@@ -1,0 +1,102 @@
+# MkDocs configuration for the v3 roguelike tutorial
+#
+# Installation (one-time):
+#   pip install mkdocs-material
+#
+# Usage:
+#   mkdocs serve        → live preview at http://127.0.0.1:8000
+#   mkdocs build        → generates static HTML in site/
+
+site_name: "Roguelike Tutorial: Python & tcod"
+site_description: "A step-by-step guide to building a roguelike in Python 3.12+ and tcod, focused on understanding why, not just how."
+docs_dir: v3
+use_directory_urls: false   # generates part-1.html instead of part-1/index.html
+                            # so you can open site/ directly in a browser
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Roboto
+    code: FiraCode Nerd Font Mono             # monospace with good box-drawing character support
+  features:
+    - navigation.top           # "back to top" button
+    - navigation.footer        # prev/next links at the bottom of each page
+    - content.code.copy        # copy button on all code blocks
+    - content.code.annotate    # inline code annotations
+
+markdown_extensions:
+  # Admonitions: renders our !!! note / !!! tip / !!! warning / !!! danger blocks
+  - admonition
+  - pymdownx.details           # makes admonitions collapsible (optional)
+
+  # Code blocks with syntax highlighting
+  - pymdownx.highlight:
+      anchor_linenums: true
+      linenums_style: pymdownx-inline
+  - pymdownx.inlinehilite
+  - pymdownx.superfences       # fenced code blocks (```python, ```diff, etc.)
+
+  # Tables (used in Part 0 and Part 3)
+  - tables
+
+  # Misc
+  - attr_list                  # lets us add HTML attributes to elements
+
+extra_css:
+  - stylesheets/extra.css
+
+copyright: 'By caragones &nbsp;|&nbsp; Tutorial text <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> &nbsp;·&nbsp; Code <a href="https://opensource.org/licenses/MIT">MIT</a>'
+
+extra:
+  analytics:
+    provider: google
+    property: G-X6W3XMLB36
+
+plugins:
+  - search                       # built-in, keep it or the search bar disappears
+  - git-revision-date-localized:
+      enable_creation_date: false
+      fallback_to_build_date: true
+      type: date                 # format: May 19, 2026
+  - glightbox
+
+nav:
+  - Home: index.md
+  - "Part 0: Introduction & Setup": part-0.md
+  - "Part 1: Drawing the @ and Moving It": part-1.md
+  - "Part 2: Entities, the Map, and the Engine": part-2.md
+  - "Part 3: Generating a Dungeon": part-3.md
+  - "Part 4: Field of View": part-4.md
+  - "Part 5: Enemies and the Turn System": part-5.md
+  - "Part 6: Combat": part-6.md
+  - "Part 7: The User Interface": part-7.md
+  - "Part 8: Items and Inventory": part-8-intro.md
+  - "Part 8a: The Item System": part-8a.md
+  - "Part 8b: Inventory": part-8b.md
+  - "Part 9: Spells and Targeting": part-9.md
+  - "Part 10: Save and Load": part-10.md
+  - "Part 11: Dungeon Levels and Experience": part-11.md
+  - "Part 12: Procedural Difficulty": part-12.md
+  - "Part 13: Equipment": part-13.md
+  - Appendices:
+    - "Appendix 1: Damage Formulas": append-1.md
+    - "Appendix 2: Combat Effects": append-2.md
+    - "Appendix 3: Consumable Scaling": append-3.md
+    - "Appendix 4: Advanced Dungeon Generation Ideas": append-4.md
+    - "Appendix 5: Designing Enemies with Personality": append-5.md
+    - "Appendix 6: Designing Equipment with Personality": append-6.md
