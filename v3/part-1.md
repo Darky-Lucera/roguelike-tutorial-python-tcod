@@ -447,6 +447,86 @@ The order is now `clear → draw → present → wait`, the standard game-loop p
 
 ---
 
+## Bonus: "but I don't want to play with letters"
+
+!!! abstract "Optional detour"
+    This section is a side trip, not a requirement. The rest of the tutorial stays with characters, and nothing later depends on what you do here. Read it for the idea, try it if you like, and switch back whenever you want.
+
+The player is an `@`. Before moving on, a confession from one kind of reader:
+
+> Yeah, but I don't like these graphics for a game. What do you mean it is a *terminal*?
+
+Fair enough. The good news: **tcod does not know anything about characters.** A tileset is just an image cut into a grid, and each cell is one tile. tcod draws tiles, not letters. The `@` is simply the tile that sits where the codepoint for `@` points, and nothing stops you from pointing a codepoint at a tile that looks like a tiny hero instead.
+
+The only rule is that everything stays on the grid: one tile per cell, all the same size.
+
+![extended tileset](images/dejavu12x12_gs_tc_ex.png)
+
+That is the same DejaVu sheet with a few sprites painted into the lower rows (hero, orc, dagger, and so on).
+
+??? note "Where to find graphics"
+    You can find tile and sprite sets in many styles, free or paid, on sites like [itch.io](https://itch.io), [OpenGameArt](https://opengameart.org), or [Kenney](https://kenney.nl) (there are tens of dedicated webs).
+
+    The sprites used here are adapted from two CC0 sets by Merchant Shade:
+
+    - [16x16 Puny Characters Plus Sprites](https://merchant-shade.itch.io/16x16-puny-characters-plus-sprites) (paid)
+    - [16x16 Mixed RPG Icons](https://merchant-shade.itch.io/16x16-mixed-rpg-icons) (free)
+
+    One free, one paid, both released under CC0. I had to adapt them, because our font is `12 × 12` and few sprites come in that size: `16 × 16` is far more common. There is nothing special about `12 × 12`, though. Pick whatever tile size suits your art, as long as the whole sheet uses one consistent size.
+
+With just those few tiles, the same game looks like this:
+
+![hero sprite in the room](images/part1_sprites.png)
+
+!!! tip "Mixing characters and sprites"
+    It is not all or nothing. The floor, the walls, and the HUD can stay as plain characters while only the entities use sprites. Drawing one *sprite on top of another* (a floor tile under a creature, for example) is the part that gets tricky in tcod, and it has its own appendix.
+
+### Swapping the @ for a sprite
+
+Two small changes to `main.py`. First, load the extended sheet and point a free codepoint at the hero tile:
+
+```diff
+     tileset = tcod.tileset.load_tilesheet(
+-        Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png",
++        Path(__file__).parent / "res" / "dejavu12x12_gs_tc_ex.png",
+         32,
+         8,
+         tcod.tileset.CHARMAP_TCOD,
+     )
++
++    # Point codepoint 500 at the hero tile (column 0, row 5 of the sheet).
++    tileset.remap(500, 0, 5)
+```
+
+Then draw that codepoint instead of `"@"`:
+
+```diff
+         console.clear()
+-        console.print(x=player_x, y=player_y, text="@")
++        console.print(x=player_x, y=player_y, text=chr(500))
+```
+
+`tileset.remap(codepoint, column, row)` makes a codepoint draw the tile at that cell of the sheet. Columns and rows are zero-based and counted from the top-left, so `(0, 5)` is the first tile of the sixth row. We use `500` for the codepoint because the TCOD character map only fills codepoints `0`-`255`, so `500` is free and cannot clash with a real character. `chr(500)` turns that codepoint into the one-character string `console.print` expects.
+
+Run the game: the hero walks around as a sprite. That is the whole trick.
+
+!!! note "About the sheet layout"
+    The lower rows of the original DejaVu sheet were empty, so we are filling unused cells, not overwriting any glyph. The `32` and `8` we pass to `load_tilesheet` are exactly that: how many tiles the sheet holds across and down (`32 × 8 = 256` cells). When you need more sprites than the free cells can hold, make the image *taller*, add rows below the originals, and raise the row count to match. The appendix shows the tidy setup.
+
+### Doing it properly, later
+
+This recipe is enough to *see* a sprite. Once the game grows, two more tiny changes make sprites behave well, and you will meet them in later parts:
+
+- **Do not tint sprites.** `console.print(..., fg=color)` multiplies the tile by `fg`. That is what paints a green `o` for an orc, but it also stains a full-color sprite. When you add the `Entity` class (Part 2), force `fg` to white for sprite entities so the art keeps its own colors.
+- **Tell a codepoint from a character.** Once entities render through the map (Part 3), an entity's glyph may be a real character like `"#"` or a sprite codepoint like `500`. Convert the integer with `chr()` before printing it.
+
+The full, switchable setup (a `USE_SPRITES` flag, a small `sprites` module with named tiles, and separate left/right tiles for facing) lives in the [graphics appendix](append-7.md).
+
+!!! info "Why you cannot just flip a sprite"
+    tcod copies each tile to the screen exactly as it sits in the sheet; it never rotates or mirrors them. So a hero facing left and the same hero facing right are *two different tiles*: you draw whichever one matches the current facing. In ASCII this never came up, because a letter does not face anywhere. Honestly, most 2D games do the same even when they *can* mirror, because light hits a character from one side and the highlights should not jump across just because it turned around.
+
+---
+
 ## Testing your work
 
 Run `python main.py`:
