@@ -1,4 +1,8 @@
-# Appendix 3: Consumable Scaling
+# Appendix 3 Draft: Consumable Scaling (WIP)
+
+!!! note "Draft notes"
+
+    This document is a parking place for future ideas. It is not part of the main tutorial flow yet, and the details below should be revisited and balanced before being turned into a finished appendix.
 
 ## Concept
 

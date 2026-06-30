@@ -1,4 +1,4 @@
-# Appendix 4 Draft: Advanced Dungeon Generation Ideas
+# Appendix 4 Draft: Advanced Dungeon Generation Ideas (WIP)
 
 !!! note "Draft notes"
 

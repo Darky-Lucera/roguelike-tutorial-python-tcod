@@ -1,0 +1,108 @@
+@startuml part11_local_classes
+
+!theme mimeograph
+
+top to bottom direction
+
+hide members
+hide circle
+
+skinparam roundcorner 10
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+skinparam nodesep 20
+skinparam ranksep 35
+
+set namespaceSeparator none
+
+'--------------------------------------
+' Classes
+'--------------------------------------
+
+class "Engine" as game.engine.Engine {
+}
+
+class "GameMap" as game.map.game_map.GameMap {
+}
+
+class "Entity" as game.entities.entity.Entity {
+}
+
+class "Actor" as game.entities.entity.Actor {
+}
+
+class "Stairs" as game.entities.entity.Stairs #e0e0d0 {
+}
+
+class "StairsDirection" as game.entities.entity.StairsDirection #e0e0d0 {
+}
+
+class "ActorComponent" as game.entities.components.base_component.ActorComponent {
+}
+
+class "Fighter" as game.entities.components.fighter.Fighter {
+}
+
+class "Level" as game.entities.components.level.Level #e0e0d0 {
+}
+
+class "Action" as game.actions.Action {
+}
+
+class "TakeStairsAction" as game.actions.TakeStairsAction #e0e0d0 {
+}
+
+class "GameState" as game.game_states.GameState {
+}
+
+class "LevelUpState" as game.game_states.LevelUpState #e0e0d0 {
+}
+
+class "GameWorld" as game.game_world.GameWorld #e0e0d0 {
+}
+
+'--------------------------------------
+' Relations
+'--------------------------------------
+
+' Inheritance: base class first, derived class second.
+game.entities.entity.Entity <|-- game.entities.entity.Actor
+game.entities.entity.Entity <|-- game.entities.entity.Stairs
+game.entities.components.base_component.ActorComponent <|-- game.entities.components.fighter.Fighter
+game.entities.components.base_component.ActorComponent <|-- game.entities.components.level.Level
+game.actions.Action <|-- game.actions.TakeStairsAction
+game.game_states.GameState <|-- game.game_states.LevelUpState
+
+' New ownership and references introduced by dungeon levels.
+game.engine.Engine *-- game.game_world.GameWorld : game_world
+game.game_world.GameWorld *-- "*" game.map.game_map.GameMap : floors
+game.game_world.GameWorld -up-> game.engine.Engine : engine
+game.entities.entity.Actor "level" *-- game.entities.components.level.Level
+game.entities.entity.Stairs --> game.entities.entity.StairsDirection : direction
+
+' Existing classes touched by the chapter.
+game.entities.components.fighter.Fighter --> game.entities.components.level.Level : awards XP
+game.actions.TakeStairsAction --> game.game_world.GameWorld : changes floor
+game.game_states.LevelUpState --> game.entities.components.level.Level : spends points
+
+'--------------------------------------
+' Layout hints
+'--------------------------------------
+
+game.engine.Engine -[hidden]down- game.game_world.GameWorld
+game.game_world.GameWorld -[hidden]down- game.map.game_map.GameMap
+
+game.entities.entity.Entity -[hidden]down- game.entities.entity.Actor
+game.entities.entity.Actor -[hidden]right- game.entities.entity.Stairs
+game.entities.entity.Stairs -[hidden]right- game.entities.entity.StairsDirection
+
+game.entities.components.base_component.ActorComponent -[hidden]down- game.entities.components.fighter.Fighter
+game.entities.components.fighter.Fighter -[hidden]right- game.entities.components.level.Level
+
+game.actions.Action -[hidden]down- game.actions.TakeStairsAction
+game.game_states.GameState -[hidden]down- game.game_states.LevelUpState
+game.actions.TakeStairsAction -[hidden]right- game.game_states.LevelUpState
+
+@enduml

@@ -1,0 +1,77 @@
+@startuml part10_local_classes
+
+!theme mimeograph
+
+top to bottom direction
+
+hide members
+hide circle
+
+skinparam roundcorner 10
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+skinparam nodesep 20
+skinparam ranksep 35
+
+set namespaceSeparator none
+
+'--------------------------------------
+' Classes
+'--------------------------------------
+
+class "Engine" as game.engine.Engine {
+}
+
+class "BaseGameState" as game.game_states.BaseGameState #e0e0d0 {
+}
+
+class "GameState" as game.game_states.GameState {
+}
+
+class "ActionModalState" as game.game_states.ActionModalState {
+}
+
+class "GameOverState" as game.game_states.GameOverState {
+}
+
+class "MainMenuState" as game.game_states.MainMenuState #e0e0d0 {
+}
+
+class "PopupMessageState" as game.game_states.PopupMessageState #e0e0d0 {
+}
+
+'--------------------------------------
+' Relations
+'--------------------------------------
+
+' Inheritance: base class first, derived class second.
+game.game_states.BaseGameState <|-- game.game_states.GameState
+game.game_states.BaseGameState <|-- game.game_states.MainMenuState
+game.game_states.BaseGameState <|-- game.game_states.PopupMessageState
+game.game_states.GameState <|-- game.game_states.ActionModalState
+game.game_states.GameState <|-- game.game_states.GameOverState
+
+' New state relationships introduced by save/load and the menu.
+game.game_states.GameState -up-> game.engine.Engine : engine
+game.game_states.PopupMessageState -up-> game.game_states.BaseGameState : parent
+game.game_states.MainMenuState --> game.engine.Engine : starts or loads
+game.game_states.GameOverState --> game.game_states.MainMenuState : returns to menu
+
+' Engine serializes the active state when saving and restores one when loading.
+game.engine.Engine ..> game.game_states.BaseGameState : saves / loads
+
+'--------------------------------------
+' Layout hints
+'--------------------------------------
+
+game.game_states.BaseGameState -[hidden]down- game.game_states.GameState
+game.game_states.BaseGameState -[hidden]down- game.game_states.MainMenuState
+game.game_states.MainMenuState -[hidden]right- game.game_states.PopupMessageState
+
+game.game_states.GameState -[hidden]down- game.game_states.ActionModalState
+game.game_states.ActionModalState -[hidden]right- game.game_states.GameOverState
+game.game_states.MainMenuState -[hidden]down- game.engine.Engine
+
+@enduml

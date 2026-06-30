@@ -1,4 +1,4 @@
-# Appendix 5 Draft: Designing Enemies with Personality
+# Appendix 5 Draft: Designing Enemies with Personality (WIP)
 
 !!! note "Draft notes"
 

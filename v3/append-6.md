@@ -1,4 +1,4 @@
-# Appendix 6 Draft: Designing Equipment with Personality
+# Appendix 6 Draft: Designing Equipment with Personality (WIP)
 
 !!! note "Draft notes"
 

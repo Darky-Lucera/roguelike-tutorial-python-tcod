@@ -932,6 +932,14 @@ Equipment is complete, and with it the main tutorial game. Key additions:
 - **Inventory UI**: groups items into *Equipped*, *Equippable* and *Items*, with number keys for gear and letters for the rest
 - **Guaranteed spawns**: `equipment_spawns` bands in `factories.py`, rolled per run by `GameWorld`, placed by the generator; the dagger waits in the safe starting room of floor 1
 
+**Local Class Diagram**:
+
+![classes](images/part13_local_classes.png)
+
+**Full Class Diagram**:
+
+![classes](images/part13_classes.png)
+
 **File structure**:
 
 ```text

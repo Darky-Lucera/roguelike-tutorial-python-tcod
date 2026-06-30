@@ -125,14 +125,14 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 ---
 
-## Appendices [WIP]
+## Appendices (WIP)
 
 - [Appendix 1: Damage Formulas](append-1.md)
 - [Appendix 2: Combat Effects](append-2.md)
-- Appendix 3: Consumable Scaling
-- Appendix 4: Advanced Dungeon Generation Ideas
-- Appendix 5: Designing Enemies with Personality
-- Appendix 6: Designing Equipment with Personality
+- [Appendix 3: Consumable Scaling (WIP)](append-3.md)
+- [Appendix 4: Advanced Dungeon Generation Ideas (WIP)](append-4.md)
+- [Appendix 5: Designing Enemies with Personality (WIP)](append-5.md)
+- [Appendix 6: Designing Equipment with Personality (WIP)](append-6.md)
 
 ---
 

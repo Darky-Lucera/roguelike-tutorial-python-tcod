@@ -1,0 +1,104 @@
+@startuml part13_local_classes
+
+!theme mimeograph
+
+top to bottom direction
+
+hide members
+hide circle
+
+skinparam roundcorner 10
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+skinparam nodesep 20
+skinparam ranksep 35
+
+set namespaceSeparator none
+
+'--------------------------------------
+' Classes
+'--------------------------------------
+
+class "Actor" as game.entities.entity.Actor {
+}
+
+class "Item" as game.entities.entity.Item {
+}
+
+class "ActorComponent" as game.entities.components.base_component.ActorComponent {
+}
+
+class "ItemComponent" as game.entities.components.base_component.ItemComponent {
+}
+
+class "Fighter" as game.entities.components.fighter.Fighter {
+}
+
+class "Equipment" as game.entities.components.equipment.Equipment #e0e0d0 {
+}
+
+class "Equippable" as game.entities.components.equippable.Equippable #e0e0d0 {
+}
+
+class "EquipmentType" as game.entities.equipment_type.EquipmentType #e0e0d0 {
+}
+
+class "ItemAction" as game.actions.ItemAction {
+}
+
+class "EquipAction" as game.actions.EquipAction #e0e0d0 {
+}
+
+class "DropItem" as game.actions.DropItem {
+}
+
+class "InventoryUseState" as game.game_states.InventoryUseState {
+}
+
+'--------------------------------------
+' Relations
+'--------------------------------------
+
+' Inheritance: base class first, derived class second.
+game.entities.components.base_component.ActorComponent <|-- game.entities.components.fighter.Fighter
+game.entities.components.base_component.ActorComponent <|-- game.entities.components.equipment.Equipment
+game.entities.components.base_component.ItemComponent <|-- game.entities.components.equippable.Equippable
+game.actions.ItemAction <|-- game.actions.EquipAction
+game.actions.ItemAction <|-- game.actions.DropItem
+
+' New ownership and references introduced by equipment.
+game.entities.entity.Actor "equipment" *-- game.entities.components.equipment.Equipment
+game.entities.entity.Item *-- game.entities.components.equippable.Equippable : equippable
+game.entities.components.equipment.Equipment -right-> game.entities.entity.Item : weapon
+game.entities.components.equipment.Equipment -right-> game.entities.entity.Item : armor
+game.entities.components.equippable.Equippable --> game.entities.equipment_type.EquipmentType : equipment_type
+game.actions.ItemAction -up-> game.entities.entity.Item : item
+
+' Existing classes touched by the chapter.
+game.entities.components.fighter.Fighter --> game.entities.components.equipment.Equipment : reads bonuses
+game.actions.DropItem --> game.entities.components.equipment.Equipment : unequips first
+game.game_states.InventoryUseState --> game.actions.EquipAction : creates
+
+'--------------------------------------
+' Layout hints
+'--------------------------------------
+
+game.entities.entity.Actor -[hidden]right- game.entities.entity.Item
+game.entities.entity.Actor -[hidden]down- game.entities.components.base_component.ActorComponent
+game.entities.entity.Item -[hidden]down- game.entities.components.base_component.ItemComponent
+
+game.entities.components.base_component.ActorComponent -[hidden]down- game.entities.components.fighter.Fighter
+game.entities.components.fighter.Fighter -[hidden]right- game.entities.components.equipment.Equipment
+game.entities.components.base_component.ItemComponent -[hidden]down- game.entities.components.equippable.Equippable
+game.entities.components.equipment.Equipment -[hidden]right- game.entities.components.equippable.Equippable
+game.entities.components.equippable.Equippable -[hidden]down- game.entities.equipment_type.EquipmentType
+
+game.actions.ItemAction -[hidden]down- game.actions.DropItem
+game.actions.DropItem -[hidden]right- game.actions.EquipAction
+game.game_states.InventoryUseState -[hidden]down- game.actions.EquipAction
+
+game.actions.EquipAction -[hidden]down- game.game_states.InventoryUseState
+
+@enduml

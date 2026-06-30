@@ -1126,7 +1126,11 @@ Character progression and dungeon depth are now linked. Key additions:
 - `TakeStairsAction`: looks up the `Stairs` entity under the player and calls the appropriate `GameWorld` method
 - `LevelUpState`: modal state entered when the player must choose a stat
 
-**Class Diagram**:
+**Local Class Diagram**:
+
+![classes](images/part11_local_classes.png)
+
+**Full Class Diagram**:
 
 ![classes](images/part11_classes.png)
 

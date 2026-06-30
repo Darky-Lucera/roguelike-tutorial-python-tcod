@@ -1414,7 +1414,11 @@ Items are now a first-class part of the game. Key additions:
 - `InventoryState`: subclasses provide `on_item_selected()` and override the title, prompt, and color class variables; `GameState.handle_events()` automatically switches back to `MainGameState` after an inventory action
 - `ActorComponent` / `ItemComponent`: `entity` annotation narrows from `Entity` to the actual holder type, so type checkers can verify component attribute access correctly
 
-**Class Diagram**:
+**Local Class Diagram**:
+
+![classes](images/part8_local_classes.png)
+
+**Full Class Diagram**:
 
 ![classes](images/part8_classes.png)
 

@@ -1068,7 +1068,11 @@ Key additions:
 - `MainMenuState`: starts before an `Engine` exists
 - `Engine.save_as(filename, state)` / `Engine.load()`: serialize and restore the active state (engine included transitively) plus `MessageLog.messages`
 
-**Class Diagram**:
+**Local Class Diagram**:
+
+![classes](images/part10_local_classes.png)
+
+**Full Class Diagram**:
 
 ![classes](images/part10_classes.png)
 

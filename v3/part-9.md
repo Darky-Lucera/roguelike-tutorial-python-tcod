@@ -1002,7 +1002,11 @@ The targeting system is now in place. Key additions:
 - AI can be swapped at runtime, as with `ConfusedEnemy`
 - Dependency direction is strictly one-way: `game_states` → `actions` ← `consumable`
 
-**Class Diagram**:
+**Local Class Diagram**:
+
+![classes](images/part9_local_classes.png)
+
+**Full Class Diagram**:
 
 ![classes](images/part9_classes.png)
 

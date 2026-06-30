@@ -1,0 +1,146 @@
+@startuml part9_local_classes
+
+!theme mimeograph
+
+top to bottom direction
+
+hide members
+hide circle
+
+skinparam roundcorner 10
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+skinparam nodesep 20
+skinparam ranksep 35
+
+set namespaceSeparator none
+
+'--------------------------------------
+' Classes
+'--------------------------------------
+
+class "Action" as game.actions.Action {
+}
+
+class "TargetingAction" as game.actions.TargetingAction #e0e0d0 {
+}
+
+class "SingleRangedTargetingAction" as game.actions.SingleRangedTargetingAction #e0e0d0 {
+}
+
+class "AreaRangedTargetingAction" as game.actions.AreaRangedTargetingAction #e0e0d0 {
+}
+
+class "GameState" as game.game_states.GameState {
+}
+
+class "ActionModalState" as game.game_states.ActionModalState {
+}
+
+class "SelectIndexState" as game.game_states.SelectIndexState #e0e0d0 {
+}
+
+class "SingleRangedAttackState" as game.game_states.SingleRangedAttackState #e0e0d0 {
+}
+
+class "AreaRangedAttackState" as game.game_states.AreaRangedAttackState #e0e0d0 {
+}
+
+class "BaseAI" as game.entities.components.ai.BaseAI {
+}
+
+class "HostileEnemy" as game.entities.components.ai.HostileEnemy {
+}
+
+class "ConfusedEnemy" as game.entities.components.ai.ConfusedEnemy #e0e0d0 {
+}
+
+class "ItemComponent" as game.entities.components.base_component.ItemComponent {
+}
+
+class "Consumable" as game.entities.components.consumable.Consumable {
+}
+
+class "LightningDamageConsumable" as game.entities.components.consumable.LightningDamageConsumable #e0e0d0 {
+}
+
+class "ConfusionConsumable" as game.entities.components.consumable.ConfusionConsumable #e0e0d0 {
+}
+
+class "FireballDamageConsumable" as game.entities.components.consumable.FireballDamageConsumable #e0e0d0 {
+}
+
+class "MappingConsumable" as game.entities.components.consumable.MappingConsumable <<Ex. 9.1 >> #e0e0e0 {
+}
+
+class "DrainConsumable" as game.entities.components.consumable.DrainConsumable <<Ex. 9.2 >> #e0e0e0 {
+}
+
+class "TeleportConsumable" as game.entities.components.consumable.TeleportConsumable <<Ex. 9.3 >> #e0e0e0 {
+}
+
+'--------------------------------------
+' Relations
+'--------------------------------------
+
+' Inheritance: base class first, derived class second.
+game.actions.Action <|-- game.actions.TargetingAction
+game.actions.TargetingAction <|-- game.actions.SingleRangedTargetingAction
+game.actions.TargetingAction <|-- game.actions.AreaRangedTargetingAction
+
+game.game_states.GameState <|-- game.game_states.ActionModalState
+game.game_states.ActionModalState <|-- game.game_states.SelectIndexState
+game.game_states.SelectIndexState <|-- game.game_states.SingleRangedAttackState
+game.game_states.SelectIndexState <|-- game.game_states.AreaRangedAttackState
+
+game.entities.components.ai.BaseAI <|-- game.entities.components.ai.HostileEnemy
+game.entities.components.ai.BaseAI <|-- game.entities.components.ai.ConfusedEnemy
+
+game.entities.components.base_component.ItemComponent <|-- game.entities.components.consumable.Consumable
+game.entities.components.consumable.Consumable <|-- game.entities.components.consumable.LightningDamageConsumable
+game.entities.components.consumable.Consumable <|-- game.entities.components.consumable.ConfusionConsumable
+game.entities.components.consumable.Consumable <|-- game.entities.components.consumable.FireballDamageConsumable
+game.entities.components.consumable.Consumable <|-- game.entities.components.consumable.MappingConsumable
+game.entities.components.consumable.Consumable <|-- game.entities.components.consumable.DrainConsumable
+game.entities.components.consumable.Consumable <|-- game.entities.components.consumable.TeleportConsumable
+
+' New collaboration paths introduced by targeting and spells.
+game.entities.components.consumable.ConfusionConsumable --> game.game_states.SingleRangedAttackState : creates
+game.entities.components.consumable.FireballDamageConsumable --> game.game_states.AreaRangedAttackState : creates
+game.game_states.SingleRangedAttackState --> game.actions.SingleRangedTargetingAction : returns
+game.game_states.AreaRangedAttackState --> game.actions.AreaRangedTargetingAction : returns
+game.actions.SingleRangedTargetingAction --> game.entities.components.ai.ConfusedEnemy : applies
+game.entities.components.ai.ConfusedEnemy "previous_ai" o-- game.entities.components.ai.BaseAI
+
+' Exercise consumables follow the same targeting-state pattern.
+game.entities.components.consumable.MappingConsumable --> game.game_states.ActionModalState : reveals map
+game.entities.components.consumable.DrainConsumable --> game.game_states.SingleRangedAttackState : creates
+game.entities.components.consumable.TeleportConsumable --> game.game_states.SingleRangedAttackState : creates
+
+'--------------------------------------
+' Layout hints
+'--------------------------------------
+
+game.game_states.GameState -[hidden]down- game.game_states.ActionModalState
+game.game_states.ActionModalState -[hidden]down- game.game_states.SelectIndexState
+game.game_states.SelectIndexState -[hidden]down- game.game_states.SingleRangedAttackState
+game.game_states.SingleRangedAttackState -[hidden]right- game.game_states.AreaRangedAttackState
+
+game.actions.Action -[hidden]down- game.actions.TargetingAction
+game.actions.TargetingAction -[hidden]down- game.actions.SingleRangedTargetingAction
+game.actions.SingleRangedTargetingAction -[hidden]right- game.actions.AreaRangedTargetingAction
+
+game.entities.components.ai.BaseAI -[hidden]down- game.entities.components.ai.HostileEnemy
+game.entities.components.ai.HostileEnemy -[hidden]right- game.entities.components.ai.ConfusedEnemy
+
+game.entities.components.base_component.ItemComponent -[hidden]down- game.entities.components.consumable.Consumable
+game.entities.components.consumable.Consumable -[hidden]down- game.entities.components.consumable.LightningDamageConsumable
+game.entities.components.consumable.LightningDamageConsumable -[hidden]right- game.entities.components.consumable.ConfusionConsumable
+game.entities.components.consumable.ConfusionConsumable -[hidden]right- game.entities.components.consumable.FireballDamageConsumable
+game.entities.components.consumable.LightningDamageConsumable -[hidden]down- game.entities.components.consumable.MappingConsumable
+game.entities.components.consumable.ConfusionConsumable -[hidden]down- game.entities.components.consumable.DrainConsumable
+game.entities.components.consumable.FireballDamageConsumable -[hidden]down- game.entities.components.consumable.TeleportConsumable
+
+@enduml
