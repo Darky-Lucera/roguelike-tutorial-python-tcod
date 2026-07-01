@@ -494,8 +494,12 @@ Two small changes to `main.py`. First, load the extended sheet and point a free 
          tcod.tileset.CHARMAP_TCOD,
      )
 +
-+    # Point codepoint 500 at the hero tile (column 0, row 5 of the sheet).
-+    tileset.remap(500, 0, 5)
++    # 0xE000 starts the Unicode Private Use Area: a range of codepoints that
++    # never map to a real character, so a sprite there can never clash.
++    # Point its first slot at the hero tile (column 0, row 5 of the sheet).
++    PUA = 0xE000
++
++    tileset.remap(PUA, 0, 5)
 ```
 
 Then draw that codepoint instead of `"@"`:
@@ -503,10 +507,10 @@ Then draw that codepoint instead of `"@"`:
 ```diff
          console.clear()
 -        console.print(x=player_x, y=player_y, text="@")
-+        console.print(x=player_x, y=player_y, text=chr(500))
++        console.print(x=player_x, y=player_y, text=chr(PUA))
 ```
 
-`tileset.remap(codepoint, column, row)` makes a codepoint draw the tile at that cell of the sheet. Columns and rows are zero-based and counted from the top-left, so `(0, 5)` is the first tile of the sixth row. We use `500` for the codepoint because the TCOD character map only fills codepoints `0`-`255`, so `500` is free and cannot clash with a real character. `chr(500)` turns that codepoint into the one-character string `console.print` expects.
+`tileset.remap(codepoint, column, row)` makes a codepoint draw the tile at that cell of the sheet. Columns and rows are zero-based and counted from the top-left, so `(0, 5)` is the first tile of the sixth row. We use `PUA` (`0xE000`) for the codepoint because it sits in the Unicode **Private Use Area** (`U+E000..U+F8FF`), a block Unicode reserves for custom glyphs and never assigns to real characters, so it can never clash with a real character. `chr(PUA)` turns that codepoint into the one-character string `console.print` expects.
 
 Run the game: the hero walks around as a sprite. That is the whole trick.
 
@@ -518,7 +522,7 @@ Run the game: the hero walks around as a sprite. That is the whole trick.
 This recipe is enough to *see* a sprite. Once the game grows, two more tiny changes make sprites behave well, and you will meet them in later parts:
 
 - **Do not tint sprites.** `console.print(..., fg=color)` multiplies the tile by `fg`. That is what paints a green `o` for an orc, but it also stains a full-color sprite. When you add the `Entity` class (Part 2), force `fg` to white for sprite entities so the art keeps its own colors.
-- **Tell a codepoint from a character.** Once entities render through the map (Part 3), an entity's glyph may be a real character like `"#"` or a sprite codepoint like `500`. Convert the integer with `chr()` before printing it.
+- **Tell a codepoint from a character.** Once entities render through the map (Part 3), an entity's glyph may be a real character like `"#"` or a sprite codepoint like `0xE000`. Convert the integer with `chr()` before printing it.
 
 The full, switchable setup (a `USE_SPRITES` flag, a small `sprites` module with named tiles, and separate left/right tiles for facing) lives in the [graphics appendix](append-7.md).
 

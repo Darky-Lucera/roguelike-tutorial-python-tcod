@@ -356,15 +356,23 @@ if __name__ == "__main__":
 
 Notice that the map is 45 rows tall while the screen is 50, we reserve the bottom 5 rows for the UI (health bar, message log) which we will add in Part 7.
 
-Run the game. You will see a white `@`, a yellow `N`, and a small wall. Try to walk through the wall; it should block you.
+!!! tip "Run it now"
+    This is a good moment to run the game. You should see a white `@` (the
+    player), a yellow `N` (an NPC with no AI), and a short test wall. Walking
+    into the wall or off the edge of the map is blocked; the NPC stays put.
+    This is a complete, playable milestone. The rest of the chapter is a refactor
+    that improves how actions are structured without changing anything you see on
+    screen.
 
 ---
 
 ## Giving actions more context
 
-The engine currently handles movement inside `match action:` by recognizing `MovementAction` and manually applying the logic. This will not scale: soon we will have many action types, and putting all of their logic in `handle_events` will make it enormous.
+Right now the engine handles movement inside its `match action:` block: it recognizes `MovementAction`, computes the destination, and applies the logic itself. Every new kind of action we add later (attacking an enemy, picking up an item, drinking a potion, descending the stairs) would need another `case` here and more logic inside `handle_events`. The engine would have to know about every action in the game, and this single method would keep growing.
 
-A better pattern: each `Action` knows how to perform itself, given the engine and the acting entity. The engine just calls `action.perform(engine, entity)`.
+A better pattern moves the responsibility: each `Action` knows how to perform *itself*, given the engine and the acting entity. The engine stops deciding what each action does; it just calls `action.perform(engine, entity)` and moves on.
+
+The gain is concrete. `handle_events` shrinks to a single line and never changes again, no matter how many action types we add: a new behavior later means writing one new `Action` subclass, not editing the engine. This also separates who *requests* an action (the input handler) from who *carries it out* (the action).
 
 This rewrites every class from Part 1, so replace the whole contents of `game/actions.py`:
 
