@@ -4,7 +4,7 @@
 
     This document is a parking place for future ideas. It is not part of the main tutorial flow yet, and the details below should be revisited and balanced before being turned into a finished appendix.
 
-    Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2) and the `game/constants/` package (Part 5). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
+    Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2), the `game/constants/` package (Part 5), and the centralized `RES_DIR` (Part 10). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
 
 Part 1 ends with a quick trick: point a free codepoint at a tile in the sheet and draw `chr(0xE000)` instead of `"@"`. That is enough to see a sprite, but it does not scale to a full game with dozens of entities, monsters that face left and right, and a switch to flip the whole game back to ASCII.
 
@@ -34,17 +34,14 @@ Rather than hunt for gaps, take the sprite ids from the Unicode **Private Use Ar
 
 ## A `sprites` module
 
-Collect every sprite decision in one place: `game/constants/sprites.py`. Two pieces live here, a flag and a set of named codepoints, plus a function that wires them to the sheet.
+Collect every sprite decision in one place: `game/constants/sprites.py`. Two pieces live here: a set of named codepoints, and a function that wires them to the sheet.
 
 ```python
 from __future__ import annotations
 
 import tcod
 
-# Flip the whole game between sprites and characters.
-USE_SPRITES: bool = True
-
-# Sprite ids live in the Unicode Private Use Area, so they never collide with
+# Sprite ids live in the Unicode Private Use Area (PUA), so they never collide with
 # a real character. PUA marks its start; each sprite is a small offset from it.
 PUA = 0xE000
 
@@ -105,7 +102,7 @@ Because `SCROLL` is one codepoint, `init_sprites` remaps it a single time; the n
 
 ## Choosing characters or sprites
 
-There are two reasonable designs, depending on whether you ever need to switch at runtime.
+There are two reasonable designs, depending on whether you want a flag that picks the mode at startup, or you are fine hand-editing constants instead.
 
 **Option A: one set, no switch.** Keep the single `sprites` module from above. Each constant holds the sprite codepoint, with the character it replaces written as a comment:
 
@@ -117,44 +114,75 @@ DAGGER = PUA + 3
 
 This is the simplest design. The game is always graphical, and `chr(0xE000)` is what reaches the screen instead of `"@", "o" or "/"`. Going back to characters means editing the constants by hand.
 
-**Option B: two sets, switchable.** When you want a single flag to flip the whole game, use two sets of constants with the same names: one with characters, one with sprites.
-
-The sprite set *inherits* from the character set and overrides only the names that actually have art, so anything without a sprite falls back to its character automatically.
+**Option B: two sets, switchable.** When you want a single flag to flip the whole game, declare two classes with the same names: one with characters, one with sprites.
 
 ```python
+USE_SPRITES: bool = True
+
 class CharGlyphs:
     PLAYER = "@"
     ORC    = "o"
     DAGGER = "/"
 
-class SpriteGlyphs(CharGlyphs):
+class SpriteGlyphs:
     PLAYER = PUA + 0
     ORC    = PUA + 1
-    # DAGGER is not overridden, so it falls back to "/"
+    DAGGER = PUA + 3
 
-current_glyphs = SpriteGlyphs if USE_SPRITES else CharGlyphs
+CurrentGlyphs: type[SpriteGlyphs] | type[CharGlyphs] = SpriteGlyphs if USE_SPRITES else CharGlyphs
 ```
 
-Entity definitions always read `current_glyphs.PLAYER`, never a bare value, so the same code works in both modes. With `USE_SPRITES = True` the player is codepoint `0xE000`; with `False`, the whole game drops back to characters, and any entity still missing a sprite shows its letter either way.
+!!! question "Why doesn't `SpriteGlyphs` inherit from `CharGlyphs`?"
+    A natural first instinct is to make `SpriteGlyphs` a subclass of `CharGlyphs`, overriding only the names that have art, so anything without a sprite falls back to its character automatically:
 
-Pick whichever design fits your game; the rest of this appendix keeps using the plain `sprites.PLAYER` form (Option A) to keep the listings short. If you go with Option B, read every `sprites.X` in what follows as `current_glyphs.X`.
+    ```python
+    class SpriteGlyphs(CharGlyphs):
+        PLAYER = PUA + 0    # overrides "@"
+        # DAGGER is not overridden, so it keeps "/"
+    ```
+
+    This runs fine, but a type checker rejects it. `CharGlyphs.PLAYER` is typed as `str`; reassigning `PLAYER` to an `int` in the subclass changes the type of an inherited attribute, which mypy and pyright both flag as an incompatible override. Python itself does not check this, class attributes are just names in a namespace at runtime, but a type checker treats each name as carrying one fixed type across the whole hierarchy, and `str` and `int` are not that.
+
+    The fix costs a few lines: declare every name in both classes, even where the sprite set has no fallback to offer. Each class is then self-contained and honestly typed, at the cost of the automatic fallback the inheritance version promised.
+
+Entity definitions always read `CurrentGlyphs.PLAYER`, never a bare value, so the same code works in both modes. With `USE_SPRITES = True` the player is codepoint `0xE000`; with `False`, the whole game drops back to characters. "Both modes" means two separate runs, not a switch mid-game: `CurrentGlyphs` is decided once, when `sprites.py` is imported, and every factory reads it at that same moment. Flipping `USE_SPRITES` means changing the constant and restarting, not toggling a setting while playing.
+
+!!! tip "Why `CurrentGlyphs` and not `current_glyphs`"
+    `CurrentGlyphs` holds a class, not a value, so it plays the role of a type alias. PEP 8 asks for CapWords there, the same convention as a class name, rather than the `snake_case` used for ordinary variables. A naming linter (ruff's pep8-naming rules, for instance) flags a lowercase name in this position.
+
+Pick whichever design fits your game. From here on, this appendix follows Option B, since that is what the reference implementation uses: every later snippet reads `CurrentGlyphs.X`, or `SpriteGlyphs.X` directly where facing specifically needs a sprite codepoint. If you picked Option A instead, there is only one set, so read every `CurrentGlyphs.X` and `SpriteGlyphs.X` below as a bare `sprites.X`.
+
+A factory definition changes by one line:
+
+```diff
+ player = Actor(
+-    char  = sprites.PLAYER,
++    char  = sprites.CurrentGlyphs.PLAYER,
+     ...
+ )
+```
+
+Every other entity in `game/entities/factories.py` follows the same pattern: wherever a definition reads `sprites.X`, it now reads `sprites.CurrentGlyphs.X`.
 
 ---
 
 ## Wiring it into `main.py`
 
-Load the extended sheet and call `init_sprites` once, right after the tileset is created and before the context opens:
+Load the right sheet for the current mode and call `init_sprites` once, right after the tileset is created and before the context opens:
 
 ```diff
      tileset = tcod.tileset.load_tilesheet(
--        Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png",
-+        Path(__file__).parent / "res" / "dejavu12x12_gs_tc_ex.png",
+-        constants.RES_DIR / "dejavu12x12_gs_tc.png",
++        constants.RES_DIR / ("dejavu12x12_gs_tc_ex.png" if sprites.USE_SPRITES else "dejavu12x12_gs_tc.png"),
          32,
          8,
          tcod.tileset.CHARMAP_TCOD,
      )
-+    init_sprites(tileset)
++    sprites.init_sprites(tileset)
 ```
+
+!!! warning "Parenthesize the ternary"
+    `/` binds tighter than `if ... else`. Without the inner parentheses, `RES_DIR / "a" if flag else "b"` parses as `(RES_DIR / "a") if flag else "b"`: the `False` branch would return the bare string `"b"`, never joined to `RES_DIR`. Wrap the whole conditional before joining it to the path.
 
 The remap mutates the tileset in place, so every console that uses this tileset draws the sprites from now on.
 
@@ -164,7 +192,7 @@ The remap mutates the tileset in place, so every console that uses this tileset 
 
 `console.print(..., fg=color)` multiplies each tile by the foreground color. For characters that is a feature: one white `o` glyph becomes a green orc or a red one just by changing `fg`. For a full-color sprite it is usually the opposite of what you want: the art gets stained.
 
-So, unless you are tinting on purpose (a hit flash, a status effect), set the entity color to white whenever its glyph is a sprite. White is the neutral multiplier, so the tile shows its own colors. Check what the entity's own `char` actually holds, not a global flag: under Option B, a character-mode fallback still needs its color even while sprites are enabled elsewhere. In `Entity.__init__`:
+So, unless you are tinting on purpose (a hit flash, a status effect), set the entity color to white whenever its glyph is a sprite. White is the neutral multiplier, so the tile shows its own colors. Check what the entity's own `char` actually holds, not a global flag: an entity that deliberately keeps a literal character, a debug marker, say, still needs its own color even while the rest of the game runs on sprites. In `Entity.__init__`:
 
 ```diff
 -        self.color = color
@@ -180,7 +208,12 @@ So, unless you are tinting on purpose (a hit flash, a status effect), set the en
 
 `render` still needs a one-character string, but an entity's `char` can be a real character (`"#"`, a `str`) or a sprite codepoint (`0xE000`, an `int`). The smallest fix is a property that calls `chr` only for codepoints. That works, yet it is only the *first* rule about how an entity becomes a tile: facing will choose between two tiles, animation will cycle through several. Rather than pile branches onto `Entity`, make "how do I become a character" its own small object, a `Graphic`, and give each entity one.
 
+Create `game/entities/components/graphic.py`:
+
 ```python
+from __future__ import annotations
+
+
 class Graphic:
     """How an entity turns its drawing state into the character tcod prints."""
 
@@ -200,7 +233,13 @@ class StaticGraphic(Graphic):
         return chr(self.char) if isinstance(self.char, int) else self.char
 ```
 
-`Entity` now owns a `Graphic` and exposes `glyph` by delegating to it. Every existing definition passes a bare `char`, so wrap that in the trivial `StaticGraphic` automatically; only special entities pass their own `Graphic`:
+`Entity` now owns a `Graphic` and exposes `glyph` by delegating to it. Every existing definition passes a bare `char`, so wrap that in the trivial `StaticGraphic` automatically; only special entities pass their own `Graphic`. In `game/entities/entity.py`, add the import:
+
+```diff
++from game.entities.components.graphic import Graphic, StaticGraphic
+```
+
+and update `__init__`:
 
 ```diff
      def __init__(
@@ -222,6 +261,42 @@ class StaticGraphic(Graphic):
 +        return self.graphic.glyph
 ```
 
+`Actor` overrides `__init__` with its own explicit signature instead of inheriting `Entity`'s, so it needs the same two edits, or `Actor(..., graphic=...)` raises `TypeError: unexpected keyword argument 'graphic'`:
+
+```diff
+     def __init__(
+         self,
+         *,
+         ...
+-        char: str = sprites.UNKNOWN,
++        char: str | int = sprites.UNKNOWN,
++        graphic: Graphic | None = None,
+         ...
+     ) -> None:
+         super().__init__(
+             ...
+             char            = char,
++            graphic         = graphic,
+             ...
+         )
+```
+
+Passing both `char` and `graphic` is not an error, `graphic` simply wins: `char` is only consulted to build the fallback `StaticGraphic` when `graphic` is `None`.
+
+!!! warning "Old saves and `graphic`"
+    [Part 10](part-10.md) pickles every entity, and this section replaces `Entity.char` with `Entity.graphic`. A save written before this change unpickles into an entity that has `char` but no `graphic`, and the first render raises `AttributeError`.
+
+    Either delete old saves, as Part 11 and Part 13 already made you do, or adapt the `__setstate__` migration trick from Part 10: translate the old `char` key into `graphic = StaticGraphic(char)` before the rest of `__dict__` loads.
+
+This also retires the tinting rule from the previous section. `isinstance(char, int)` read `self.char`, which no longer exists: an entity built with `graphic=` directly never had a meaningful `char` to inspect, it keeps whatever default the parameter has, unrelated to what actually gets drawn. Fall back to the mode flag instead:
+
+```diff
+-        self.color = colors.WHITE if isinstance(char, int) else color
++        self.color = colors.WHITE if sprites.USE_SPRITES else color
+```
+
+The trade-off is real: an entity with a literal character no longer gets to opt out of the white tint just because its own glyph is text. If that precision matters for a particular entity, give `Graphic` an `is_sprite` property and check `self.graphic.is_sprite` instead of the global flag.
+
 `render` changes by one word, and never has to change again whatever glyph an entity uses:
 
 ```diff
@@ -229,8 +304,27 @@ class StaticGraphic(Graphic):
 +                console.print(entity.x, entity.y, entity.glyph, fg=entity.color)
 ```
 
+`GameMap.render` is not the only place `.char` reaches the screen, the inventory panel prints `item.char` too. Search the codebase for every `.char` read on an entity or item and replace it with `.glyph`. A type checker turns this from a hunt into a checklist: once `Entity` no longer declares `char` as an attribute, mypy or pyright flags every remaining `.char` access as unknown, so running one after the rename surfaces exactly the call sites still to fix.
+
 !!! info "This is the Strategy pattern"
     `Graphic` is a *strategy*: an interchangeable object that captures one decision, here "which character do I draw right now". `render` depends only on the small `Graphic` interface, not on the concrete kind, so new behaviors arrive as new subclasses and the drawing code stays put.
+
+### Swapping a `Graphic` after construction
+
+`self.graphic` is a plain attribute, not read-only, so anything that changes what an entity draws can just assign a new one. `Fighter.die()` does exactly this to turn a fallen actor into a corpse. Add the import to `game/entities/components/fighter.py`:
+
+```diff
++from game.entities.components.graphic import StaticGraphic
+```
+
+then, in `die()`:
+
+```python
+self.entity.graphic = StaticGraphic(sprites.CurrentGlyphs.CORPSE)
+self.entity.color   = colors.WHITE if sprites.USE_SPRITES else colors.CORPSE
+```
+
+`render` needs no change: it only ever asks for `entity.glyph`, and `glyph` reads whichever `Graphic` is currently assigned. A corpse has no facing, so a plain `StaticGraphic` is enough either way, and `CurrentGlyphs.CORPSE` still follows the mode flag like any other plain `char`.
 
 ### How the `glyph` scales
 
@@ -267,7 +361,7 @@ First, give every `Graphic` a way to react to movement. The base does nothing, s
      """How an entity turns its drawing state into the character tcod prints."""
 
 +    def face(self, dx: int, dy: int) -> None:
-+        """React to a move. No-op by default; overridden when facing matters."""
++        pass    # No-op by default; overridden when facing matters.
 +
      @property
      def glyph(self) -> str:
@@ -281,9 +375,9 @@ class DirectionalGraphic(Graphic):
     """Two tiles: the sheet art, and its mirror."""
 
     def __init__(self, base: int, flipped: int) -> None:
-        self.base = base
+        self.base    = base
         self.flipped = flipped
-        self.flip = False   # True shows the mirrored tile
+        self.flip    = False   # True shows the mirrored tile
 
     def face(self, dx: int, dy: int) -> None:
         # Assumes the base art faces right; swap the comparison if it faces left.
@@ -300,39 +394,64 @@ class DirectionalGraphic(Graphic):
 Before an actor can use it, reserve the mirrored tile in `sprites.py`, in whichever row of the sheet holds the flipped art (row 6, if row 5 holds the upright actors):
 
 ```diff
- PLAYER = PUA + 0
- ORC    = PUA + 1
- TROLL  = PUA + 2
+ class SpriteGlyphs:
+     PLAYER = PUA + 0
+     ORC    = PUA + 1
+     TROLL  = PUA + 2
 +
-+PLAYER_FLIPPED = PLAYER + 0x100
-+ORC_FLIPPED    = ORC    + 0x100
-+TROLL_FLIPPED  = TROLL  + 0x100
++    PLAYER_FLIPPED = PLAYER + 10
++    ORC_FLIPPED    = ORC    + 10
++    TROLL_FLIPPED  = TROLL  + 10
 
- DAGGER = PUA + 3
- SWORD  = PUA + 4
- POTION = PUA + 5
+     DAGGER = PUA + 3
+     SWORD  = PUA + 4
+     POTION = PUA + 5
 ```
+
+The gap of `10` leaves room for a few more upright entities before their flipped variants would collide with the next block. A larger game can reserve a whole block per category instead, actors, items, equipment, each starting at its own round number, so the roster has room to grow without renumbering anything.
 
 ```diff
-     tileset.remap(PLAYER, 0, 5)
-     tileset.remap(ORC,    1, 5)
-     tileset.remap(TROLL,  2, 5)
+     tileset.remap(SpriteGlyphs.PLAYER, 0, 5)
+     tileset.remap(SpriteGlyphs.ORC,    1, 5)
+     tileset.remap(SpriteGlyphs.TROLL,  2, 5)
 
-+    tileset.remap(PLAYER_FLIPPED, 0, 6)
-+    tileset.remap(ORC_FLIPPED,    1, 6)
-+    tileset.remap(TROLL_FLIPPED,  2, 6)
++    tileset.remap(SpriteGlyphs.PLAYER_FLIPPED, 0, 6)
++    tileset.remap(SpriteGlyphs.ORC_FLIPPED,    1, 6)
++    tileset.remap(SpriteGlyphs.TROLL_FLIPPED,  2, 6)
 +
-     tileset.remap(DAGGER, 0, 7)
+     tileset.remap(SpriteGlyphs.DAGGER, 0, 7)
 ```
 
-A flipping actor declares its two tiles instead of a single `char`:
+A flipping actor declares its two tiles instead of a single `char`, but only when there is art to flip between: there is no mirrored version of the character `"@"`. Build `DirectionalGraphic` unconditionally and the failure is silent in character mode: `main.py` loads the plain sheet, but `init_sprites` still remaps `SpriteGlyphs.PLAYER` and its neighbors onto whatever sheet is loaded, since it does not check the flag either, so the actor draws whatever happens to sit at those cells instead of falling back to `"@"`.
+
+(This is where Option A stops needing a translation note: there is only one glyph set, so skip `_directional` below and build `DirectionalGraphic(sprites.PLAYER, sprites.PLAYER_FLIPPED)` directly, with no flag and no fallback to consider.)
+
+A per-actor `if sprites.USE_SPRITES else None` would work, but five monsters mean five chances to forget it. Centralize the decision instead, in `game/entities/factories.py`:
+
+```diff
+-from game.entities.components.graphic import DirectionalGraphic
++from game.entities.components.graphic import DirectionalGraphic, Graphic, StaticGraphic
+```
 
 ```python
+def _directional(base: int, flipped: int, fallback: int | str) -> Graphic:
+    return DirectionalGraphic(base, flipped) if sprites.USE_SPRITES else StaticGraphic(fallback)
+
+
 player = Actor(
     ...
-    graphic = DirectionalGraphic(sprites.PLAYER, sprites.PLAYER_FLIPPED),
+    graphic = _directional(sprites.SpriteGlyphs.PLAYER, sprites.SpriteGlyphs.PLAYER_FLIPPED, sprites.CurrentGlyphs.PLAYER),
 )
 ```
+
+`CurrentGlyphs.PLAYER` is the right argument here, not `CharGlyphs.PLAYER`: every other entity already reads its plain glyph through `CurrentGlyphs`, so this keeps the same habit even though, in the branch where `sprites.USE_SPRITES` is true, the value it resolves to (a sprite codepoint) never actually gets used, `fallback` only matters in the other branch, where `CurrentGlyphs` has already collapsed to `CharGlyphs` for you.
+
+!!! info "Why this stays out of `DirectionalGraphic` itself"
+    `StaticGraphic` already resolves `str` or `int` in its own `glyph` (the `isinstance` check from earlier), so reusing it for the fallback avoids duplicating that logic a second time inside `DirectionalGraphic`. It also keeps every `Graphic` subclass ignorant of `USE_SPRITES`: `StaticGraphic` and `AnimatedGraphic` do not know the flag exists, and `DirectionalGraphic` should not be the one exception. The mode decision belongs to whoever builds the entity, made once at construction, not to the strategy object itself on every `glyph` read.
+
+    A variant worth knowing about: check `isinstance(fallback, int)` instead of `sprites.USE_SPRITES` directly, and `_directional` would not need to import `sprites` at all, it would just react to the type of whatever `CurrentGlyphs.PLAYER` resolved to, the same idiom `StaticGraphic.glyph` already uses. Either reads fine; this appendix keeps the explicit flag since it says outright what is being decided.
+
+`char` is no longer needed on this actor: `_directional` always returns a real `Graphic`, sprite or fallback, so `graphic` is never `None` and `Entity.__init__` never reaches for `char`.
 
 Finally, wherever an entity moves, tell its glyph which way it went. Static entities ignore the call, so it is safe for everyone:
 
@@ -350,6 +469,7 @@ Finally, wherever an entity moves, tell its glyph which way it went. Static enti
 
 ## Constraints and what comes next
 
+- **Facing only follows movement.** `face()` is called from `move()`, so a bump attack, which resolves to `MeleeAction` without ever calling `move()`, leaves the actor's facing wherever it last was. Attacking left without having walked left keeps the sprite facing right. Calling `self.graphic.face(dx, dy)` from `MeleeAction.perform()` too would close this gap.
 - **One tile per cell.** Every sprite must fit a single grid cell, same size as the font. Multi-tile creatures and large sprites need extra work and are out of scope here.
 - **Layering two graphics is the hard part.** Drawing a sprite *on top of another sprite* (a floor tile under a creature, an item glow behind an icon) is not straightforward in tcod, because a cell holds one tile. It is possible, and it gets its own appendix (advanced tcod techniques), with worked examples.
 - **Animation timing and composition** belong in that advanced appendix. The `AnimatedGraphic` sketch above shows the shape; advancing frames on a clock, composing animation with facing, plus **blending** and **partial transparency**, are the deeper work.
@@ -358,6 +478,6 @@ Finally, wherever an entity moves, tell its glyph which way it went. Static enti
 
 ## Summary
 
-Graphics in tcod are not a different rendering path: they are the same tile system with the codepoints remapped. `tileset.remap` points a free id at a tile in the sheet, and the Unicode Private Use Area is where those ids come from, so they never collide with a real character. A `sprites` module collects them behind a `USE_SPRITES` flag and an `init_sprites()` function, organized either as flat constants or as two switchable sets, and forces `fg` to white so the art keeps its own colors.
+Graphics in tcod are not a different rendering path: they are the same tile system with the codepoints remapped. `tileset.remap` points a free id at a tile in the sheet, and the Unicode Private Use Area is where those ids come from, so they never collide with a real character. A `sprites` module collects them behind a `USE_SPRITES` flag and an `init_sprites()` function, organized either as flat constants or as two switchable sets, and forces `fg` to white whenever the game is in sprite mode, so the art keeps its own colors.
 
 Rather than branch on `int` versus `str` at every draw, each entity delegates to a `Graphic`: a small strategy object whose `glyph` property resolves to the character tcod prints. That one change is what lets facing and animation arrive as new kinds of `Graphic` (`DirectionalGraphic`, `AnimatedGraphic`) instead of new special cases in `render`. The whole system still assumes one tile per cell; layering two graphics, blending, and full animation timing go beyond that and are the subject of the advanced tcod appendix.
