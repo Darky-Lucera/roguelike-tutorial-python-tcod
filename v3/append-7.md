@@ -1,10 +1,6 @@
-# Appendix 7 Draft: Using Graphics Instead of Characters (WIP)
+# Appendix 7: Using Graphics Instead of Characters
 
-!!! note "Draft notes"
-
-    This document is a parking place for future ideas. It is not part of the main tutorial flow yet, and the details below should be revisited and balanced before being turned into a finished appendix.
-
-    Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2), the `game/constants/` package (Part 5), and the centralized `RES_DIR` (Part 10). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
+Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2), the `game/constants/` package (Part 5), and the centralized `RES_DIR` (Part 10). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
 
 Part 1 ends with a quick trick: point a free codepoint at a tile in the sheet and draw `chr(0xE000)` instead of `"@"`. That is enough to see a sprite, but it does not scale to a full game with dozens of entities, monsters that face left and right, and a switch to flip the whole game back to ASCII.
 
@@ -28,7 +24,11 @@ Rather than hunt for gaps, take the sprite ids from the Unicode **Private Use Ar
     Each range stops at `...FFFD` because its final two codepoints (`...FFFE` and `...FFFF`) are permanent *noncharacters*: reserved forever and never meant for interchange, which is why the private ranges end just before them.
 
 !!! info "Filling free cells vs. extending the sheet"
-    `CHARMAP_TCOD` does not fill all 256 cells: the lower rows of the original DejaVu sheet are empty. The example sheet in Part 1 paints its sprites into those free cells, so nothing from the base font is lost. The `32` and `8` passed to `load_tilesheet` are the tile counts across and down. When you need more sprites than the free cells can hold, make the sheet *taller*: keep the original rows untouched, add new rows below, and raise the row count to match.
+    `CHARMAP_TCOD` does not fill all 256 cells: the lower rows of the original DejaVu sheet are empty. The extended sheet from Part 1 paints its first sprites into those free cells, so nothing from the base font is lost. When you need more sprites than the free cells can hold, make the sheet *taller*: keep the original rows untouched, add new rows below, and raise the row count passed to `load_tilesheet` to match.
+
+    Taller, never wider. `load_tilesheet` numbers tiles left to right, top to bottom, and assigns the codepoints in `CHARMAP_TCOD` to the tiles in that same order. `CHARMAP_TCOD` has 160 entries, enough for the first five rows of a 32-column sheet, which is exactly why the three rows below them were free in the first place. Any tile numbered past the end of the list gets no character, so rows added at the bottom leave the whole font intact, and the new tiles sit unassigned until `remap` points something at them. Widen the sheet instead and the numbering shifts under the charmap: with 40 columns, tile 32 is no longer the first cell of the second row (`@` in this layout) but the 33rd cell of the first, so every character past the first row lands on the wrong art.
+
+    The tutorial's sheet already does both safe moves: rows 5 to 7 fill free cells, and five extra rows of directional art sit below the original eight, 13 in total. The facing sections at the end of this appendix put those rows to work.
 
 ---
 
@@ -168,18 +168,21 @@ Every other entity in `game/entities/factories.py` follows the same pattern: whe
 
 ## Wiring it into `main.py`
 
-Load the right sheet for the current mode and call `init_sprites` once, right after the tileset is created and before the context opens:
+Load the right sheet for the current mode, with its matching row count, and call `init_sprites` once, right after the tileset is created and before the context opens:
 
 ```diff
      tileset = tcod.tileset.load_tilesheet(
 -        constants.RES_DIR / "dejavu12x12_gs_tc.png",
 +        constants.RES_DIR / ("dejavu12x12_gs_tc_ex.png" if sprites.USE_SPRITES else "dejavu12x12_gs_tc.png"),
          32,
-         8,
+-        8,
++        (13 if sprites.USE_SPRITES else 8), # 5 Monster rows
          tcod.tileset.CHARMAP_TCOD,
      )
 +    sprites.init_sprites(tileset)
 ```
+
+The row count follows the same flag as the filename: the original sheet is 8 rows tall, the extended one is 13, and passing a count that does not match the image leaves tcod unable to cut it into tiles. The five extra rows hold directional monster art; the facing sections below put it to work.
 
 !!! warning "Parenthesize the ternary"
     `/` binds tighter than `if ... else`. Without the inner parentheses, `RES_DIR / "a" if flag else "b"` parses as `(RES_DIR / "a") if flag else "b"`: the `False` branch would return the bare string `"b"`, never joined to `RES_DIR`. Wrap the whole conditional before joining it to the path.
@@ -344,7 +347,7 @@ class AnimatedGraphic(Graphic):
 !!! warning "Keep `glyph` pure"
     The `glyph` property must only *read* state, never change it. Advancing `frame` (or the facing in the next section) belongs to update time: a `tick` called once per game turn, or on a clock in the main loop. A property that `render` may call many times, or not at all, is the wrong place for a side effect. Rendering should change nothing.
 
-Composing these axes (animation per direction, eight-way facing, blending two tiles in one cell) builds on this same base and is the subject of the advanced tcod appendix. The next section wires the first extra axis: facing.
+Composing these axes (animation per direction, blending two tiles in one cell) builds on this same base; animation itself is the subject of [Appendix 8](append-8.md). The next sections wire the first extra axis: facing, first as a left/right mirror, then across the full compass.
 
 ---
 
@@ -352,7 +355,7 @@ Composing these axes (animation per direction, eight-way facing, blending two ti
 
 tcod copies each tile to the screen exactly as it sits in the sheet. It never rotates or mirrors, so a hero facing left and the same hero facing right are *two different tiles*. You paint the mirrored art into its own codepoints and choose the right one at draw time.
 
-The naive fix is a `flip` boolean and an `if` at every place that draws. That branch spreads through the code and never grows past two directions. With `Graphic` in place, facing becomes one more kind: a `DirectionalGraphic` that holds both tiles and decides between them.
+The naive fix is a `flip` boolean and an `if` at every place that draws. That branch spreads through the code and never grows past two directions. With `Graphic` in place, facing becomes one more kind: a `DirectionalGraphic2` that holds both tiles and decides between them. The `2` in the name counts its directions: four-way and eight-way siblings join it before this appendix ends.
 
 First, give every `Graphic` a way to react to movement. The base does nothing, so static graphics ignore it for free; only graphics that care override it. Passing both `dx` and `dy` keeps the interface uniform for future four or eight-way art, even though a left/right flip reads only `dx`:
 
@@ -368,10 +371,10 @@ First, give every `Graphic` a way to react to movement. The base does nothing, s
          raise NotImplementedError
 ```
 
-`DirectionalGraphic` stores the two tiles and flips between them. We store `flip` ("show the mirror"), not a compass facing, because the base art may point either way; the artist decides, and `face` only toggles on horizontal moves:
+`DirectionalGraphic2` stores the two tiles and flips between them. We store `flip` ("show the mirror"), not a compass facing, because the base art may point either way; the artist decides, and `face` only toggles on horizontal moves:
 
 ```python
-class DirectionalGraphic(Graphic):
+class DirectionalGraphic2(Graphic):
     """Two tiles: the sheet art, and its mirror."""
 
     def __init__(self, base: int, flipped: int) -> None:
@@ -422,36 +425,38 @@ The gap of `10` leaves room for a few more upright entities before their flipped
      tileset.remap(SpriteGlyphs.DAGGER, 0, 7)
 ```
 
-A flipping actor declares its two tiles instead of a single `char`, but only when there is art to flip between: there is no mirrored version of the character `"@"`. Build `DirectionalGraphic` unconditionally and the failure is silent in character mode: `main.py` loads the plain sheet, but `init_sprites` still remaps `SpriteGlyphs.PLAYER` and its neighbors onto whatever sheet is loaded, since it does not check the flag either, so the actor draws whatever happens to sit at those cells instead of falling back to `"@"`.
+A flipping actor declares its two tiles instead of a single `char`, but only when there is art to flip between: there is no mirrored version of the character `"@"`. Build `DirectionalGraphic2` unconditionally and the failure is silent in character mode: `main.py` loads the plain sheet, but `init_sprites` still remaps `SpriteGlyphs.PLAYER` and its neighbors onto whatever sheet is loaded, since it does not check the flag either, so the actor draws whatever happens to sit at those cells instead of falling back to `"@"`.
 
-(This is where Option A stops needing a translation note: there is only one glyph set, so skip `_directional` below and build `DirectionalGraphic(sprites.PLAYER, sprites.PLAYER_FLIPPED)` directly, with no flag and no fallback to consider.)
+(This is where Option A stops needing a translation note: there is only one glyph set, so skip `_directional2` below and build `DirectionalGraphic2(sprites.PLAYER, sprites.PLAYER_FLIPPED)` directly, with no flag and no fallback to consider.)
 
 A per-actor `if sprites.USE_SPRITES else None` would work, but five monsters mean five chances to forget it. Centralize the decision instead, in `game/entities/factories.py`:
 
 ```diff
--from game.entities.components.graphic import DirectionalGraphic
-+from game.entities.components.graphic import DirectionalGraphic, Graphic, StaticGraphic
+-from game.entities.components.graphic import DirectionalGraphic2
++from game.entities.components.graphic import DirectionalGraphic2, Graphic, StaticGraphic
 ```
 
 ```python
-def _directional(base: int, flipped: int, fallback: int | str) -> Graphic:
-    return DirectionalGraphic(base, flipped) if sprites.USE_SPRITES else StaticGraphic(fallback)
+def _directional2(base: int,
+                  flipped:  int,
+                  fallback: str | int) -> Graphic:
+    return DirectionalGraphic2(base, flipped) if sprites.USE_SPRITES else StaticGraphic(fallback)
 
 
 player = Actor(
     ...
-    graphic = _directional(sprites.SpriteGlyphs.PLAYER, sprites.SpriteGlyphs.PLAYER_FLIPPED, sprites.CurrentGlyphs.PLAYER),
+    graphic = _directional2(sprites.SpriteGlyphs.PLAYER, sprites.SpriteGlyphs.PLAYER_FLIPPED, sprites.CurrentGlyphs.PLAYER),
 )
 ```
 
 `CurrentGlyphs.PLAYER` is the right argument here, not `CharGlyphs.PLAYER`: every other entity already reads its plain glyph through `CurrentGlyphs`, so this keeps the same habit even though, in the branch where `sprites.USE_SPRITES` is true, the value it resolves to (a sprite codepoint) never actually gets used, `fallback` only matters in the other branch, where `CurrentGlyphs` has already collapsed to `CharGlyphs` for you.
 
-!!! info "Why this stays out of `DirectionalGraphic` itself"
-    `StaticGraphic` already resolves `str` or `int` in its own `glyph` (the `isinstance` check from earlier), so reusing it for the fallback avoids duplicating that logic a second time inside `DirectionalGraphic`. It also keeps every `Graphic` subclass ignorant of `USE_SPRITES`: `StaticGraphic` and `AnimatedGraphic` do not know the flag exists, and `DirectionalGraphic` should not be the one exception. The mode decision belongs to whoever builds the entity, made once at construction, not to the strategy object itself on every `glyph` read.
+!!! info "Why this stays out of `DirectionalGraphic2` itself"
+    `StaticGraphic` already resolves `str` or `int` in its own `glyph` (the `isinstance` check from earlier), so reusing it for the fallback avoids duplicating that logic a second time inside `DirectionalGraphic2`. It also keeps every `Graphic` subclass ignorant of `USE_SPRITES`: `StaticGraphic` and `AnimatedGraphic` do not know the flag exists, and `DirectionalGraphic2` should not be the one exception. The mode decision belongs to whoever builds the entity, made once at construction, not to the strategy object itself on every `glyph` read.
 
-    A variant worth knowing about: check `isinstance(fallback, int)` instead of `sprites.USE_SPRITES` directly, and `_directional` would not need to import `sprites` at all, it would just react to the type of whatever `CurrentGlyphs.PLAYER` resolved to, the same idiom `StaticGraphic.glyph` already uses. Either reads fine; this appendix keeps the explicit flag since it says outright what is being decided.
+    A variant worth knowing about: check `isinstance(fallback, int)` instead of `sprites.USE_SPRITES` directly, and `_directional2` would not need to import `sprites` at all, it would just react to the type of whatever `CurrentGlyphs.PLAYER` resolved to, the same idiom `StaticGraphic.glyph` already uses. Either reads fine; this appendix keeps the explicit flag since it says outright what is being decided.
 
-`char` is no longer needed on this actor: `_directional` always returns a real `Graphic`, sprite or fallback, so `graphic` is never `None` and `Entity.__init__` never reaches for `char`.
+`char` is no longer needed on this actor: `_directional2` always returns a real `Graphic`, sprite or fallback, so `graphic` is never `None` and `Entity.__init__` never reaches for `char`. Every other actor with its own facing art (the tutorial's monsters, if you gave them one) follows the same `_directional2(...)` call.
 
 Finally, wherever an entity moves, tell its glyph which way it went. Static entities ignore the call, so it is safe for everyone:
 
@@ -465,14 +470,254 @@ Finally, wherever an entity moves, tell its glyph which way it went. Static enti
 !!! info "Why duplicate instead of mirror, even when you could"
     Most 2D games keep separate left and right art on purpose. Light hits a character from one side, so highlights and shadows sit on fixed pixels. Mirroring would make the shine jump to the other side every time the character turns, which reads as wrong. Duplicating the art (or hand-tuning each direction) keeps the lighting consistent.
 
+### Facing in combat
+
+Movement is not the only thing with a direction. A bump attack resolves through `MeleeAction` without ever calling `move()`, so an actor could strike left while its sprite kept looking right, and the victim could take the blow with its back turned. Both read wrong on screen. Fix both sides in `MeleeAction.perform`, just before the attack lands:
+
+```diff
+             return  # Both attacker and defender must be Actors to fight
+
++        entity.graphic.face(self.dx, self.dy)
++        target.graphic.face(-self.dx, -self.dy)
++
+         entity.fighter.melee_attack(target)
+```
+
+The attacker turns into its own blow, and `(-dx, -dy)` is that same blow seen from the other side, so the target turns to meet it. Because `face` is a no-op on the base `Graphic`, both lines are safe whatever kind of graphic either side carries. Ranged attacks, the scrolls, still turn nobody; the same call fits wherever a target position is known, if your game wants it.
+
+!!! question "Should the victim really turn?"
+    Turning the defender is a game-feel choice, not a rule. Two fighters trading blows while facing each other is what the eye expects, and being hit is as good a reason as any to look at your attacker. A stealth game might keep the victim's facing untouched on purpose: a backstab reads as a backstab precisely because the victim never saw it coming. If that is your game, drop the second line.
+
+---
+
+## Facing in four and eight directions
+
+A mirror pair costs two tiles of art and covers most roguelikes. Top-down packs usually offer more: distinct art for the four compass points, or for all eight. The Strategy shape absorbs that upgrade without touching `render`, `move`, or `MeleeAction`, because how many directions exist is a private detail of each `Graphic`. This section adds the four-way and eight-way siblings of `DirectionalGraphic2`, and the bookkeeping the extra art needs.
+
+Directions deserve names before anything else. In `game/entities/components/graphic.py`:
+
+```diff
+ from __future__ import annotations
++from enum import Enum
+```
+
+```python
+class GraphicDirection(Enum):
+    DOWN       = 0
+    DOWN_RIGHT = 1
+    RIGHT      = 2
+    UP_RIGHT   = 3
+    UP         = 4
+    UP_LEFT    = 5
+    LEFT       = 6
+    DOWN_LEFT  = 7
+```
+
+Three reading notes. `DOWN` means "toward the bottom of the screen": the console's `y` axis grows downward, the same convention every `dy` in the game already uses. The code below never reads the numeric values (every lookup goes by member); they exist to fix an order, the same order the sprite sheet's columns will use, so the enum, the constants, and the remaps all read straight across. And `DirectionalGraphic2` keeps its `flip` boolean untouched: two directions do not need the enum.
+
+### Four directions
+
+`DirectionalGraphic4` keeps one tile per compass point and reduces every move to one of them:
+
+```python
+class DirectionalGraphic4(Graphic):
+    """Four tiles."""
+
+    def __init__(self,
+                 down: int,
+                 right: int,
+                 up: int,
+                 left: int,
+                 initial: GraphicDirection = GraphicDirection.DOWN) -> None:
+        self.direction = initial
+        self.sprites = {
+            GraphicDirection.DOWN:  down,
+            GraphicDirection.RIGHT: right,
+            GraphicDirection.UP:    up,
+            GraphicDirection.LEFT:  left,
+        }
+
+    def face(self, dx: int, dy: int) -> None:
+        if dx == 0 and dy == 0:
+            return
+
+        if abs(dx) > abs(dy):
+            self.direction = GraphicDirection.LEFT if dx < 0 else GraphicDirection.RIGHT
+        else:
+            self.direction = GraphicDirection.UP if dy < 0 else GraphicDirection.DOWN
+
+    @property
+    def glyph(self) -> str:
+        return chr(self.sprites[self.direction])
+```
+
+The `face` override is where four tiles meet eight-way movement. A diagonal move has no tile of its own, so the comparison asks which axis dominates: the horizontal art wins only when the move is *more* horizontal than vertical. On a pure diagonal both amounts tie and the vertical art wins, on purpose: front and back views are the most readable poses in most sheets, so ties fall to them rather than to a profile.
+
+`initial` exists because an actor must show some tile before its first move. `DOWN`, the pose that looks at the player, is what most sheets draw as the resting frame.
+
+### Eight directions
+
+`DirectionalGraphic8` is the same idea with the full compass. The one new trick is normalizing the move before the lookup:
+
+```python
+class DirectionalGraphic8(Graphic):
+    """Eight tiles."""
+
+    def __init__(self,
+                 down:       int,
+                 down_right: int,
+                 right:      int,
+                 up_right:   int,
+                 up:         int,
+                 up_left:    int,
+                 left:       int,
+                 down_left:  int,
+                 initial: GraphicDirection = GraphicDirection.DOWN) -> None:
+        self.direction = initial
+        self.sprites = {
+            GraphicDirection.DOWN:       down,
+            GraphicDirection.DOWN_RIGHT: down_right,
+            GraphicDirection.RIGHT:      right,
+            GraphicDirection.UP_RIGHT:   up_right,
+            GraphicDirection.UP:         up,
+            GraphicDirection.UP_LEFT:    up_left,
+            GraphicDirection.LEFT:       left,
+            GraphicDirection.DOWN_LEFT:  down_left,
+        }
+
+    def face(self, dx: int, dy: int) -> None:
+        if dx == 0 and dy == 0:
+            return
+
+        x = 0 if dx == 0 else 1 if dx > 0 else -1
+        y = 0 if dy == 0 else 1 if dy > 0 else -1
+        self.direction = {
+            ( 0,  1): GraphicDirection.DOWN,
+            ( 1,  1): GraphicDirection.DOWN_RIGHT,
+            ( 1,  0): GraphicDirection.RIGHT,
+            ( 1, -1): GraphicDirection.UP_RIGHT,
+            ( 0, -1): GraphicDirection.UP,
+            (-1, -1): GraphicDirection.UP_LEFT,
+            (-1,  0): GraphicDirection.LEFT,
+            (-1,  1): GraphicDirection.DOWN_LEFT,
+        }[(x, y)]
+
+    @property
+    def glyph(self) -> str:
+        return chr(self.sprites[self.direction])
+```
+
+`x` and `y` are the *signs* of `dx` and `dy`: any move, one cell or many, collapses to `-1`, `0`, or `1` on each axis. That leaves nine combinations; `(0, 0)` already returned at the top, and the remaining eight are exactly the dictionary's keys. Looking the answer up in a literal dictionary instead of walking an `if` chain is the same dispatch trick the key maps have used since Part 5.
+
+### One block of ids per actor
+
+Count what an actor owns now: a base tile, its mirror, and eight directions, ten ids in all. The gap of 10 from the mirror section is spent to the last slot, with no room left before the next actor. This is the moment to renumber, and the block idea mentioned back then lands one size finer: a block of 100 ids per actor, and a block of 1000 per category:
+
+```python
+class SpriteGlyphs:
+
+    # One block of 100 ids per actor:
+    # +0 the base tile, +1 its mirror, +10..+17 the eight directions.
+    PLAYER = PUA + 0
+    ORC    = PUA + 100
+    TROLL  = PUA + 200
+
+    PLAYER_FLIPPED = PLAYER + 1
+    ORC_FLIPPED    = ORC    + 1
+    TROLL_FLIPPED  = TROLL  + 1
+
+    PLAYER_DOWN       = PLAYER + 10
+    PLAYER_DOWN_RIGHT = PLAYER + 11
+    PLAYER_RIGHT      = PLAYER + 12
+    PLAYER_UP_RIGHT   = PLAYER + 13
+    PLAYER_UP         = PLAYER + 14
+    PLAYER_UP_LEFT    = PLAYER + 15
+    PLAYER_LEFT       = PLAYER + 16
+    PLAYER_DOWN_LEFT  = PLAYER + 17
+
+    # ORC_DOWN .. ORC_DOWN_LEFT and TROLL_DOWN .. TROLL_DOWN_LEFT
+    # repeat the same +10 .. +17 offsets inside their own blocks.
+```
+
+In the full game the corpse moves to `PUA + 1000`, the chest and consumables to the 2000s, weapons and armor to the 3000s, and the stairs to the 4000s. The direction offsets follow the `GraphicDirection` order, and renumbering ids changes nothing on screen: the ids are the game's names for tiles, the cells of the sheet have not moved, and `init_sprites` remains the only bridge between the two.
+
+The sprite sheet grows five new rows for this art, rows 8 through 12: one row per actor (player, orc, troll, ghoul, ogre in the full game), eight columns in `GraphicDirection` order. Those rows are why `load_tilesheet` has been passing `13 if sprites.USE_SPRITES else 8` since the wiring section. `init_sprites` gains one line per tile; the player's row shows the pattern, and each other actor repeats it one row further down:
+
+```python
+    tileset.remap(SpriteGlyphs.PLAYER_DOWN,       0, 8)
+    tileset.remap(SpriteGlyphs.PLAYER_DOWN_RIGHT, 1, 8)
+    tileset.remap(SpriteGlyphs.PLAYER_RIGHT,      2, 8)
+    tileset.remap(SpriteGlyphs.PLAYER_UP_RIGHT,   3, 8)
+    tileset.remap(SpriteGlyphs.PLAYER_UP,         4, 8)
+    tileset.remap(SpriteGlyphs.PLAYER_UP_LEFT,    5, 8)
+    tileset.remap(SpriteGlyphs.PLAYER_LEFT,       6, 8)
+    tileset.remap(SpriteGlyphs.PLAYER_DOWN_LEFT,  7, 8)
+```
+
+### Wiring the factories
+
+The helpers follow `_directional2`, one per family, still deciding sprite mode in one place:
+
+```python
+def _directional4(down:     int,
+                  right:    int,
+                  up:       int,
+                  left:     int,
+                  fallback: str | int,
+                  initial:  GraphicDirection = GraphicDirection.DOWN) -> Graphic:
+    return DirectionalGraphic4(down, right, up, left, initial) if sprites.USE_SPRITES else StaticGraphic(fallback)
+
+def _directional8(down:       int,
+                  down_right: int,
+                  right:      int,
+                  up_right:   int,
+                  up:         int,
+                  up_left:    int,
+                  left:       int,
+                  down_left:  int,
+                  fallback:   str | int,
+                  initial:    GraphicDirection = GraphicDirection.DOWN) -> Graphic:
+    return DirectionalGraphic8(down, down_right, right, up_right, up, up_left, left, down_left, initial) if sprites.USE_SPRITES else StaticGraphic(fallback)
+```
+
+with the import line grown to match:
+
+```diff
+-from game.entities.components.graphic import DirectionalGraphic2, Graphic, StaticGraphic
++from game.entities.components.graphic import DirectionalGraphic2, DirectionalGraphic4, DirectionalGraphic8, Graphic, GraphicDirection, StaticGraphic
+```
+
+An actor upgrades by naming its eight tiles; the fallback works exactly as before:
+
+```python
+player = Actor(
+    graphic    = _directional8(
+        sprites.SpriteGlyphs.PLAYER_DOWN,
+        sprites.SpriteGlyphs.PLAYER_DOWN_RIGHT,
+        sprites.SpriteGlyphs.PLAYER_RIGHT,
+        sprites.SpriteGlyphs.PLAYER_UP_RIGHT,
+        sprites.SpriteGlyphs.PLAYER_UP,
+        sprites.SpriteGlyphs.PLAYER_UP_LEFT,
+        sprites.SpriteGlyphs.PLAYER_LEFT,
+        sprites.SpriteGlyphs.PLAYER_DOWN_LEFT,
+        sprites.CurrentGlyphs.PLAYER
+    ),
+    ...
+)
+```
+
+The orc, the troll, and the rest make the same call with their own blocks.
+
+!!! info "Three strategies, zero new branches"
+    Stand back and count what did *not* change. `render` still prints `entity.glyph`. `move` and `MeleeAction` still call `face(dx, dy)` without knowing who is listening. Switching one actor between two, four, and eight directions is one factory line, and a future `DirectionalGraphic16`, or a graphic that turns by swapping palettes, would slot in the same way. This is the Strategy pattern paying rent: every new behavior arrived as a new class plus data, never as a new `if` in the drawing code.
+
 ---
 
 ## Constraints and what comes next
 
-- **Facing only follows movement.** `face()` is called from `move()`, so a bump attack, which resolves to `MeleeAction` without ever calling `move()`, leaves the actor's facing wherever it last was. Attacking left without having walked left keeps the sprite facing right. Calling `self.graphic.face(dx, dy)` from `MeleeAction.perform()` too would close this gap.
 - **One tile per cell.** Every sprite must fit a single grid cell, same size as the font. Multi-tile creatures and large sprites need extra work and are out of scope here.
 - **Layering two graphics is the hard part.** Drawing a sprite *on top of another sprite* (a floor tile under a creature, an item glow behind an icon) is not straightforward in tcod, because a cell holds one tile. It is possible, and it gets its own appendix (advanced tcod techniques), with worked examples.
-- **Animation timing and composition** belong in that advanced appendix. The `AnimatedGraphic` sketch above shows the shape; advancing frames on a clock, composing animation with facing, plus **blending** and **partial transparency**, are the deeper work.
+- **Animation timing and composition** belong in [Appendix 8](append-8.md). The `AnimatedGraphic` sketch above shows the shape; advancing frames on a clock, composing animation with facing, plus **blending** and **partial transparency**, are the deeper work.
 
 ---
 
@@ -480,4 +725,4 @@ Finally, wherever an entity moves, tell its glyph which way it went. Static enti
 
 Graphics in tcod are not a different rendering path: they are the same tile system with the codepoints remapped. `tileset.remap` points a free id at a tile in the sheet, and the Unicode Private Use Area is where those ids come from, so they never collide with a real character. A `sprites` module collects them behind a `USE_SPRITES` flag and an `init_sprites()` function, organized either as flat constants or as two switchable sets, and forces `fg` to white whenever the game is in sprite mode, so the art keeps its own colors.
 
-Rather than branch on `int` versus `str` at every draw, each entity delegates to a `Graphic`: a small strategy object whose `glyph` property resolves to the character tcod prints. That one change is what lets facing and animation arrive as new kinds of `Graphic` (`DirectionalGraphic`, `AnimatedGraphic`) instead of new special cases in `render`. The whole system still assumes one tile per cell; layering two graphics, blending, and full animation timing go beyond that and are the subject of the advanced tcod appendix.
+Rather than branch on `int` versus `str` at every draw, each entity delegates to a `Graphic`: a small strategy object whose `glyph` property resolves to the character tcod prints. That one change is what lets facing arrive as new kinds of `Graphic` instead of new special cases in `render`: a mirror pair in `DirectionalGraphic2`, four compass points in `DirectionalGraphic4`, the full eight in `DirectionalGraphic8`, all fed by the same `face()` calls from movement and combat, with `AnimatedGraphic` sketched as the next step. The whole system still assumes one tile per cell; layering two graphics, blending, and full animation timing go beyond that, and animation is the subject of [Appendix 8](append-8.md).

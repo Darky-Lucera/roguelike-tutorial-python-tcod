@@ -139,7 +139,18 @@ tileset = tcod.tileset.load_tilesheet(
 
 `Path(__file__).parent` is the folder where `main.py` lives, so `Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png"` resolves the image path relative to `main.py` itself, not the terminal's current directory. For example, if `main.py` lives in `/home/user/my-game/`, the path evaluates to `/home/user/my-game/res/dejavu12x12_gs_tc.png`, regardless of which folder you launched Python from. This means `python main.py` works the same way from anywhere.
 
-The sheet has 32 columns and 8 rows = 256 tiles, one for each character in the TCOD character map.
+The sheet has 32 columns and 8 rows = 256 tiles. The TCOD character map only claims the first 160 of them (five rows); the last three rows sit empty, something the end of this part takes advantage of.
+
+!!! info "`CHARMAP_TCOD` vs `CHARMAP_CP437`"
+    The charmap is the list that tells `load_tilesheet` which character each tile stands for, in reading order: first tile, first codepoint of the list, and so on. It must describe the layout the image was *drawn* in, so it is a property of the font file, not a preference.
+
+    `CHARMAP_TCOD` (160 entries) is the layout of the classic libtcod fonts, our DejaVu sheet among them. tcod's documentation treats it as legacy: non-standard, kept so that fonts already drawn in it still load, not recommended for new art.
+
+    The standard today is `CHARMAP_CP437` (256 entries): the layout of IBM's original PC character set, Code Page 437. It is what Dwarf Fortress tilesets use, and any sheet from the [Dwarf Fortress tileset repository](https://dwarffortresswiki.org/index.php/DF2014:Tileset_repository) loads with it directly.
+
+    This tutorial stays on `CHARMAP_TCOD` because our font is drawn in that layout; swap in a CP437 sheet and the only changes are the charmap argument and the sheet's own column and row counts.
+
+    Grids of tiles in a PNG are not the only option, either. libtcod's [font folder](https://github.com/libtcod/libtcod/tree/main/data/fonts), where our sheet comes from, points at the alternatives: Dwarf Fortress tilesets, BDF bitmap fonts (`tcod.tileset.load_bdf`), and TrueType fonts (`tcod.tileset.load_truetype_font`).
 
 ### SDL metadata and scaling hints
 
@@ -462,7 +473,7 @@ The only rule is that everything stays on the grid: one tile per cell, all the s
 
 ![extended tileset](images/dejavu12x12_gs_tc_ex.png)
 
-That is the same DejaVu sheet with a few sprites painted into the lower rows (hero, orc, dagger, and so on).
+That is the same DejaVu sheet with a few sprites painted into the lower rows (hero, orc, dagger, and so on), plus five rows of directional art added below the original eight. This part only uses the hero tile; the rest waits for the [graphics appendix](append-7.md).
 
 ??? note "Where to find graphics"
     You can find tile and sprite sets in many styles, free or paid, on sites like [itch.io](https://itch.io), [OpenGameArt](https://opengameart.org), or [Kenney](https://kenney.nl) (there are tens of dedicated webs).
@@ -490,7 +501,8 @@ Two small changes to `main.py`. First, load the extended sheet and point a free 
 -        Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png",
 +        Path(__file__).parent / "res" / "dejavu12x12_gs_tc_ex.png",
          32,
-         8,
+-        8,
++        13,  # the extended sheet adds 5 rows below the original 8
          tcod.tileset.CHARMAP_TCOD,
      )
 +
@@ -515,7 +527,11 @@ Then draw that codepoint instead of `"@"`:
 Run the game: the hero walks around as a sprite. That is the whole trick.
 
 !!! note "About the sheet layout"
-    The lower rows of the original DejaVu sheet were empty, so we are filling unused cells, not overwriting any glyph. The `32` and `8` we pass to `load_tilesheet` are exactly that: how many tiles the sheet holds across and down (`32 × 8 = 256` cells). When you need more sprites than the free cells can hold, make the image *taller*, add rows below the originals, and raise the row count to match. The appendix shows the tidy setup.
+    The lower rows of the original DejaVu sheet were empty, so the first sprites fill unused cells, not overwrite any glyph. The `32` and `13` we pass to `load_tilesheet` are exactly that: how many tiles the image holds across and down, and they must match the image or tcod cannot cut it into tiles. The original sheet is `32 × 8 = 256` cells; the extended one adds five rows of art below, for `32 × 13`.
+
+    Growing *downward* is the safe direction. Tiles are numbered left to right, top to bottom, and `CHARMAP_TCOD` hands out its codepoints in that same order: it has 160 entries, enough for the first five rows, which is exactly why the rows below them are free. Tiles numbered past the end of the list get no character, so new rows at the bottom leave the whole font intact, and the new tiles just wait for `remap`. Widening the sheet instead would shift the numbering, and every character past the first row would land on the wrong cell.
+
+    This part only uses the hero tile from the extra art; the [graphics appendix](append-7.md) shows the tidy setup that wires up the rest.
 
 ### Doing it properly, later
 

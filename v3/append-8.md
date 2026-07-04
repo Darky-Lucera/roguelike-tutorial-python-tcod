@@ -1,454 +1,319 @@
-# Appendix 8 Draft: A Camera for Bigger Maps (WIP)
+# Appendix 8 Draft: Animations and Visual Effects (WIP)
 
 !!! note "Draft notes"
 
     This document is a parking place for future ideas. It is not part of the main tutorial flow yet, and the details below should be revisited and balanced before being turned into a finished appendix.
 
-    The camera itself only needs the map from [Part 2](part-2.md) and the renderer as it stands after [Part 6](part-6.md). The mouse section assumes [Part 7](part-7.md) (`Engine.mouse_location`, the HUD) and the targeting section assumes [Part 9](part-9.md). The code is written against the finished game as the chapters leave it, without the optional exercises; the reference repository carries those on top (the fading memory, for example), and the notes below call them out where they matter. If you are earlier in the tutorial, adapt the module paths and skip the sections about systems you do not have yet.
+    It builds directly on [Appendix 7](append-7.md) (sprite codepoints, the `Graphic` strategy) and edits the main loop as [Part 10](part-10.md) leaves it. The trigger examples assume the consumables of [Part 9](part-9.md). All code below is concept level: checked against the current game layout, but not implemented in the reference repository yet.
 
-Every map in this tutorial is exactly as big as the window that shows it. `MAP_WIDTH` is 80, the same as `SCREEN_WIDTH`. `MAP_HEIGHT` is 44: the 50 screen rows minus the 6 that the HUD panel keeps. That is not a coincidence. It is a silent assumption that a lot of code depends on: *the position of a tile on the map and its position on the screen are the same pair of numbers*.
+Appendix 7 gave every entity its art, and the whole dungeon still stands perfectly still. Nothing blinks, nothing flies, an exploding fireball is a log line and some instant hit point math. This appendix maps what it takes to add motion: a flash when lightning strikes, an arrow that crosses the room, sprites with an idle animation.
 
-Try to break it. Set `MAP_HEIGHT = 100` and the first frame crashes: `GameMap.render` asks numpy to copy a block of 100 rows into a console that only has 50. The renderer does not know the difference between "where a tile is" and "where a tile is drawn", because so far there has never been one.
+The surprise is where the difficulty lives. It is not in the sprites, not in the tileset, not in the `Graphic` system. It is in the main loop.
 
-This appendix introduces that difference on purpose. The tool that manages it is a **camera**: a small object that decides which part of the map is on screen and translates positions between the two spaces. With one in place, nothing stops a floor from being 120x80, or 300x300, with the view scrolling over it as the player walks.
+---
 
-!!! info "Why classic levels fit on one screen"
+## A loop that waits
 
-    Rogue (1980) ran on the serial terminals of its time: screens of 80 columns by 24 rows. A level had to fit in one screen because there was nowhere else to put it. The constraint became a genre convention that outlived the hardware by decades, and plenty of roguelikes still ship screen-sized levels on purpose: "you can see the whole battlefield" is a real tactical virtue, not just nostalgia.
+The heart of `run()` is one call:
 
-    Moria (1983) had already outgrown the screen: its dungeon was far wider than any terminal, and the view moved in **panels**, half-screen jumps that triggered when you walked near the edge. Angband (1990) inherited that scheme. Smooth per-tile scrolling, the kind this appendix builds, became the default later, when redrawing the whole screen every turn stopped being expensive.
-
-## Two coordinate systems
-
-From now on, a position can live in one of two spaces:
-
-- **Map coordinates**: where something *is*. `entity.x`, room centers, FOV arrays, pathfinding: everything the game simulates.
-- **Screen coordinates**: where something is *drawn*. Console cells, mouse events: everything the window sees.
-
-The camera is the bridge. Its position `(camera.x, camera.y)` is the map coordinate of the screen's top-left tile, and the translation is one subtraction each way:
-
-```text
-screen = map - camera        map = screen + camera
+```python
+for event in tcod.event.wait():
 ```
 
-We will also give a name to the rectangle of the screen that shows the map: the **viewport**. In our layout it is the top 80x44 cells; the bottom 6 rows belong to the HUD and are not the camera's business.
+`wait()` **blocks**. Between one keypress and the next, the program is asleep inside that line: no code runs, no frame is drawn. The screen you see between turns is just the last frame, sitting unchanged in the window. A two-frame sprite has no chance, because nobody is redrawing anything while the player thinks.
 
-Before writing the class, it helps to see where the old identity hides. Four places treat one space as the other, and nothing breaks today:
+This is a feature, not a bug. A turn-based game is idle almost all the time, and a loop that only wakes for input spends zero CPU while the player stares at the map. Any animation, though, needs the opposite: frames drawn *without* input, plus a measure of how much time passed between them. In concept:
 
-- `GameMap.render` writes tiles and entities at their map position, straight into console cells.
-- The `MouseMotion` case in `GameState.handle_events` stores `event.integer_position` (screen) in `Engine.mouse_location`.
-- The HUD reads `mouse_location` back as a map position and checks it against `game_map.visible`.
-- The Part 9 targeting states draw the cursor at `mouse_location` (map) but read clicks from `event.integer_position` (screen).
+```python
+# Concept, not final code
+while True:
+    delta_time = clock.tick()          # seconds since the previous frame
+    effects.update(delta_time)         # advance whatever is animating
 
-Each of those lines will keep working or break depending on one question: which space does this value live in? Keeping that answer straight is the whole discipline of camera code.
+    console.clear()
+    state.on_render(console)
+    effects.render(console)            # draw animations on top of the game
+    context.present(console)
 
-## A `Camera` class
+    for event in tcod.event.get():     # non-blocking
+        state = state.handle_events(event)
+```
 
-Create `game/camera.py`:
+Running that at 60 frames per second, forever, would burn CPU and battery to redraw an identical frame all night. The reasonable design for a roguelike is a **hybrid**: `tcod.event.wait(timeout=...)` while something is animating, so the loop wakes on its own to draw the next frame, and plain `wait()` when nothing is, so the game goes back to costing nothing. `wait(timeout=n)` returns after `n` seconds even if no event arrived, which is exactly the wake-up call an animation needs.
+
+The rest of this appendix builds the pieces that hybrid loop needs, then wires them in.
+
+---
+
+## An `Effects` manager
+
+An effect is a short-lived visual: it appears, it changes with time, it removes itself. That is a small interface, and a manager that owns the list. Create `game/effects.py`:
 
 ```python
 from __future__ import annotations
 
-import numpy as np
+from tcod.console import Console
 
 
-class Camera:
-    """The window through which the screen looks at the map."""
+class Effect:
+    """One short-lived visual. It advances with time and draws over the map."""
 
-    def __init__(self, width: int, height: int) -> None:
-        self.width = width
-        self.height = height
-        self.x = 0
-        self.y = 0
+    done: bool = False
 
-    def follow(
-        self,
-        target_x: int,
-        target_y: int,
-        map_width: int,
-        map_height: int,
-    ) -> bool:
-        """Center the viewport on the target without leaving the map.
+    def update(self, delta_time: float) -> None:
+        raise NotImplementedError
 
-        Returns True if the camera moved.
-        """
-        x = max(0, min(target_x - self.width // 2, map_width - self.width))
-        y = max(0, min(target_y - self.height // 2, map_height - self.height))
+    def render(self, console: Console) -> None:
+        raise NotImplementedError
 
-        moved = (x, y) != (self.x, self.y)
-        self.x = x
-        self.y = y
-        return moved
+
+class Effects:
+    """Every effect currently playing."""
+
+    _playing: list[Effect] = []
+
+    @classmethod
+    def add(cls, effect: Effect) -> None:
+        cls._playing.append(effect)
+
+    @classmethod
+    def any_playing(cls) -> bool:
+        return bool(cls._playing)
+
+    @classmethod
+    def update(cls, delta_time: float) -> None:
+        for effect in cls._playing:
+            effect.update(delta_time)
+
+        cls._playing = [effect for effect in cls._playing if not effect.done]
+
+    @classmethod
+    def render(cls, console: Console) -> None:
+        for effect in cls._playing:
+            effect.render(console)
 ```
 
-`follow` centers the view on the target and then clamps: `min(...)` stops the right and bottom edges, `max(0, ...)` stops the left and top ones. Near a map edge the camera stands still and the player walks toward the border of the screen, which is exactly what you want. It also reports whether it actually moved; keep that detail in mind, the mouse handling further down depends on it.
+!!! info "The `MessageLog` pattern, and why saves do not care"
+    `Effects` keeps its state at class level and is called from anywhere as `Effects.add(...)`, exactly like `MessageLog.add_message(...)` since Part 7. The pattern has a second payoff here: the manager lives *outside* the `Engine`, and Part 10 pickles the `Engine`. Effects are transient by nature, so keeping them out of the object graph that gets saved means a save file never contains half-played animations, with no `__getstate__` tricks needed.
 
-Notice what the class does *not* have: no velocity, no history, no update order to get wrong. In a turn-based game a centered camera is a pure computation from three things (target, viewport size, map size), so `follow` can rebuild it from scratch every frame and it can never go stale. It also takes the map size as two plain integers instead of a `GameMap`, so the class knows nothing about the rest of the game: it could follow a confused enemy or a cutscene just as happily, and you can test it in isolation with nothing but numbers.
+---
 
-The rest of the class is the translation service: the two conversions, a bounds check, and the slices the renderer will use.
+## Wiring the hybrid loop
+
+Name the frame budget in `game/constants/config.py`:
 
 ```python
-    def screen_to_map(self, x: int, y: int) -> tuple[int, int]:
-        """Where a screen position lands on the map."""
-        return x + self.x, y + self.y
+FRAME_TIME = 1 / 60   # seconds per frame while something is animating
+```
 
-    def map_to_screen(self, x: int, y: int) -> tuple[int, int]:
-        """Where a map position lands on the screen."""
-        return x - self.x, y - self.y
+Then `run()` in `main.py` learns about time. `time.monotonic()` is the standard clock for this: it only moves forward, immune to the system clock being adjusted under you:
 
-    def in_view(self, x: int, y: int) -> bool:
-        """True if the map position is inside the viewport."""
-        return (
-            self.x <= x < self.x + self.width
-            and self.y <= y < self.y + self.height
+```diff
++import time
++
++from game.effects import Effects
+ ...
+     try:
++        previous = time.monotonic()
+         while True:
++            now        = time.monotonic()
++            delta_time = min(now - previous, constants.FRAME_TIME)
++            previous   = now
++
++            Effects.update(delta_time)
++
+             console.clear()
+             state.on_render(console=console)
++            Effects.render(console)
+             context.present(console)
+
+-            for event in tcod.event.wait():
++            timeout = constants.FRAME_TIME if Effects.any_playing() else None
++            for event in tcod.event.wait(timeout=timeout):
+                 converted_event = context.convert_event(event)
+                 state = state.handle_events(converted_event)
+```
+
+With no effects playing, `timeout` is `None` and the loop behaves exactly as before: it sleeps in `wait()` until the player acts. The moment an effect exists, the loop wakes 60 times per second, advances it, draws it, and goes back to sleeping the instant the list is empty.
+
+`delta_time` is the number of seconds the previous frame took, and every effect advances by that amount instead of by "one tick". This is **frame-rate independence**: a projectile at 30 cells per second crosses the same map in the same real time whether the loop managed 60 frames or 13 that second. Game code usually shortens the name to `dt`; the tutorial keeps it spelled out.
+
+!!! warning "The first frame after a long wait"
+    Note the `min(...)` clamp on `delta_time`, and what it is guarding. The player thinks for two minutes, presses a key, the scroll fires and adds an effect. On the very next loop pass, `now - previous` is *two minutes*, because `previous` was stamped before the long sleep. Without the clamp, the brand-new effect would receive those 120 seconds in a single `update()` and finish instantly, skipping its whole animation. Clamping to one frame budget means a frame is never asked to represent more time than a frame.
+
+---
+
+## Three cheap effects
+
+### Flash
+
+The simplest effect: tint one cell and fade the tint away. It is the same weighted color mix the area targeting preview draws in Part 9, only decaying over time instead of sitting static:
+
+```python
+class Flash(Effect):
+    """Tint one cell with a color that fades away."""
+
+    def __init__(self, x: int, y: int, color: Color, duration: float = 0.25) -> None:
+        self.x        = x
+        self.y        = y
+        self.color    = color
+        self.duration = duration
+        self.elapsed  = 0.0
+
+    def update(self, delta_time: float) -> None:
+        self.elapsed += delta_time
+        self.done = self.elapsed >= self.duration
+
+    def render(self, console: Console) -> None:
+        strength = max(0.0, 1.0 - self.elapsed / self.duration)
+        bg = console.rgb[self.x, self.y]["bg"]
+        console.rgb[self.x, self.y]["bg"] = tuple(
+            int(base * (1.0 - strength) + tint * strength)
+            for base, tint in zip(bg, self.color, strict=True)
         )
+```
+
+### Projectile
+
+One glyph traveling the straight line between two map positions. `tcod.los.bresenham` returns every cell on that line; the effect just picks which one matches the elapsed time:
+
+```python
+import tcod
+
+
+class Projectile(Effect):
+    """One glyph traveling the straight line between two positions."""
+
+    def __init__(
+        self,
+        start: tuple[int, int],
+        end:   tuple[int, int],
+        glyph: str,
+        color: Color,
+        speed: float = 30.0,   # cells per second
+    ) -> None:
+        self.path    = tcod.los.bresenham(start, end).tolist()
+        self.glyph   = glyph
+        self.color   = color
+        self.speed   = speed
+        self.elapsed = 0.0
+
+    def update(self, delta_time: float) -> None:
+        self.elapsed += delta_time
+        self.done = self.elapsed * self.speed >= len(self.path)
+
+    def render(self, console: Console) -> None:
+        index = min(int(self.elapsed * self.speed), len(self.path) - 1)
+        x, y  = self.path[index]
+        console.print(x, y, self.glyph, fg=self.color)
+```
+
+!!! info "Bresenham, 1962"
+    The line algorithm behind `tcod.los.bresenham` was designed by Jack Bresenham at IBM in 1962, to drive pen plotters: machines that drew with a physical arm and could only step one unit at a time. It picks which cells best approximate a straight line using only integer additions, no floating point, which made it fast enough for 1960s hardware and keeps it everywhere today, from FOV code to your arrow.
+
+### Explosion
+
+A disc of `Flash`-style tints instead of a single cell: every cell within the fireball's radius gets the fading overlay, optionally delayed a little more the farther it sits from the center, so the blast reads as expanding. No new machinery, just a loop over the same cells the fireball already damages.
+
+### Firing them
+
+The trigger points already exist. Every consumable calls `MessageLog.add_message` at the moment of impact; the effect is one more line beside it. In `LightningDamageConsumable.activate()`:
+
+```diff
+             target.fighter.take_damage(self.damage, attacker=consumer)
++            Effects.add(Flash(target.x, target.y, colors.LIGHTNING, duration=0.2))
+```
+
+One line per effect, per trigger. The fireball adds its explosion, a future bow adds a `Projectile` from archer to victim.
+
+---
+
+## Cosmetic or blocking?
+
+There is a design fork here, and it decides how much of the game the effects touch.
+
+**Cosmetic (fire and forget).** The damage applies instantly, exactly as today, and the animation plays *on top* while the game keeps accepting input. The lightning already killed the orc; the flash is just telling you about it. Nothing in the turn flow, the states, or the actions changes. This is the version everything above builds, and the right place to start.
+
+**Blocking.** The arrow flies first, *then* the hit resolves, and the player cannot act while it is in the air. This is a different animal: it means deferring the resolution of an action until an animation completes, an `AnimationPlayingState` that swallows input until done, and changes to the turn flow in `GameState.handle_events`. It is the classic roguelike dilemma: veterans hold a key to descend ten floors and resent every enforced delay. If you go this way, keep the animations fast and add a setting to skip them. Out of scope for a first iteration.
+
+---
+
+## Animating the sprites themselves
+
+Appendix 7 already sketched the shape: `AnimatedGraphic`, a `Graphic` that steps through frames. What was missing was time, and the loop now provides it. Two routes, by cost.
+
+**The shared clock (cheap).** One class-level clock, advanced by the loop, read by every animated glyph:
+
+```python
+class AnimatedGraphic(Graphic):
+    """Cycles through frames on a clock shared by every animated entity."""
+
+    clock: float = 0.0             # advanced once per frame, in run()
+    frames_per_second: float = 2.0
+
+    def __init__(self, frames: list[int]) -> None:
+        self.frames = frames
 
     @property
-    def view(self) -> tuple[slice, slice]:
-        """The viewport as slices, ready to index the map arrays."""
-        return np.s_[self.x : self.x + self.width, self.y : self.y + self.height]
+    def glyph(self) -> str:
+        index = int(AnimatedGraphic.clock * self.frames_per_second) % len(self.frames)
+        return chr(self.frames[index])
 ```
 
-One assumption to keep in mind: `follow` and `view` expect the map to be at least as big as the viewport. A smaller map would pin the camera to `(0, 0)` and shrink the `view` slices, and the renderer below would need extra care to center the leftover space. The tutorial's maps only grow, so the main path ignores that case; centering small maps is one of the exercise seeds at the end.
-
-!!! tip "`np.s_` builds slice objects"
-
-    [Part 3](part-3.md) introduced slice objects, the things Python creates from the `a:b` syntax inside square brackets. That syntax is only legal inside brackets, which makes slices awkward to store in a variable.
-
-    `np.s_` is numpy's tiny helper for exactly that: `np.s_[2:5]` is `slice(2, 5)`, and `np.s_[2:5, 0:44]` is the tuple `(slice(2, 5), slice(0, 44))`. The `view` property returns that tuple, so `self.visible[camera.view]` means the same as `self.visible[camera.x : camera.x + camera.width, camera.y : camera.y + camera.height]`, with one important bonus: a slice of a numpy array is a *view*, not a copy, so indexing this way costs almost nothing.
-
-## Rendering through the viewport
-
-`GameMap.render` currently copies the whole map into the console. Now it copies the slice the camera selects, and converts every entity position on the way out. Add `Camera` to the `TYPE_CHECKING` imports of `game/map/game_map.py`, then:
-
-```diff
--    def render(self, console: Console) -> None:
--        console.rgb[0 : self.width, 0 : self.height] = np.select(
--            condlist   = [self.visible, self.explored],
--            choicelist = [self.tiles["in_fov"], self.tiles["out_of_fov"]],
--            default    = tile_types.UNSEEN,
--        )
-+    def render(self, console: Console, camera: Camera) -> None:
-+        view = camera.view
-+        console.rgb[0 : camera.width, 0 : camera.height] = np.select(
-+            condlist   = [self.visible[view], self.explored[view]],
-+            choicelist = [self.tiles["in_fov"][view], self.tiles["out_of_fov"][view]],
-+            default    = tile_types.UNSEEN,
-+        )
-
-         for entity in sorted(self.entities, key=lambda e: e.render_order.value):
-             stays_visible = entity.stays_visible and self.explored[entity.x, entity.y]
--            if self.visible[entity.x, entity.y] or stays_visible:
--                console.print(entity.x, entity.y, entity.char, fg=entity.color)
-+            if not (self.visible[entity.x, entity.y] or stays_visible):
-+                continue
-+
-+            if not camera.in_view(entity.x, entity.y):
-+                continue
-+
-+            screen_x, screen_y = camera.map_to_screen(entity.x, entity.y)
-+            console.print(screen_x, screen_y, entity.char, fg=entity.color)
-```
-
-The tile half is the same `np.select` as always; the only change is that every input array is sliced through the same window before the comparison happens. If you carried exercise code in your condition list (the fading memory from Part 4, the mapping scroll from Part 9), slice those arrays the same way; the fading memory also replaces `self.explored` in the `stays_visible` line.
-
-The entity half gains a guard, and it is not paranoia. For *visible* entities you could argue it away: the camera follows the player, the FOV radius is 8, and half a viewport is at least 22 tiles, so anything in view of the player is comfortably on screen. But the loop has drawn `stays_visible` entities in explored tiles since Part 6, and the moment something has that flag ([Part 11](part-11.md) gives it to the stairs), an entity can be explored, far outside the viewport, and still asked to draw.
-
-!!! warning "Clamp it yourself"
-
-    What happens without the guard? On current tcod, mostly nothing: `Console.print` silently clips text that falls outside the console (verified on tcod 21.2.1: printing at a negative position draws only the characters that reach the console, and a row below the console draws nothing at all). The game would look correct by courtesy of one method's undocumented behavior.
-
-    Do not rely on that. Nothing in `print`'s contract promises clipping, and the numpy writes coming later in this appendix (`console.bg` and `console.fg`, for the targeting cursor and the area preview) follow harsher rules: a negative index wraps around to the opposite edge, silently drawing a ghost on the wrong side of the screen, and an index past the edge raises `IndexError`. Guarding and converting at every drawing site is always more correct than trusting another layer to save you.
-
-## Wiring it into the `Engine`
-
-The camera needs a size before anything else, and constants must exist before the code that uses them. Name the viewport in `game/constants/config.py`:
-
-```diff
- # Screen / window
- SCREEN_WIDTH = 80
- SCREEN_HEIGHT = 50
-+
-+# Viewport: the part of the screen that shows the map
-+VIEWPORT_WIDTH = SCREEN_WIDTH
-+VIEWPORT_HEIGHT = SCREEN_HEIGHT - 6  # the HUD panel keeps its 6 rows
- TITLE = "Roguelike Tutorial"
-```
-
-The 6 comes from the HUD panel, and note what this diff does *not* fix: the HUD's own row numbers (44 to 49, spread across `hud.py` and `Engine.render`) stay hardcoded, and they only agree with `VIEWPORT_HEIGHT` by construction. That is acceptable while the viewport height never changes; deriving the HUD layout from `VIEWPORT_HEIGHT` is the first of the exercise seeds.
-
-Now the camera needs a home, somewhere both the renderer and the event handlers can reach: the `Engine`. In `game/engine.py` (this file already imports the config module under the `constants` alias):
-
-```diff
- from game import hud
-+from game.camera import Camera
- from game.constants import colors
-```
-
-```diff
-     ) -> None:
-         self.mouse_location: tuple[int, int] = (0, 0)
-+        self.camera = Camera(constants.VIEWPORT_WIDTH, constants.VIEWPORT_HEIGHT)
-         self.player = player
-```
-
-And in `Engine.render`, aim the camera before drawing the map (ignore the returned flag for now; the mouse section uses it):
-
-```diff
-     def render(self, console: Console) -> None:
--        self.game_map.render(console)
-+        self.camera.follow(
-+            self.player.x,
-+            self.player.y,
-+            self.game_map.width,
-+            self.game_map.height,
-+        )
-+        self.game_map.render(console, self.camera)
-```
-
-Because `follow` runs at the start of every frame, there is nothing to update anywhere else: not after moving, not after taking stairs, not after loading a save. Whatever happened to the player since the last frame, the camera is correct by construction.
-
-!!! warning "Old saves and the new attributes"
-
-    [Part 10](part-10.md) pickles the whole `Engine`, and this appendix adds attributes to it: the camera here, and a raw mouse position in the next section. A save written before this change unpickles into an `Engine` without them, and the first render raises `AttributeError`.
-
-    Either delete old saves, as Part 11 and Part 13 already made you do, or supply the missing attributes with the `__getattr__` migration trick from Part 10.
-
-Finally, the payoff. Grow the map in `game/constants/config.py`:
-
-```diff
- # Map generation
--MAP_WIDTH = 80
--MAP_HEIGHT = 44
--MAX_ROOMS = 30
-+MAP_WIDTH = 120
-+MAP_HEIGHT = 80
-+MAX_ROOMS = 80
- ROOM_MIN_SIZE = 6
-```
-
-`MAX_ROOMS` grows with the map: 30 rooms in almost three times the area feels like a desert. Run the game. The dungeon no longer fits the window; the `@` stays centered while the world slides under it, and near a map edge the camera stops and lets the `@` walk to the border. The HUD has not moved, the message log still works, combat and FOV are untouched. Then move the mouse over a monster, and meet the one system we broke.
-
-## The mouse crosses the border
-
-Part 7 stores the mouse position in the `match` block of `GameState.handle_events`:
+with one line in `run()`, next to `Effects.update`:
 
 ```python
-case tcod.event.MouseMotion():
-    self.engine.mouse_location = event.integer_position
+AnimatedGraphic.clock += delta_time
 ```
 
-That line was correct by accident. `integer_position` is a screen position; everything that reads `mouse_location` (the HUD's names-under-mouse, the targeting states) treats it as a map position. The two spaces coincided, so nobody noticed, and the `in_bounds` check inside the HUD quietly rejected the panel rows because map row 46 did not exist.
+`glyph` stays a pure read, honoring the Appendix 7 rule: the loop advances the clock, the property only looks at it. There is no per-entity state, so nothing new enters the savegame, and every orc on screen animates in step, which for a roguelike reads as tidy rather than cheap.
 
-With a camera, the accident turns into two real bugs. Point at a troll on screen and the HUD looks up whatever tile happens to share those numbers, up and left of what you see. Hover the HUD panel and screen row 46 now converts to a tile that *does* exist, hidden under the panel; if it is in your FOV, the HUD names an entity you are not pointing at.
+Note one interaction with the hybrid loop: idle animation means the game is *always* animating while any animated entity is on screen, so the loop never gets to sleep fully. A two-frame idle cycle does not need 60 frames per second, though; a second, slower timeout (`1 / frames_per_second`) while only idle animation is running keeps the cost negligible.
 
-The fix states the rule this appendix runs on: **convert at the boundary**. The moment a position enters the game from the outside world, translate it, and let everything downstream keep speaking map coordinates. Give the conversion to the `Engine`, next to the attributes it feeds, and keep the raw screen position too (you will see why in a moment):
+!!! info "The remap trick: animating the tileset instead of the game"
+    There is a zero-render-changes alternative. The tileset is a lookup table, and `tileset.remap(SpriteGlyphs.PLAYER, column, row)` rewrites one entry of it at any time, not just at startup. Remap the same codepoint to a different sheet cell on a clock, and every `@` on screen changes costume at once, without touching `Graphic`, `render`, or the entities. It is the sprite equivalent of editing the font while the text stays put.
 
-```python
-def update_mouse_location(self, screen_x: int, screen_y: int) -> None:
-    """Translate a raw screen position into a map position for mouse_location."""
-    self.mouse_screen_location = (screen_x, screen_y)
+**Per-entity state (complete).** Walk cycles that start when the entity moves, animations out of phase, one-shot animations like an attack swing: these need a current frame and an accumulated time *per entity*, and a `tick(delta_time)` call reaching each visible entity every frame. It also puts animation state inside the pickled object graph, so a save written mid-cycle carries those floats; harmless in size, but worth excluding via `__getstate__` if you want saves byte-identical across runs. Defer this route until a concrete animation demands it.
 
-    if 0 <= screen_x < self.camera.width and 0 <= screen_y < self.camera.height:
-        self.mouse_location = self.camera.screen_to_map(screen_x, screen_y)
-    else:
-        self.mouse_location = (-1, -1)
-```
+---
 
-Add `self.mouse_screen_location: tuple[int, int] = (0, 0)` next to `mouse_location` in `Engine.__init__`, and route the event through the new method:
+## The expensive part is the art
 
-```diff
-             case tcod.event.MouseMotion():
--                self.engine.mouse_location = event.integer_position
-+                self.engine.update_mouse_location(*event.integer_position)
-```
+Everything above is one or two afternoons of code. The real cost is pixels, and there is a trap waiting in the asset packs.
 
-Positions outside the viewport (the HUD rows) become `(-1, -1)`, a map position that fails every `in_bounds` check downstream, which is exactly the behavior the old code got for free. And because `handle_events` lives in `GameState`, the base class of every in-game state, this one line is the single point that updates `mouse_location`, for the main game, the game over screen, and the targeting states alike. Mouse *clicks* are a second, separate doorway: the targeting section below converts them in their own handler.
+Every frame must fit one cell, and the font decides the cell: 12x12 in this tutorial. The animated packs you will actually find are mostly 16x16 art, often delivered on 32x32 canvases so that swords, bows, and capes can overhang the character's own tile during a swing. Neither survives the trip: downscaling 16x16 pixel art to 12x12 destroys it (pixel art has no fractional pixels to spare), and overhang simply cannot exist when a sprite *is* one cell.
 
-One subtlety remains, and it is the reason the method stores the raw screen position. Events only fire when the mouse *moves*, but the camera can move under a mouse that stays still: every step the player takes scrolls the world beneath the pointer, no `MouseMotion` arrives, and `mouse_location` quietly points one tile behind what the player sees. A camera move is a border crossing too: the screen position did not change, but its meaning did. So repeat the conversion whenever `follow` reports movement; this is what its return value is for:
+The realistic options:
 
-```diff
-     def render(self, console: Console) -> None:
--        self.camera.follow(
--            self.player.x,
--            self.player.y,
--            self.game_map.width,
--            self.game_map.height,
--        )
-+        if self.camera.follow(
-+            self.player.x,
-+            self.player.y,
-+            self.game_map.width,
-+            self.game_map.height,
-+        ):
-+            self.update_mouse_location(*self.mouse_screen_location)
-         self.game_map.render(console, self.camera)
-```
+- **Art made for your grid.** Draw or commission at exactly the cell size. This is what the extended sheet from Part 1 does.
+- **Move the game to the art's grid.** The font sets the cell, so switching to a 16x16 font and a 16x16 sheet realigns everything; window columns and rows stay the same, the window just grows. Everything in this appendix is size-agnostic.
+- **Keep entities static, animate with effects.** Flashes, projectiles, and tint pulses need no new art at all. This is the cheapest route and, combined with facing from Appendix 7, already reads as a living game.
 
-This never fights the keyboard-driven cursor of the targeting states: while the player is aiming, the player is not walking, so the camera reports no movement and `mouse_location` stays wherever the keys put it.
+---
 
-And here is the pleasant surprise: `hud.py` does not change at all. `render_names_at_mouse_location` always thought in map coordinates; it was the data feeding it that was mislabeled. When you keep each function inside one coordinate space, a change like this stays local to the border.
+## The ceiling: cells, not pixels
 
-## Targeting through the camera
+Everything here animates *by cell*. The projectile jumps from square to square; nothing slides smoothly between them, because a tcod console is a grid of tiles, not a canvas of pixels. That is the medium, and per-cell motion with color pulses is aesthetically coherent with it.
 
-The Part 9 targeting states mix the two spaces in four places, and each one follows a pattern you have already seen.
+Going below the cell, to sub-pixel movement, particles, or sprites gliding between tiles, means leaving the console: rendering it to a texture via the SDL layer (`context.sdl_renderer` plus `tcod.render.SDLConsoleRender`) and drawing free-floating sprites on top. That is a real architecture jump, and a different appendix, if it ever earns one.
 
-**Entering the state.** `engine.mouse_location = player.x, player.y` is already a map position. Unchanged.
+---
 
-**Drawing the cursor.** `SelectIndexState.on_render` writes `console.bg` at a map position: the entity bug again. Guard with the camera and convert. `in_view` is stricter than the old `in_bounds` (the viewport always lies inside the map) and it also rejects the `(-1, -1)` sentinel:
+## Where to start
 
-```diff
-         x, y = self.engine.mouse_location
--        if self.engine.game_map.in_bounds(x, y):
--            console.bg[x, y] = colors.WHITE
--            console.fg[x, y] = colors.BLACK
-+        camera = self.engine.camera
-+
-+        if camera.in_view(x, y):
-+            screen_x, screen_y = camera.map_to_screen(x, y)
-+            console.bg[screen_x, screen_y] = colors.WHITE
-+            console.fg[screen_x, screen_y] = colors.BLACK
-```
+The order that keeps the game runnable at every step:
 
-**Moving the cursor with the keyboard.** The old code clamps the cursor to the *map*, which used to be the same as keeping it on screen. On a big map it is not: the cursor could walk off the viewport and keep going, selecting tiles the player cannot see. Clamp to the viewport instead, in map space. Nothing targetable is lost: everything you can aim at must be visible, and with the centered camera everything visible is on screen (the margins section revisits that promise).
+1. The hybrid loop in `main.py`: time infrastructure only, no animations yet. The game must behave identically.
+2. `Effects` manager plus `Flash`, wired to the lightning scroll. First visible payoff.
+3. `Projectile` for a thrown or shot attack.
+4. The explosion for the fireball.
+5. Extra frames in the tilesheet plus the shared-clock idle animation.
+6. Only if the game asks for it: blocking effects, per-entity animation state, or the SDL layer.
 
-```diff
-             x, y = self.engine.mouse_location
-             dx, dy = keys.MOVE_KEYS[key]
--            x = max(0, min(x + dx * modifier, self.engine.game_map.width - 1))
--            y = max(0, min(y + dy * modifier, self.engine.game_map.height - 1))
-+            camera = self.engine.camera
-+            x = max(camera.x, min(x + dx * modifier, camera.x + camera.width - 1))
-+            y = max(camera.y, min(y + dy * modifier, camera.y + camera.height - 1))
-             self.engine.mouse_location = x, y
-```
-
-**Clicking.** `event.integer_position` is a screen position entering the game: guard and convert, the same shape as `update_mouse_location`. The viewport always lies inside the map, so the old `in_bounds` check is subsumed by the new guard:
-
-```diff
-     def event_mousebuttondown(self, event: tcod.event.MouseButtonDown) -> Action | None:
--        x, y = event.integer_position
--        if self.engine.game_map.in_bounds(x, y):
-+        screen_x, screen_y = event.integer_position
-+        camera = self.engine.camera
-+
-+        if 0 <= screen_x < camera.width and 0 <= screen_y < camera.height:
-+            x, y = camera.screen_to_map(screen_x, screen_y)
-             if event.button == 1:
-                 return self.on_index_selected(x, y)
-```
-
-**The area preview.** `AreaRangedAttackState.on_render` walks a bounding box around the cursor and tints `console.bg` tile by tile: the entity loop again, so guard, convert, write. The guard genuinely matters here: the box extends `radius + 1` beyond a cursor that can sit at the edge of the viewport, and as the earlier admonition warned, `console.bg` with an index past the edge raises `IndexError` while a negative one wraps to the opposite side of the screen.
-
-```diff
-+        camera = self.engine.camera
-+
-         for grid_y in range(min_y, max_y):
-             for grid_x in range(min_x, max_x):
-                 alpha = weights[grid_x, grid_y]
--                if alpha > 0:
--                    console.bg[grid_x, grid_y] = self.color.scale(alpha)
-+                if alpha > 0 and camera.in_view(grid_x, grid_y):
-+                    screen_x, screen_y = camera.map_to_screen(grid_x, grid_y)
-+                    console.bg[screen_x, screen_y] = self.color.scale(alpha)
-```
-
-## Scroll margins: a camera with memory
-
-The centered camera has one aesthetic flaw: it moves every single step, so the world never holds still and the `@` never visibly walks. Many games prefer **scroll margins** (also called a dead zone): the camera stays put while the player moves inside a comfortable inner rectangle, and only scrolls when the player pushes into the margin near an edge.
-
-Add the margin to `game/constants/config.py`:
-
-```diff
- # Field of view
- FOV_RADIUS = 8
-+
-+# Camera
-+SCROLL_MARGIN = 10
-```
-
-Then replace `follow` in `game/camera.py`. The file now needs the config import the rest of the project uses (`from game.constants import config as constants`); constants are configuration, not game state, so the class stays easy to test:
-
-```python
-    def follow(
-        self,
-        target_x: int,
-        target_y: int,
-        map_width: int,
-        map_height: int,
-    ) -> bool:
-        """Scroll only when the target pushes into a margin, then clamp.
-
-        Returns True if the camera moved.
-        """
-        x = self._follow_axis(self.x, target_x, self.width, map_width)
-        y = self._follow_axis(self.y, target_y, self.height, map_height)
-
-        moved = (x, y) != (self.x, self.y)
-        self.x = x
-        self.y = y
-        return moved
-
-    @staticmethod
-    def _follow_axis(position: int, target: int, viewport: int, map_size: int) -> int:
-        margin = min(constants.SCROLL_MARGIN, (viewport - 1) // 2)
-
-        if target < position + margin:
-            position = target - margin
-        elif target >= position + viewport - margin:
-            position = target - viewport + 1 + margin
-
-        return max(0, min(position, map_size - viewport))
-```
-
-Two details in there do real work:
-
-- **The margin is capped** at half the viewport. Without the cap, a viewport smaller than two margins would make the bands overlap, and every step would push the camera back and forth between them.
-- **The clamp runs unconditionally**, outside the `if`. The margin logic only moves the camera when the player pushes it, so without the final clamp, a stale position could survive events that teleport the player: taking stairs to a floor with a different size, or loading a save. Recompute the bounds every frame and those cases fix themselves.
-
-One more consequence: with margins the player can now stand as close as `margin` tiles from the viewport edge, so "everything visible is on screen" holds only while `FOV_RADIUS` stays at or below `SCROLL_MARGIN`. The defaults keep the promise (radius 8, margin 10); if you made the torch radius variable in the Part 4 exercises, cap it, or grow the margin with it.
-
-Note what the margins cost you: the camera is no longer a pure function of the current state. Where it points now depends on how the player got there, so `self.x` and `self.y` have become real state, saved and restored with the `Engine` like everything else. That is the general trade: a nicer feel in exchange for state you must keep valid. The `moved` flag keeps working unchanged, and with it the mouse re-conversion from the previous section.
-
-!!! info "Cameras are a craft of their own"
-
-    Side-scrolling games spent the 1980s and 1990s refining exactly this problem. Super Mario Bros. famously only scrolled forward; later platformers added dead zones, look-ahead, and separate vertical rules that only scroll after you land.
-
-    Itay Keren's GDC talk and article "Scroll Back: The Theory and Practice of Cameras in Side-Scrollers" catalogs dozens of these techniques, with animations, and is the standard reference. Almost everything in it translates directly to tile grids.
-
-## What does not change
-
-It is worth listing what this appendix never touched, because the list is the design working as intended. FOV runs on map arrays. Pathfinding costs, AI decisions, actions, combat, spawning, the message log, dungeon generation: all of them live purely in map coordinates and never noticed the camera. The camera is a lens between the game and the screen, not a change to the world, and the only code that had to move was code that touches the screen (rendering) or comes from the screen (the mouse).
-
-## Try it
-
-The changes touch rendering, the mouse, and targeting, so walk each border once:
-
-- [ ] Walk toward each map edge: the camera stops, the `@` reaches the border, and no tiles appear on the opposite side of the screen.
-- [ ] Cross the whole map: the HUD never moves and the message log keeps working.
-- [ ] Hover a monster: the HUD names what is under the pointer, not a tile up and left of it.
-- [ ] Hover the HUD panel: no names appear.
-- [ ] Walk while the mouse rests over the map: the highlighted name updates as the world scrolls under the pointer.
-- [ ] Aim a confusion scroll with the keyboard: the cursor cannot leave the screen.
-- [ ] Aim a fireball at a tile near the viewport edge: the preview is cut at the border instead of crashing or painting the far side.
-- [ ] Click a target: the spell hits the tile you clicked, not an offset one.
-- [ ] Take the stairs and load a save: the view is correct on the first frame.
-- [ ] With scroll margins on, walk small circles at the center of the screen: the camera holds still; push toward an edge: it follows.
+---
 
 ## Summary
 
-- The tutorial silently assumes map coordinates and screen coordinates are the same numbers; bigger maps require splitting the two spaces.
-- A camera is the translation between them: one subtraction each way, plus a policy for where it points.
-- The centered, clamped camera is stateless: recomputed from scratch each frame, it can never be wrong after stairs or loads.
-- Rendering slices the map arrays through `camera.view`; entities convert per position, with an on-screen guard. Guard every drawing site yourself: `print` happens to clip, but numpy writes wrap or raise.
-- Input converts at the boundary: one `Engine` method translates the mouse, rejects positions off the viewport, and runs again when the camera moves under a motionless pointer.
-- Scroll margins buy a calmer view at the price of real state: cap the margin, clamp unconditionally, and save the camera with the engine.
+The obstacle to animation was never the graphics, it was `tcod.event.wait()`: a loop that only draws when the player acts cannot show motion. The fix is a hybrid loop that wakes on a timeout while something is playing and sleeps like before when nothing is, plus a `delta_time` so animations advance by real seconds, clamped so the first frame after a long think does not swallow the whole show.
 
-## Exercise seeds
-
-Ideas to grow this draft, roughly in order of effort:
-
-1. **Derive the HUD from the viewport.** The HUD rows are still hardcoded (44 to 49, across `hud.py` and `Engine.render`). Introduce `HUD_PANEL_Y = VIEWPORT_HEIGHT` in `config.py` and turn every row into an offset from it, so changing the viewport height cannot desynchronize the map area and the HUD.
-2. **Center small maps.** Let a floor be smaller than the viewport (a cramped vault level) and center it with a pair of offsets instead of pinning it to the top-left corner.
-3. **A look mode.** A state that scrolls the camera freely with the movement keys, without moving the player, and snaps back on exit. The Part 9 `SelectIndexState` machinery is most of the work already done.
-4. **Angband panels.** Change `follow` so the camera jumps by half a viewport instead of scrolling per tile. One conditional, a very different feel, and a taste of why terminals liked it: far fewer full redraws.
+On top of that clock, effects are small self-discarding objects in a `MessageLog`-style manager that lives outside the save file: a fading `Flash`, a `Projectile` walking a Bresenham line, an explosion that is a disc of flashes. They fire from one-line hooks in the consumables and play over the game without touching the turn flow, as long as they stay cosmetic. Sprite idle animation rides the same clock through `AnimatedGraphic`, shared by all entities in the cheap version. The genuinely expensive ingredient is art that fits the cell, and the honest ceiling is the cell itself: smooth sub-tile motion belongs to the SDL layer, another world away.
