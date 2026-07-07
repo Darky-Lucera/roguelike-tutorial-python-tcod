@@ -521,7 +521,7 @@ Three reading notes. `DOWN` means "toward the bottom of the screen": the console
 
 ```python
 class DirectionalGraphic4(Graphic):
-    """Four tiles."""
+    """Four tiles: one per cardinal direction, snapped to whichever axis dominates."""
 
     def __init__(self,
                  down: int,
@@ -561,7 +561,7 @@ The `face` override is where four tiles meet eight-way movement. A diagonal move
 
 ```python
 class DirectionalGraphic8(Graphic):
-    """Eight tiles."""
+    """Eight tiles: one per cardinal and diagonal direction."""
 
     def __init__(self,
                  down:       int,
@@ -653,6 +653,22 @@ The sprite sheet grows five new rows for this art, rows 8 through 12: one row pe
     tileset.remap(SpriteGlyphs.PLAYER_LEFT,       6, 8)
     tileset.remap(SpriteGlyphs.PLAYER_DOWN_LEFT,  7, 8)
 ```
+
+!!! warning "Guard `init_sprites` against character mode, not just this block"
+    Rows 8 to 12 exist only in the extended, 13-row sheet; the plain one stops at row 7. `init_sprites` runs once, unconditionally, right after `main()` loads whichever sheet `USE_SPRITES` picked, so a run with `USE_SPRITES = False` would still reach these `remap` calls against the 8-row sheet, and `tileset.remap` raises `IndexError: Tile ... is non-existent` the moment it gets to row 8.
+
+    The fix is not to special-case these particular rows: character mode never reads a `SpriteGlyphs` codepoint at all, `CurrentGlyphs` is `CharGlyphs` there, so nothing in `init_sprites` needs to run in the first place. Guard the whole function, once, at the top:
+
+    ```diff
+     def init_sprites(tileset: tcod.tileset.Tileset) -> None:
+         """Point each sprite codepoint at its tile (column, row) in the sheet."""
+    +    if not USE_SPRITES:
+    +        return
+    +
+         tileset.remap(SpriteGlyphs.PLAYER,            0, 5)
+    ```
+
+    Add this once you reach this section, not before: everything `init_sprites` remapped up to row 7 already exists on both sheets, so the crash only becomes possible from here, where the function first reaches past row 7.
 
 ### Wiring the factories
 

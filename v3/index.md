@@ -108,6 +108,7 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 - [Appendix 7: Using Graphics Instead of Characters](append-7.md)
 - [Appendix 8: Animations and Visual Effects (WIP)](append-8.md)
 - [Appendix 9: A Camera for Bigger Maps (WIP)](append-9.md)
+- [Appendix 10: Localization](append-10.md)
 
 ---
 
