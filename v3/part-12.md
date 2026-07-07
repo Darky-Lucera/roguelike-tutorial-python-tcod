@@ -584,7 +584,7 @@ game/
 
         ```diff
         if damage > 0:
-            MessageLog.add_message(f"{attack_msg} for {damage} hit points.", attack_color)
+            MessageLog.add_message(f"{attack_msg} for {damage:.1f} hit points.", attack_color)
             target.fighter.take_damage(damage, attacker=self.entity)
         +
         +    # Part-12. Exercise 2: New monster: Ghoul

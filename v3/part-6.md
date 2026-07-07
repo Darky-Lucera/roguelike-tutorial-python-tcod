@@ -24,6 +24,8 @@ Components keep combat data separate from the base `Entity`. In this part, entit
 !!! info "Design decision: Fighter component + Actor subclass"
     This is composition-over-inheritance applied where it pays off. The alternative is an `Actor` base class with HP and a separate `Item` hierarchy with its own data: two parallel trees that grow apart over time. We keep one `Entity` base, introduce `Actor` only as the small specialization that bundles the components needed to fight, and let new systems (a `Poisoned` status, a `Trader` component) be added by writing a component class instead of editing the hierarchy.
 
+    At a larger scale than this tutorial, many engines drop the entity class hierarchy entirely and switch to an entity-component-system (ECS) library such as `tcod-ecs`, where an entity is only an ID and every capability, including position and HP, is a component. That trade pays off once a project has far more entity types and cross-cutting systems than we do here; for this tutorial's scope, `Entity`/`Actor` plus components is the simpler choice.
+
 !!! info "Pattern: Component"
     `Fighter` and `AI` are *components*: interchangeable behaviors attached to entities at construction time. The entity does not inherit capabilities; it delegates to them. This keeps the base `Entity` small and lets new systems be added as new component classes without touching the entity hierarchy. `Inventory` joins this same pattern in Part 8.
 

@@ -92,7 +92,6 @@ Create `game/tile_types.py`:
 ```python
 from __future__ import annotations
 
-
 import numpy as np
 
 # Describes how to draw one tile: character + foreground + background colors
@@ -262,10 +261,11 @@ class Engine:
 
 `run()` is the loop we extracted as `game_loop` in Part 1, now living on `Engine` as a method. This is the idea previewed in Part 1: the player's position is now part of the `Engine` state instead of a pair of local loop variables, so the loop modifies state that the caller already owns.
 
-The collision check in `handle_events` uses numpy indexing:
+The collision check in `handle_events` computes the destination, then looks it up in the tile array:
 
 ```python
-self.game_map.tiles["walkable"][self.player.x + action.dx, self.player.y + action.dy]
+dest_x, dest_y = self.player.x + dx, self.player.y + dy
+if self.game_map.tiles["walkable"][dest_x, dest_y]:
 ```
 
 This reads the `walkable` field at the destination tile. If it is `False` (a wall), the move is rejected.
@@ -273,13 +273,13 @@ This reads the `walkable` field at the destination tile. If it is `False` (a wal
 !!! info "Design decision: Engine holds the game state"
     `main.py` will become a thin launcher: create objects, create the window, hand off to `engine.handle_events` and `engine.render`. All the real logic lives in `Engine`. This makes it easier to add save/load later (Part 10), because we can serialize and deserialize the `Engine` state.
 
+    Right now `game_map.render` also decides what appears on screen. Part 7 splits that further, separating frame composition (the UI, the message log) from map rendering, once there is enough on screen to make that split worth it.
+
 ---
 
 ## Updating main.py
 
-Replace `main.py` with this cleaner version:
-
-We also add a second entity (yellow `N`) just to verify that the entity set and renderer work with more than one object; it has no AI and will be removed in Part 3.
+Replace `main.py` with this cleaner version, which also adds a second entity (yellow `N`) just to verify that the entity set and renderer work with more than one object; it has no AI and will be removed in Part 3.
 
 ```python
 from __future__ import annotations
@@ -331,11 +331,11 @@ def main() -> None:
     tcod.lib.SDL_SetAppMetadata(
         title.encode("utf-8"),
         version.encode("utf-8"),
-        app_id.encode("utf-8")
+        app_id.encode("utf-8"),
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0" # Nearest pixel sampling
+        b"0"  # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -363,6 +363,8 @@ Notice that the map is 45 rows tall while the screen is 50, we reserve the botto
     This is a complete, playable milestone. The rest of the chapter is a refactor
     that improves how actions are structured without changing anything you see on
     screen.
+
+<!-- TODO: screenshot — the map with the white @, yellow N, and the test wall -->
 
 ---
 
@@ -432,6 +434,8 @@ class MovementAction(Action):
 
 !!! question "What is `TYPE_CHECKING`?"
     `from engine import Engine` inside the file would create a circular import: `game/engine.py` imports from `game/actions.py`, and `game/actions.py` would import from `game/engine.py`. `TYPE_CHECKING` is `False` at runtime, so the import only happens when a type checker (like mypy or Pyright) analyzes the code. This breaks the cycle.
+
+    Two modules that need to import each other is usually a sign that their responsibilities are tangled, and worth noticing as such. We accept this one because `Action` and `Engine` genuinely collaborate: an action cannot perform itself without the engine's state, and the engine cannot act without a concrete action to call.
 
 !!! tip "Action is meant to be subclassed"
     `Action` is never intended to be instantiated directly: it is a contract that subclasses fulfill. Right now that intent lives only in the docstring. In Part 5, we will make it a formal, enforceable contract using Python's `abc` module.

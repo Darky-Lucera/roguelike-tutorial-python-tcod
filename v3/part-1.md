@@ -89,11 +89,11 @@ def main() -> None:
     tcod.lib.SDL_SetAppMetadata(
         title.encode("utf-8"),
         version.encode("utf-8"),
-        app_id.encode("utf-8")
+        app_id.encode("utf-8"),
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0" # Nearest pixel sampling
+        b"0"  # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -120,7 +120,10 @@ if __name__ == "__main__":
     main()
 ```
 
-Run it with `python main.py`. You should see a window with an `@` in the top-left corner. Close it by clicking the X.
+!!! tip "Run it now"
+    Run it with `python main.py`. You should see a window with an `@` in the top-left corner. Close it by clicking the X.
+
+![Screenshot 1](images/part_1_screenshot_1.png)
 
 The 80 × 50 dimensions follow the classic 80-column terminal convention going back to the VT100; 50 rows leaves comfortable space for the map plus a UI strip we will add in Part 7.
 
@@ -162,17 +165,20 @@ app_id  = "com.tutorial.roguelike"
 tcod.lib.SDL_SetAppMetadata(
     title.encode("utf-8"),
     version.encode("utf-8"),
-    app_id.encode("utf-8")
+    app_id.encode("utf-8"),
 )
 tcod.lib.SDL_SetHint(
     b"SDL_RENDER_SCALE_QUALITY",
-    b"0" # Nearest pixel sampling
+    b"0"  # Nearest pixel sampling
 )
 ```
 
 `tcod.lib` exposes low-level SDL functions. `SDL_SetAppMetadata` gives SDL the application name, version, and identifier as UTF-8 bytes. This lets the operating system and window manager identify the application more consistently.
 
-`SDL_SetHint` with `SDL_RENDER_SCALE_QUALITY` set to `0` asks SDL to use nearest pixel sampling. That keeps the bitmap font sharp when the window is resized instead of smoothing the tiles.
+`SDL_SetHint` with `SDL_RENDER_SCALE_QUALITY` set to `0` requests nearest-neighbor scaling. That keeps the bitmap font sharp when the window is resized, instead of smoothing the tiles.
+
+!!! note "A legacy hint that still works"
+    This hint belongs to SDL2. SDL3 removed it, replacing it with a scale mode set directly on each texture. libtcod still reads this older hint internally and applies the same nearest-pixel behavior, so the call above keeps working unchanged and needs no lower-level SDL code on our side.
 
 ### The context (window)
 
@@ -240,6 +246,8 @@ Update the drawing call to use the new variables:
 -        console.print(x=1, y=1, text="@")
 +        console.print(x=player_x, y=player_y, text="@")
 ```
+
+![Screenshot 2](images/part_1_screenshot_2.png)
 
 ### Setting up the `game/` package
 
@@ -349,7 +357,7 @@ class EventHandler:
 
 ### Wiring it together
 
-Update `main.py` to use the new modules. We also extract the `while True` block into its own function, `game_loop`, so `main` is left as a focused setup orchestrator:
+Update `main.py` to use the new modules. We also extract the `while True` block into its own function, `game_loop`, so `main` is left as a focused setup orchestrator. Most of the listing below is code you already have, just rearranged; the new parts are the two imports, the `game_loop` function itself, and the `match action` block that replaces the old inline movement:
 
 ```python
 from __future__ import annotations
@@ -411,11 +419,11 @@ def main() -> None:
     tcod.lib.SDL_SetAppMetadata(
         title.encode("utf-8"),
         version.encode("utf-8"),
-        app_id.encode("utf-8")
+        app_id.encode("utf-8"),
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0" # Nearest pixel sampling
+        b"0"  # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -439,7 +447,8 @@ Splitting `main` and `game_loop` is the standard pattern: setup goes in one plac
 !!! abstract "A quick preview of Part 2"
     For now, the player's position lives in local variables inside the loop, which keeps Part 1 small and easy to follow. In Part 2, we will group this kind of game state into an `Engine` object so the loop can manage it more cleanly.
 
-Run the game. The `@` moves! But it leaves a trail behind it.
+!!! tip "Run it now"
+    Run the game and press each arrow key a few times, in any order. The `@` should follow every direction you press. Try holding one down, too. You will notice it leaves a trail behind it: that is expected, and the next section fixes it.
 
 ### Clearing the console
 
@@ -522,9 +531,13 @@ Then draw that codepoint instead of `"@"`:
 +        console.print(x=player_x, y=player_y, text=chr(PUA))
 ```
 
-`tileset.remap(codepoint, column, row)` makes a codepoint draw the tile at that cell of the sheet. Columns and rows are zero-based and counted from the top-left, so `(0, 5)` is the first tile of the sixth row. We use `PUA` (`0xE000`) for the codepoint because it sits in the Unicode **Private Use Area** (`U+E000..U+F8FF`), a block Unicode reserves for custom glyphs and never assigns to real characters, so it can never clash with a real character. `chr(PUA)` turns that codepoint into the one-character string `console.print` expects.
+`tileset.remap(codepoint, column, row)` makes a codepoint draw the tile at that cell of the sheet. Columns and rows are zero-based and counted from the top-left, so `(0, 5)` is the first tile of the sixth row. We use `PUA` (`0xE000`) for the codepoint because it sits in the Unicode **Private Use Area** (`U+E000..U+F8FF`), a block Unicode never assigns to real characters. Since tcod only ever sees our own tileset here, nothing else competes for the slot either. `chr(PUA)` turns that codepoint into the one-character string `console.print` expects.
 
-Run the game: the hero walks around as a sprite. That is the whole trick.
+!!! tip "Run it now"
+    Run the game and move around. The hero walks as a sprite instead of an `@`, in every direction, same as before. That is the whole trick.
+
+!!! note "Why exactly `0xE000`?"
+    `0xE000` is simply the first slot of the Private Use Area: easy to remember, easy to type. That is enough for one sprite. Once a sheet grows to dozens of tiles, picking a codepoint by hand for each one gets tedious and easy to get wrong. A neater trick is to encode a tile's row and column *into* the codepoint itself, so it can be computed instead of memorized. This chapter only needs one sprite, so we are not there yet, but keep the idea in the back of your mind: the [graphics appendix](append-7.md) picks it back up once the sheet is big enough to actually need it.
 
 !!! note "About the sheet layout"
     The lower rows of the original DejaVu sheet were empty, so the first sprites fill unused cells, not overwrite any glyph. The `32` and `13` we pass to `load_tilesheet` are exactly that: how many tiles the image holds across and down, and they must match the image or tcod cannot cut it into tiles. The original sheet is `32 × 8 = 256` cells; the extended one adds five rows of art below, for `32 × 13`.

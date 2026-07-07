@@ -667,9 +667,9 @@ Add the import at the top of `game/entities/components/fighter.py`:
 First, add `heal()` and `take_damage()` to `Fighter` in `game/entities/components/fighter.py`. Defining them now means `melee_attack()` can call `take_damage()` right after:
 
 ```python
-    def heal(self, amount: float) -> int:
+    def heal(self, amount: float) -> float:
         if self.hp == self.max_hp:
-            return 0
+            return 0.0
 
         new_hp_value = self._hp + amount
         new_hp_value = min(new_hp_value, float(self.max_hp))
@@ -677,7 +677,7 @@ First, add `heal()` and `take_damage()` to `Fighter` in `game/entities/component
         recovered = new_hp_value - self._hp
         self.hp = new_hp_value
 
-        return int(recovered)
+        return recovered
 
     def take_damage(self, amount: float) -> None:
         self.hp -= amount
@@ -694,7 +694,7 @@ Update `Fighter.melee_attack()` in `game/entities/components/fighter.py`:
 +    attack_color = colors.PLAYER_ATTACK if self.entity.ai is None else colors.ENEMY_ATTACK
 +
      if damage > 0:
--        print(f"{attack_msg} for {damage} hit points.")
+-        print(f"{attack_msg} for {damage:.1f} hit points.")
 +        MessageLog.add_message(f"{attack_msg} for {damage:.1f} hit points.", attack_color)
 -        target.fighter.hp -= damage
 +        target.fighter.take_damage(damage)

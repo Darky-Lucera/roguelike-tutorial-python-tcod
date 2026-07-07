@@ -669,7 +669,7 @@ class LightningDamageConsumable(Consumable):
 
         if target:
             MessageLog.add_message(
-                f"A lightning bolt strikes the {target.name} for {self.damage} damage!",
+                f"A lightning bolt strikes the {target.name} for {self.damage:.1f} damage!",
                 colors.PLAYER_ATTACK,
             )
             target.fighter.take_damage(self.damage)

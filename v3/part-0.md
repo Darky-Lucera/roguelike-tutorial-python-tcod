@@ -2,7 +2,7 @@
 
 ## What You Will Build
 
-By the end of this part, you will have a Python project configured with `uv`, `tcod`, and `numpy`, and a game window that opens on your screen. It will not do much yet, but every chapter from here builds directly on this foundation.
+By the end of this part, you will have a Python project configured with `uv`, `tcod`, and `numpy`, verified from the terminal. The game window itself opens in Part 1; every chapter from here builds directly on this foundation.
 
 ## Learning goals
 
@@ -114,7 +114,17 @@ dependencies = [
 ```
 
 !!! tip "Why pin version ranges?"
-    We write `>=21.2,<22` instead of just `tcod` because the tcod API changes between major versions. Pinning prevents a future major release from silently breaking your code.
+    We write `>=21.2,<22` instead of just `tcod` because the tcod API changes between major versions. Pinning prevents a future major release from silently breaking your code. You will also see this style written as `tcod~=21.2`, the "compatible release" operator: it means exactly the same thing as `>=21.2,<22`. Many libraries, tcod included, publish with only a lower bound; the upper bound here is a choice for tutorial stability, not something tcod itself requires.
+
+!!! info "Dependency cooldowns"
+    A supply-chain attack publishes a malicious version of a popular package, then gets caught and pulled within days. If you install the moment a new version lands, you have no such safety window. `uv` lets you set a cooldown so it ignores any release younger than a chosen age:
+
+    ```toml
+    [tool.uv]
+    exclude-newer = "7 days"
+    ```
+
+    Add this to `pyproject.toml` and every `uv lock` / `uv sync` in the project only considers package versions at least 7 days old. See the [uv documentation on `exclude-newer`](https://docs.astral.sh/uv/reference/settings/#exclude-newer) for the full syntax (fixed dates work too) and `exclude-newer-package` for per-package overrides.
 
 !!! info "Prefer the classic pip + requirements.txt flow?"
     Both flows produce the same environment. If you'd rather use pip, create a `requirements.txt` with:
@@ -165,7 +175,7 @@ import tcod
 
 
 def main() -> None:
-    print("Hello World!")
+    print(f"Hello World! (tcod {tcod.__version__})")
 
 
 if __name__ == "__main__":
@@ -178,7 +188,7 @@ Run it:
 python main.py
 ```
 
-You should see `Hello World!` printed to the terminal. If you get an `ImportError` or `ModuleNotFoundError`, the tcod installation did not work. Check the [tcod installation guide](https://python-tcod.readthedocs.io/en/latest/installation.html).
+You should see something like `Hello World! (tcod 21.2.1)` printed to the terminal, confirming both that Python runs your code and that tcod installed correctly. If you get an `ImportError` or `ModuleNotFoundError`, the tcod installation did not work. Check the [tcod installation guide](https://python-tcod.readthedocs.io/en/latest/installation.html).
 
 !!! question "What is `from __future__ import annotations`?"
     This line makes Python treat all type annotations as strings (lazy evaluation). It lets us write type hints that refer to classes that are defined later in the file or in another module. In Python 3.12+ many cases work without it, but we include it in every file as a uniform convention, so the codebase stays consistent as it grows and you never get bitten by a forward-reference error.
@@ -202,7 +212,7 @@ Create a `res/` folder next to `main.py`, and save the file there as `dejavu12x1
 
 ## Project structure going forward
 
-As the tutorial progresses, we will add files one at a time. Here is what the final project will look like, so you have a map:
+As the tutorial progresses, we will add files one at a time. Here is the shape of the project after the first few parts, so you have a map; the full final layout appears as the tutorial grows:
 
 ```text
 roguelike-tutorial/
@@ -223,7 +233,7 @@ roguelike-tutorial/
     constants/           ← visual constants
       __init__.py
       sprites.py         ← single-character glyphs (PLAYER, ORC, TROLL, ...)
-      colors.py           ← RGB tuples (PLAYER, HP_BAR_FILLED, MENU_TITLE, ...)
+      colors.py          ← RGB tuples (PLAYER, HP_BAR_FILLED, MENU_TITLE, ...)
     components/          ← reusable pieces of behavior (Fighter, AI, Inventory, ...)
   pyproject.toml
 ```

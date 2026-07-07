@@ -170,7 +170,7 @@ Update `game/entities/components/fighter.py`. Remove the `hp` setter entirely, t
     # only heal and take_damage can write to self._hp
     def heal(self, amount: float) -> float:
         if self.hp == self.max_hp:
-            return 0
+            return 0.0
 
         new_hp_value = self.hp + amount
         new_hp_value = min(new_hp_value, float(self.max_hp))
