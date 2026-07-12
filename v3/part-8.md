@@ -1099,15 +1099,16 @@ Also add `Item` to the imports at the top of `game_states.py` so that `on_item_s
 In Part 5, `place_entities` accepted a single monster limit. Part 8 adds **item** spawning, so the function receives both monster and item limits.
 
 !!! tip "If you completed Exercise 1 from Part 5"
-    That exercise added `min_monsters` to `place_entities`. The diffs below assume it is already there. If you skipped it, add `min_monsters: int` alongside `max_monsters` and replace `max_monsters` with `random.randint(min_monsters, max_monsters)` while you are here.
+    That exercise added `min_monsters` to `place_entities`. The diffs below assume it is already there. If you skipped it, add `min_monsters: int` alongside `max_monsters` and replace `max_monsters` with `rng.randint(min_monsters, max_monsters)` while you are here.
 
 !!! tip "If you skipped Exercise 2 from Part 5"
-    The monster loop below assumes the weighted table from that exercise: `factories.monster_chances`, split into `monster_templates` and `monster_weights`, then selected with `random.choices`. If your code still has a hardcoded orc/troll `if/else`, replace it with the `random.choices` version here. It is the version future spawn tables build on.
+    The monster loop below assumes the weighted table from that exercise: `factories.monster_chances`, split into `monster_templates` and `monster_weights`, then selected with `rng.choices`. If your code still has a hardcoded orc/troll `if/else`, replace it with the `rng.choices` version here. It is the version future spawn tables build on.
 
 Expand the function signature:
 
 ```diff
  def place_entities(
+     rng: random.Random,
      room: RectangularRoom,
      dungeon: GameMap,
      min_monsters: int,
@@ -1115,16 +1116,16 @@ Expand the function signature:
 +    min_items: int,
 +    max_items: int,
  ) -> None:
-     number_of_monsters = random.randint(min_monsters, max_monsters)
-+    number_of_items    = random.randint(min_items, max_items)
+     number_of_monsters = rng.randint(min_monsters, max_monsters)
++    number_of_items    = rng.randint(min_items, max_items)
 ```
 
 Then add the item spawning loop at the end of the function body. The diff also renames the `monster` variable to `monsters` and moves the `[0]` index onto its own line so the comment reads on its own line:
 
 ```diff
         if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
--            monster = random.choices(
-+            monsters = random.choices(
+-            monster = rng.choices(
++            monsters = rng.choices(
                  monster_templates,
                  weights = monster_weights,
 -                k       = 1,
@@ -1132,20 +1133,20 @@ Then add the item spawning loop at the end of the function body. The diff also r
 -            monster.spawn(dungeon, x, y)
 +                k       = 1,
 +            )
-+            # First element (because random.choices returns a list)
++            # First element (because rng.choices returns a list)
 +            monsters[0].spawn(dungeon, x, y)
 +
 +    item_templates, item_weights = zip(*factories.item_chances)
 +    for _ in range(number_of_items):
-+        x = random.randint(room.x1 + 1, room.x2 - 1)
-+        y = random.randint(room.y1 + 1, room.y2 - 1)
++        x = rng.randint(room.x1 + 1, room.x2 - 1)
++        y = rng.randint(room.y1 + 1, room.y2 - 1)
 +        if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
-+            items = random.choices(
++            items = rng.choices(
 +                item_templates,
 +                weights=item_weights,
 +                k       = 1,
 +            )
-+            # First element (because random.choices returns a list)
++            # First element (because rng.choices returns a list)
 +            items[0].spawn(dungeon, x, y)
 ```
 
@@ -1181,6 +1182,7 @@ Update the call site in `generate_dungeon`:
 
 ```diff
              place_entities(
+                 rng,
                  new_room,
                  dungeon,
                  min_monsters_per_room,

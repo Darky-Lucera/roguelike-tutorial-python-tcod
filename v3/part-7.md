@@ -613,7 +613,7 @@ Update `run()` to delegate rendering to the active game state and to capture the
 
 ## Update main.py
 
-Four small changes: two new imports, reducing the map height to leave room for the hover text, posting the welcome message, and renaming `console` to `root_console` for clarity now that the engine owns the frame loop.
+Three small changes: two new imports, posting the welcome message, and renaming `console` to `root_console` for clarity now that the engine owns the frame loop.
 
 Add the imports:
 
@@ -623,13 +623,6 @@ Add the imports:
  from game.engine import Engine
  from game.map.map_generator import generate_dungeon
 +from game.message_log import MessageLog
-```
-
-Reduce the generated map height so the dungeon stops before the panel starts:
-
-```diff
--    map_height = 45
-+    map_height = 44
 ```
 
 Post the welcome message after creating the engine:

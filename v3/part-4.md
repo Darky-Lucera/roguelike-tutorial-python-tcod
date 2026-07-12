@@ -269,7 +269,7 @@ Key points:
     The radius controls how far the player can see. Eight tiles is a common default: large enough to see across a room, small enough that corridors stay mysterious. Change it to taste, or make it a character stat later.
 
 !!! example "FOV algorithms"
-    tcod ships several FOV algorithms: `FOV_BASIC`, `FOV_DIAMOND`, `FOV_SHADOW`, `FOV_PERMISSIVE_*` (eight variants), and `FOV_RESTRICTIVE`. They differ in how they handle corners, walls, and symmetry (whether A seeing B implies B seeing A). We pick `FOV_SHADOW` because it produces clean, symmetric sight lines and matches what most modern roguelikes use. Try the others to see how they change the feel of corridors and walls.
+    tcod ships several FOV algorithms: `FOV_BASIC`, `FOV_DIAMOND`, `FOV_SHADOW`, `FOV_PERMISSIVE_*` (eight variants), `FOV_RESTRICTIVE`, and `FOV_SYMMETRIC_SHADOWCAST`. They differ in how they handle corners, walls, and symmetry (whether A seeing B implies B seeing A). We pick `FOV_SHADOW` (recursive shadowcasting) because it produces clean sight lines with few artifacts and is the traditional roguelike choice. It is not fully symmetric; `FOV_SYMMETRIC_SHADOWCAST` exists specifically to fix that, at a higher cost, for games where mutual sight matters. Try the others to see how they change the feel of corridors and walls.
 
 ---
 
@@ -277,7 +277,9 @@ Key points:
 
 The `main.py` we are about to write picks a **seed** for the dungeon and passes it to `generate_dungeon`. With a fixed seed the generator is reproducible: the same seed rebuilds the same dungeon. From here on, `main.py` always passes a seed, so `generate_dungeon` needs a `seed` parameter on the main path.
 
-This was Part 3's first exercise. If you completed it, you already have this code; otherwise, add it now (from this point it is required, not optional):
+This was Part 3's first exercise, but with one difference: instead of reseeding Python's shared `random` module, we create a `random.Random` instance owned by the generator. Reseeding the shared module would replay every other `random` call in the whole game too (combat rolls, AI decisions, item drops), not just dungeon generation; a local instance keeps the seed's effect exactly where it belongs.
+
+If you completed Part 3's exercise with `random.seed(seed)`, replace it now (from this point it is required, not optional):
 
 ```diff
  def generate_dungeon(
@@ -291,12 +293,55 @@ This was Part 3's first exercise. If you completed it, you already have this cod
  ) -> GameMap:
      """Generate a new dungeon map and place the player."""
 +    # Part-3. Exercise 1: Reproducible dungeons
-+    random.seed(seed)
++    rng = random.Random(seed)
 +
      dungeon = GameMap(map_width, map_height)
+
+     rooms: list[RectangularRoom] = []
+
+     max_room_attempts = max_rooms * 2
+     for _ in range(max_room_attempts):
+-        room_width  = random.randint(room_min_size, room_max_size)
+-        room_height = random.randint(room_min_size, room_max_size)
++        room_width  = rng.randint(room_min_size, room_max_size)
++        room_height = rng.randint(room_min_size, room_max_size)
+
+-        x = random.randint(0, dungeon.width  - room_width  - 1)
+-        y = random.randint(0, dungeon.height - room_height - 1)
++        x = rng.randint(0, dungeon.width  - room_width  - 1)
++        y = rng.randint(0, dungeon.height - room_height - 1)
 ```
 
-`random.seed(seed)` resets Python's random generator, so every call that follows (room sizes, positions, tunnel bends) replays the same sequence for a given seed.
+Every other `random.*` call the generator makes needs the same change, including inside `tunnel_between`, so `rng` has to travel with it:
+
+```diff
+ def tunnel_between(
++    rng: random.Random,
+     start: tuple[int, int],
+     end: tuple[int, int],
+ ) -> Iterator[tuple[int, int]]:
+     """Yield the (x, y) coordinates of an L-shaped tunnel."""
+     x1, y1 = start
+     x2, y2 = end
+
+-    if random.random() < 0.5:
++    if rng.random() < 0.5:
+         corner_x, corner_y = x2, y1  # Horizontal first, then vertical
+     else:
+         corner_x, corner_y = x1, y2  # Vertical first, then horizontal
+```
+
+And its call site, inside `generate_dungeon`:
+
+```diff
+         else:
+             # All subsequent rooms: dig a tunnel to the previous room
+-            for x, y in tunnel_between(rooms[-1].center, new_room.center):
++            for x, y in tunnel_between(rng, rooms[-1].center, new_room.center):
+                 dungeon.tiles[x, y] = tile_types.floor
+```
+
+`rng` now stands in for every bare `random.*` call the generator makes. Nothing outside `generate_dungeon` and the functions it calls is affected: combat rolls, AI decisions, and anything else that calls `random` directly keeps using Python's ordinary, unseeded generator, exactly as before.
 
 ---
 
@@ -309,7 +354,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import secrets
+import random
 
 import tcod
 
@@ -320,15 +365,14 @@ from game.map.map_generator import generate_dungeon
 
 def main() -> None:
     # Part-3. Exercise 1: Reproducible dungeons
-    seed = int(os.environ.get("GAME_SEED", secrets.randbits(64)))
-    #seed = 12345 # Write here the game seed to reproduce a map
+    seed = int(os.environ.get("GAME_SEED", random.getrandbits(64)))
     print(f"Game seed: {seed}")
 
     screen_width  = 80
     screen_height = 50
 
     map_width  = 80
-    map_height = 45
+    map_height = 44
 
     room_max_size = 12
     room_min_size = 7
@@ -388,9 +432,18 @@ if __name__ == "__main__":
 
 `main.py` decides the seed before anything else:
 
-- `secrets.randbits(64)` produces a fresh 64-bit number, so each run builds a different dungeon.
-- `os.environ.get("GAME_SEED", ...)` lets you override that: set the `GAME_SEED` environment variable and the game uses it instead, so `GAME_SEED=12345 python main.py` always builds the same dungeon. The commented `seed = 12345` line is a quick alternative if you prefer editing the source.
+- `random.getrandbits(64)` produces a fresh 64-bit number, so each run builds a different dungeon. It draws from Python's shared random generator, which is already seeded from OS entropy at startup; that freshness is all we need here, so there is no reason to reach for the `secrets` module's cryptographic-strength randomness.
+- `os.environ.get("GAME_SEED", ...)` lets you override that: set the `GAME_SEED` environment variable and the game uses it instead, so `GAME_SEED=12345 python main.py` always builds the same dungeon.
 - `print(f"Game seed: {seed}")` reports the chosen seed, so when you find an interesting (or broken) layout you can reproduce it later.
+
+!!! tip "Run it now"
+    Run `python main.py` a few times. Each run should generate a different dungeon
+    layout, with a bright starting room, dimmed tiles behind you as you move away, and
+    solid black for anything you have not explored yet. Then set `GAME_SEED=12345`
+    (or any number) before running it again, twice in a row: both runs should produce
+    the exact same dungeon.
+
+<!-- TODO: screenshot: a lit starting room, a dimmed already-explored corridor behind the player, and solid black unexplored area, ideally with a one-line caption per zone -->
 
 ---
 

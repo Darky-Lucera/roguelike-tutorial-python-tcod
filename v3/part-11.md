@@ -580,14 +580,14 @@ After all rooms are generated, place down-stairs in the last room. Pick a free c
 +        if not any(e.x == x and e.y == y for e in dungeon.entities)
 +    ]
 +
-+    stair_pos = random.choice(free) if free else last_room.center
++    stair_pos = rng.choice(free) if free else last_room.center
 +    dungeon.downstairs_location = stair_pos
 +    factories.down_stairs.spawn(dungeon, *stair_pos)
 +
      return dungeon
 ```
 
-`free` is a list comprehension with an `if` clause: it keeps only the room cells where no entity already exists. `random.choice(free) if free else last_room.center` chooses a random free cell when possible, and falls back to the room center if the room somehow has no free cells. Because the list is built by walking the room in a fixed order, the same seed can reproduce the same stair placement.
+`free` is a list comprehension with an `if` clause: it keeps only the room cells where no entity already exists. `rng.choice(free) if free else last_room.center` chooses a random free cell when possible, and falls back to the room center if the room somehow has no free cells. Because the list is built by walking the room in a fixed order and `rng` is the same seeded instance the rest of the generator uses, the same seed can reproduce the same stair placement.
 
 ### Passing current_floor from GameWorld
 

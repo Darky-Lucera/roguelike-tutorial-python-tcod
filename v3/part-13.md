@@ -810,7 +810,7 @@ And pass the result to the generator:
          )
 ```
 
-The method recomputes every roll from scratch on every call, with a fresh `random.Random(self.seed)`. That sounds wasteful, but it is the point: the same seed always produces the same rolls in the same order (dicts iterate in insertion order), so when floor 4 asks "is the sword mine?" it gets the answer the run already decided on floor 1. Uniqueness needs no bookkeeping either: floors are persistent since Part 11, each floor generates exactly once, so each piece spawns exactly once. The roll uses a *local* `random.Random` on purpose: it decides only *which* floor each piece belongs to, without touching the global RNG. *Where* on that floor it lands is just as reproducible, but through the other half of the system: `generate_dungeon` calls `random.seed(seed)` at the top (the per-floor seed you added in Part 11), so every placement draw that follows is fixed too. The same run seed reproduces the whole dungeon: layout, which equipment, which floor, and which tile.
+The method recomputes every roll from scratch on every call, with a fresh `random.Random(self.seed)`. That sounds wasteful, but it is the point: the same seed always produces the same rolls in the same order (dicts iterate in insertion order), so when floor 4 asks "is the sword mine?" it gets the answer the run already decided on floor 1. Uniqueness needs no bookkeeping either: floors are persistent since Part 11, each floor generates exactly once, so each piece spawns exactly once. This `rng` is deliberately separate from `generate_dungeon`'s own `rng` (Part 4): this one decides only *which* floor each piece belongs to, seeded from the run seed (`self.seed`); `generate_dungeon`'s decides *where* things land on a given floor, seeded from the per-floor seed (`self.seed + self.current_floor`, from Part 11). Two local `random.Random` instances, each owning one concern, instead of a single shared or global generator. The same run seed still reproduces the whole dungeon: layout, which equipment, which floor, and which tile.
 
 !!! warning "Why not just store the rolled floors?"
     The tempting alternative is a dict computed once in `__init__`, something like `self.equipment_floors = {factories.dagger: 1, ...}`. But `GameWorld` is pickled inside every save file, and pickle would store *copies* of those template items. After loading, `factories.dagger` and the key in your dict would be two different objects, and every identity-based lookup (the same identity hashing that makes the Part 12 tables work) would quietly fail. Deriving the rolls from the seed keeps `GameWorld` free of template references, and your saves free of surprises.
@@ -843,7 +843,7 @@ And replace the inline search in the stairs block:
 -    ]
 +    free = free_positions(room=last_room, dungeon=dungeon)
 
-     stair_pos = random.choice(free) if free else last_room.center
+     stair_pos = rng.choice(free) if free else last_room.center
 ```
 
 `generate_dungeon` accepts the equipment list. Extend the entity import:
@@ -869,10 +869,10 @@ And place each piece after the stairs, just before the return:
 
 +    # Guaranteed equipment: the starting room on floor 1, a random room deeper down
 +    for item_template in equipment:
-+        room = rooms[0] if current_floor == 1 else random.choice(rooms)
++        room = rooms[0] if current_floor == 1 else rng.choice(rooms)
 +        free = free_positions(room, dungeon)
 +        if free:
-+            item_template.spawn(dungeon, *random.choice(free))
++            item_template.spawn(dungeon, *rng.choice(free))
 +
      return dungeon
 ```
@@ -1002,7 +1002,7 @@ game/
 
 3. **Place guaranteed equipment away from the arrival room**:
 
-   On floors after the first, the guaranteed piece can currently land in `rooms[0]`, the room you arrive in, which also holds the up stairs, so the reward appears with no exploration. In the placement loop in `generate_dungeon` (`game/map/map_generator.py`), the deeper-floor branch is `random.choice(rooms)`; restrict it to `rooms[1:]` so the arrival room is excluded.
+   On floors after the first, the guaranteed piece can currently land in `rooms[0]`, the room you arrive in, which also holds the up stairs, so the reward appears with no exploration. In the placement loop in `generate_dungeon` (`game/map/map_generator.py`), the deeper-floor branch is `rng.choice(rooms)`; restrict it to `rooms[1:]` so the arrival room is excluded.
 
    Fall back safely when the dungeon has only one room (so `rooms[1:]` is empty): `rooms[1:] or rooms` gives you the candidate list in a single expression. Leave the floor-1 special case (`rooms[0]`) untouched, since placing the dagger in the safe starting room is deliberate.
 

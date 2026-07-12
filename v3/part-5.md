@@ -624,7 +624,7 @@ troll = Entity(
 
 If you added the debug marker entities from the Part 4 exercises, remove them now. They were useful to test FOV behavior, but Part 5 starts placing real enemies in rooms, and those markers would make the test output harder to read.
 
-Add a `place_entities` function to the existing `game/map/map_generator.py`. The `RectangularRoom` class and the `tunnel_between` function from Part 3 stay unchanged. The function spawns monsters from the templates we just defined, so first add `entity_factories` to the imports at the top of the file:
+Add a `place_entities` function to the existing `game/map/map_generator.py`. The `RectangularRoom` class stays unchanged, and so does the `tunnel_between` function's body; it already takes the `rng` instance Part 4 introduced. The function spawns monsters from the templates we just defined, so first add `entity_factories` to the imports at the top of the file:
 
 ```python
 from game import entity_factories
@@ -634,23 +634,26 @@ Then add the function itself:
 
 ```python
 def place_entities(
+    rng: random.Random,
     room: RectangularRoom,
     dungeon: GameMap,
     max_monsters: int,
 ) -> None:
-    number_of_monsters = random.randint(0, max_monsters)
+    number_of_monsters = rng.randint(0, max_monsters)
 
     for _ in range(number_of_monsters):
-        x = random.randint(room.x1 + 1, room.x2 - 1)
-        y = random.randint(room.y1 + 1, room.y2 - 1)
+        x = rng.randint(room.x1 + 1, room.x2 - 1)
+        y = rng.randint(room.y1 + 1, room.y2 - 1)
 
         if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
-            if random.random() < 0.8:  # 80% chance of orc
+            if rng.random() < 0.8:  # 80% chance of orc
                 entity_factories.orc.spawn(dungeon, x, y)
 
             else:
                 entity_factories.troll.spawn(dungeon, x, y)
 ```
+
+`place_entities` takes the same `rng` instance `generate_dungeon` already owns, instead of calling the shared `random` module. This keeps monster placement reproducible from the same dungeon seed, without reseeding anything global.
 
 Update `generate_dungeon` to call `place_entities` and accept the new parameter:
 
@@ -675,12 +678,13 @@ Update `generate_dungeon` to call `place_entities` and accept the new parameter:
              player.set_position(*new_room.center)
          else:
              for x, y in tunnel_between(
+                rng,
                 rooms[-1].center,
                 new_room.center
              ):
                  dungeon.tiles[x, y] = tile_types.floor
 +
-+            place_entities(new_room, dungeon, max_monsters_per_room)
++            place_entities(rng, new_room, dungeon, max_monsters_per_room)
 
          rooms.append(new_room)
          if len(rooms) >= max_rooms:
@@ -690,7 +694,7 @@ Update `generate_dungeon` to call `place_entities` and accept the new parameter:
 ```
 
 !!! note "If you did the Part 3 exercises"
-    The tunnel line above is the main-path version (connect to the previous room with `tunnel_between(rooms[-1].center, new_room.center)`). If you connected to the nearest room (Exercise 2) or used `roughly_center` as the tunnel endpoints (Exercise 3), keep your own version of that line. The only additions Part 5 needs are the `max_monsters_per_room` parameter and the `place_entities(new_room, dungeon, max_monsters_per_room)` call inside the `else` branch.
+    The tunnel line above is the main-path version (connect to the previous room with `tunnel_between(rng, rooms[-1].center, new_room.center)`). If you connected to the nearest room (Exercise 2) or used `roughly_center` as the tunnel endpoints (Exercise 3), keep your own version of that line, passing `rng` first the same way. The only additions Part 5 needs are the `max_monsters_per_room` parameter and the `place_entities(rng, new_room, dungeon, max_monsters_per_room)` call inside the `else` branch.
 
     ```diff
          else:
@@ -702,12 +706,13 @@ Update `generate_dungeon` to call `place_entities` and accept the new parameter:
                  ),
              )
              for x, y in tunnel_between(
+                 rng,
                  nearest_room.roughly_center,
                  new_room.roughly_center,
              ):
                  dungeon.tiles[x, y] = tile_types.floor
     +
-    +            place_entities(new_room, dungeon, max_monsters_per_room)
+    +            place_entities(rng, new_room, dungeon, max_monsters_per_room)
     ```
 
 !!! tip "Why not place enemies in the first room?"
@@ -772,7 +777,7 @@ from __future__ import annotations
 import copy
 import os
 from pathlib import Path
-import secrets
+import random
 
 import tcod
 
@@ -783,15 +788,14 @@ from game.map.map_generator import generate_dungeon
 
 def main() -> None:
     # Part-3. Exercise 1: Reproducible dungeons
-    seed = int(os.environ.get("GAME_SEED", secrets.randbits(64)))
-    #seed = 12345 # Write here the game seed to reproduce a map
+    seed = int(os.environ.get("GAME_SEED", random.getrandbits(64)))
     print(f"Game seed: {seed}")
 
     screen_width  = 80
     screen_height = 50
 
     map_width  = 80
-    map_height = 45
+    map_height = 44
 
     room_max_size = 12
     room_min_size = 7
@@ -828,11 +832,11 @@ def main() -> None:
     tcod.lib.SDL_SetAppMetadata(
         title.encode("utf-8"),
         version.encode("utf-8"),
-        app_id.encode("utf-8")
+        app_id.encode("utf-8"),
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0" # Nearest pixel sampling
+        b"0"  # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -924,11 +928,11 @@ game/
 
 1. **Minimum monsters per room**:
 
-    Add a `min_monsters` parameter to `place_entities` and use `random.randint(min_monsters, max_monsters)`. Keep it at `0` by default, then try `1` and observe how much more crowded and dangerous the dungeon feels.
+    Add a `min_monsters` parameter to `place_entities` and use `rng.randint(min_monsters, max_monsters)`. Keep it at `0` by default, then try `1` and observe how much more crowded and dangerous the dungeon feels.
 
 2. **Weighted monster table**:
 
-    The current 80/20 split is hardcoded. Replace it with a list of `(entity_template, weight)` tuples and use `random.choices(population, weights)` to pick. This makes adding new monster types a one-line change.
+    The current 80/20 split is hardcoded. Replace it with a list of `(entity_template, weight)` tuples and use `rng.choices(population, weights)` to pick. This makes adding new monster types a one-line change.
 
 3. **Passive blocking entities**:
 

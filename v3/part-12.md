@@ -18,7 +18,7 @@ By the end of this part, deeper dungeon floors will feel harder in a way the pla
 Right now, every floor draws from the same spawn tables with the same weights. The weighted table from Part 5 Exercise 2 already made some monsters rarer than others, but the weights never change: floor 10 rolls on exactly the same table as floor 1. This makes the game feel flat: depth adds no tension.
 
 !!! info "Where you stand"
-    Two Part 5 exercises built the current spawn system: Exercise 1 added minimum and maximum counts per room, and Exercise 2 replaced the hardcoded monster split with a `monster_chances` table and `random.choices`. This chapter absorbs both: the counts become floor-keyed tables in `config.py`, and the weight tables gain a floor dimension. If you skipped them, don't worry: Part 8 made the weighted tables part of the main path anyway, and Part 11's listings already carried the per-room limit parameters, so the diffs below match your code. Where a deleted line covers something you never added (an exercise item, for example), there is simply nothing to delete.
+    Two Part 5 exercises built the current spawn system: Exercise 1 added minimum and maximum counts per room, and Exercise 2 replaced the hardcoded monster split with a `monster_chances` table and `rng.choices`. This chapter absorbs both: the counts become floor-keyed tables in `config.py`, and the weight tables gain a floor dimension. If you skipped them, don't worry: Part 8 made the weighted tables part of the main path anyway, and Part 11's listings already carried the per-room limit parameters, so the diffs below match your code. Where a deleted line covers something you never added (an exercise item, for example), there is simply nothing to delete.
 
 The fix is an **encounter table**: a mapping from dungeon floor to spawn probabilities. Orcs appear rarely on shallow floors and frequently on deep ones. New items only appear once the player has had time to learn the basics.
 
@@ -29,7 +29,7 @@ The fix is an **encounter table**: a mapping from dungeon floor to spawn probabi
 
 ## Weighted selection, floor by floor
 
-You already used weighted random selection in Part 5 Exercise 2: given a list of `(item, weight)` pairs, `random.choices` picks an item at random, where higher-weight items are more likely. As a refresher, here is how the item weights from this chapter behave on a deep floor, keeping only the four base items to make the example short:
+You already used weighted random selection in Part 5 Exercise 2: given a list of `(item, weight)` pairs, `rng.choices` picks an item at random, where higher-weight items are more likely. As a refresher, here is how the item weights from this chapter behave on a deep floor, keeping only the four base items to make the example short:
 
 ```text
 Item              Weight   Cumulative
@@ -223,6 +223,7 @@ def get_value_for_floor(
 
 
 def get_entities_at_random[T](
+    rng: random.Random,
     weighted_chances_by_floor: dict[T, list[tuple[int, int]]],
     number_of_entities: int,
     floor: int,
@@ -240,12 +241,12 @@ def get_entities_at_random[T](
     entities = list(entity_weighted_chances.keys())
     weights  = list(entity_weighted_chances.values())
 
-    return random.choices(entities, weights=weights, k=number_of_entities)
+    return rng.choices(entities, weights=weights, k=number_of_entities)
 ```
 
 `get_value_for_floor` walks the table in order and remembers the last entry that applies. Older tutorials call this function `get_max_value_for_floor`, but ours also reads the *minimum* tables, so that name would lie; the helper returns whichever value is in force on the given floor, whatever it represents.
 
-`get_entities_at_random` builds the weight list for the requested floor and drops every entry whose weight is 0 (not available yet). Then `random.choices` does the selection, and its `k` argument is the one to watch: `k=number_of_entities` sets how many picks come back, so the count rolled earlier in `place_entities` becomes the length of the returned list. Selection is with replacement, so the same template can be picked more than once: that is what lets one room hold two orcs. Both keys and values come from the same dict, so the two lists stay aligned: dicts preserve insertion order.
+`get_entities_at_random` builds the weight list for the requested floor and drops every entry whose weight is 0 (not available yet). Then `rng.choices` does the selection, and its `k` argument is the one to watch: `k=number_of_entities` sets how many picks come back, so the count rolled earlier in `place_entities` becomes the length of the returned list. Selection is with replacement, so the same template can be picked more than once: that is what lets one room hold two orcs. Both keys and values come from the same dict, so the two lists stay aligned: dicts preserve insertion order.
 
 !!! tip "Generic functions: `def f[T](...)`"
     The `[T]` after the function name declares a **type parameter** (Python 3.12, PEP 695). It ties the input to the output: pass a `dict[Actor, ...]` and the checker knows you get a `list[Actor]` back; pass a `dict[Item, ...]` and you get `list[Item]`. Without it we would have to type the function with a common base class and lose precision, or repeat ourselves with two nearly identical functions. Before Python 3.12 this required declaring a separate `TypeVar` object from the `typing` module; the new syntax does the same job inline.
@@ -258,33 +259,36 @@ With the tables and helpers in place, `place_entities` shrinks. Replace it entir
 
 ```python
 def place_entities(
+    rng: random.Random,
     room: RectangularRoom,
     dungeon: GameMap,
     current_floor: int,
 ) -> None:
-    number_of_monsters = random.randint(
+    number_of_monsters = rng.randint(
         get_value_for_floor(constants.MIN_MONSTERS_BY_FLOOR, current_floor),
         get_value_for_floor(constants.MAX_MONSTERS_BY_FLOOR, current_floor),
     )
-    number_of_items = random.randint(
+    number_of_items = rng.randint(
         get_value_for_floor(constants.MIN_ITEMS_BY_FLOOR, current_floor),
         get_value_for_floor(constants.MAX_ITEMS_BY_FLOOR, current_floor),
     )
 
     monsters = get_entities_at_random(
+        rng,
         factories.monster_chances,
         number_of_monsters,
         current_floor,
     )
     items = get_entities_at_random(
+        rng,
         factories.item_chances,
         number_of_items,
         current_floor,
     )
 
     for entity in monsters + items:
-        x = random.randint(room.x1 + 1, room.x2 - 1)
-        y = random.randint(room.y1 + 1, room.y2 - 1)
+        x = rng.randint(room.x1 + 1, room.x2 - 1)
+        y = rng.randint(room.y1 + 1, room.y2 - 1)
 
         if not any(e.x == x and e.y == y for e in dungeon.entities):
             entity.spawn(dungeon, x, y)
@@ -320,6 +324,7 @@ And the call inside the room loop:
 
 ```diff
 -            place_entities(
+-                rng,
 -                new_room,
 -                dungeon,
 -                min_monsters_per_room,
@@ -327,7 +332,7 @@ And the call inside the room loop:
 -                min_items_per_room,
 -                max_items_per_room,
 -            )
-+            place_entities(new_room, dungeon, current_floor)
++            place_entities(rng, new_room, dungeon, current_floor)
 ```
 
 This is the architectural payoff of the chapter: adding new floor-scaled content (a new monster, a new item, a different difficulty curve) now means editing a data table. The generator's signature never changes again for spawn reasons.
@@ -540,6 +545,7 @@ game/
 
         ```python
         def place_stairs_guardian(
+            rng: random.Random,
             dungeon: GameMap,
             current_floor: int,
             free: list[tuple[int, int]],
@@ -561,7 +567,7 @@ game/
                 for x, y in free
                 if max(abs(x - stair_pos[0]), abs(y - stair_pos[1])) <= 2
             ]
-            guardian_pos = random.choice(near_stairs) if near_stairs else fallback_pos
+            guardian_pos = rng.choice(near_stairs) if near_stairs else fallback_pos
 
             guardian = max(monsters_available, key=lambda monster: monster.level.xp_given)
             guardian.spawn(dungeon, *guardian_pos)
@@ -570,7 +576,7 @@ game/
         Then call it in `generate_dungeon()`, right after the down stairs spawn:
 
         ```python
-        place_stairs_guardian(dungeon, current_floor, free, stair_pos, last_room.center)
+        place_stairs_guardian(rng, dungeon, current_floor, free, stair_pos, last_room.center)
         ```
 
 2. **New monster: Ghoul**:

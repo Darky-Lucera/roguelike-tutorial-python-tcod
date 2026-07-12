@@ -74,6 +74,8 @@ Update the `GameMap` import in `game/engine.py`. It moves below the other `game`
 +from game.map.game_map import GameMap
 ```
 
+`main.py` still imports the old path at this point, so do not run the game yet: it would fail with `ModuleNotFoundError: No module named 'game.game_map'`. That is expected; we replace `main.py` entirely near the end of this part.
+
 ---
 
 ## The dungeon generator module
@@ -324,7 +326,7 @@ def main() -> None:
     screen_height = 50
 
     map_width  = 80
-    map_height = 45
+    map_height = 44
 
     room_max_size = 12
     room_min_size = 7
@@ -390,6 +392,8 @@ if __name__ == "__main__":
 
 Notice that the player starts at `(0, 0)`, a wall. `generate_dungeon` will move the player to the center of the first room before the game begins. We also removed the `npc` entity since it was just for demonstration.
 
+<!-- TODO: screenshot: a generated dungeon: rooms connected by L-shaped tunnels, the player inside the first room -->
+
 ---
 
 ## Testing your work
@@ -404,7 +408,7 @@ Run `python main.py` a few times:
 - [ ] There is no exit yet; descending stairs come in Part 11
 
 !!! bug "What if some rooms are unreachable?"
-    Our algorithm connects each room to the *previous* room in the list. As long as no room overlaps (which we check), every placed room is reachable. If you see a floating room with no connection, it is a bug in the intersection check; verify that `intersects` is comparing `x1/x2/y1/y2` correctly.
+    Our algorithm connects each room to the *previous* room in the list with a dug tunnel, and digging only ever turns wall into floor: a later room can never wall off an earlier corridor. That is what guarantees every room is reachable, not the overlap check (overlapping rooms would just merge into one, which is ugly but still reachable). If you see a floating room with no connection, the tunnel code did not run for it; check the `else` branch and `intersects`.
 
 ---
 
@@ -460,6 +464,8 @@ game/
 
     Add a `seed` parameter to `generate_dungeon` and call `random.seed(seed)` at the top of the function. With a fixed seed, the dungeon is always the same. This is useful for debugging: if you find a problematic layout, record its seed to reproduce it.
 
+    `random.seed(seed)` reseeds Python's shared, global random generator, so it also affects every other part of the program that calls `random` after this point, not just dungeon generation. Part 4 introduces the more robust pattern: a `random.Random(seed)` instance owned by the generator itself, so seeding the dungeon does not silently make unrelated systems deterministic too.
+
 2. **Connect to the *nearest* room instead of the *previous* one**:
 
     Our current algorithm connects each room to the one placed before it. This sometimes creates long diagonal tunnels. Instead, find the already-placed room that is closest to the new room and connect to that. The dungeon will look more compact.
@@ -486,7 +492,7 @@ game/
         return dx * dx + dy * dy
     ```
 
-    `squared_center_distance` compares room centers. `squared_distance` compares the rectangles themselves: if two rooms overlap along one axis, that axis contributes `0`; otherwise it contributes the gap between their edges. Use `squared_distance` for this exercise.
+    `squared_center_distance` compares room centers. `squared_distance` compares the rectangles themselves: if two rooms overlap along one axis, that axis contributes `0`; otherwise it contributes the gap between their edges. Use `squared_distance` for this exercise, then try `squared_center_distance` too and compare the layouts: center distance sometimes picks a room whose nearest *edge* is actually far away, because it ignores each room's size.
 
     We compare squared distances instead of real distances because we only need to know which room is closest. Taking a square root would make every distance slower to compute, and it would not change the ordering: if one squared distance is smaller than another, its real distance is smaller too.
 

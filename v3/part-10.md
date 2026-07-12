@@ -218,7 +218,7 @@ from __future__ import annotations
 
 import copy
 import os
-import secrets
+import random
 from pathlib import Path
 
 from game.constants import colors
@@ -234,7 +234,7 @@ def new_game() -> Engine:
     MessageLog.clear()
 
     # Part-3. Exercise 1: Reproducible dungeons
-    seed = int(os.environ.get("GAME_SEED", secrets.randbits(64)))
+    seed = int(os.environ.get("GAME_SEED", random.getrandbits(64)))
     print(f"Game seed: {seed}")
 
     player = copy.deepcopy(factories.player)
