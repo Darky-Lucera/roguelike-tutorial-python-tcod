@@ -4,6 +4,8 @@
 
 By the end of this part, you will have the first playable version of your roguelike: a player character, `@`, moving with the arrow keys inside a small room bounded by walls, `#`.
 
+One thing before we start: this tutorial counts on you doing the exercises at the end of each part. They are not optional extras; the following parts assume you completed them before moving on. Part 1 is the first example: the walls promised above are yours to build, in exercise 2.
+
 ## Learning goals
 
 - Understand the game loop and why roguelikes structure it the way they do
@@ -93,7 +95,7 @@ def main() -> None:
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0"  # Nearest pixel sampling
+        b"0",   # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -125,7 +127,8 @@ if __name__ == "__main__":
 
 ![Screenshot 1](images/part_1_screenshot_1.png)
 
-The 80 × 50 dimensions follow the classic 80-column terminal convention going back to the VT100; 50 rows leaves comfortable space for the map plus a UI strip we will add in Part 7.
+!!! info "Why 80 × 50?"
+    The 80-column width is the classic terminal convention: the [VT100](https://en.wikipedia.org/wiki/VT100) (1978) displayed 80 columns because it inherited the width of IBM punched cards, which held 80 characters each. The 50 rows leave comfortable space for the map plus a UI strip we will add in Part 7.
 
 Let's go through each part.
 
@@ -134,8 +137,8 @@ Let's go through each part.
 ```python
 tileset = tcod.tileset.load_tilesheet(
     Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png",
-    32,           # columns in the sheet
-    8,            # rows in the sheet
+    32, # columns in the sheet
+    8,  # rows in the sheet
     tcod.tileset.CHARMAP_TCOD,
 )
 ```
@@ -169,7 +172,7 @@ tcod.lib.SDL_SetAppMetadata(
 )
 tcod.lib.SDL_SetHint(
     b"SDL_RENDER_SCALE_QUALITY",
-    b"0"  # Nearest pixel sampling
+    b"0",   # Nearest pixel sampling
 )
 ```
 
@@ -232,7 +235,7 @@ A static `@` is not very interesting. Let's track the player's position and hand
      screen_width  = 80
      screen_height = 50
 +
-+    player_x = screen_width // 2
++    player_x = screen_width  // 2
 +    player_y = screen_height // 2
 +
      tileset = tcod.tileset.load_tilesheet(
@@ -352,8 +355,37 @@ class EventHandler:
 !!! question "Why not `tcod.event.EventDispatch`?"
     In older tcod code you will see `class EventHandler(tcod.event.EventDispatch[Action])`. That base class still exists but is marked as deprecated in recent versions of tcod. Writing the dispatch by hand keeps us in control of the routing and makes it straightforward to add subclasses of `EventHandler` later (one per game state: main menu, inventory, targeting, etc.).
 
-!!! tip "Vim editor keys and numpad"
-    To support `hjkl` (Vim editor movement) or the numpad, add more `case` branches in `event_keydown`. For example: `case tcod.event.KeySym.H: return MovementAction(dx=-1, dy=0)`.
+### Vi keys and the numpad
+
+Arrow keys are not the only tradition. *Rogue* was written before arrow keys were something you could count on, so it used the letters `h`, `j`, `k`, `l` to move, a convention borrowed from the vi text editor. Other classics leaned on the numpad instead. Longtime roguelike players expect all three schemes, and supporting them costs us almost nothing, because a single `case` can match several keys at once.
+
+Update the four movement cases in `event_keydown`:
+
+```diff
+         match key:
+-            case tcod.event.KeySym.UP:
++            case tcod.event.KeySym.UP | tcod.event.KeySym.KP_8 | tcod.event.KeySym.K:
+                 return MovementAction(dx=0, dy=-1)
+
+-            case tcod.event.KeySym.DOWN:
++            case tcod.event.KeySym.DOWN | tcod.event.KeySym.KP_2 | tcod.event.KeySym.J:
+                 return MovementAction(dx=0, dy=1)
+
+-            case tcod.event.KeySym.LEFT:
++            case tcod.event.KeySym.LEFT | tcod.event.KeySym.KP_4 | tcod.event.KeySym.H:
+                 return MovementAction(dx=-1, dy=0)
+
+-            case tcod.event.KeySym.RIGHT:
++            case tcod.event.KeySym.RIGHT | tcod.event.KeySym.KP_6 | tcod.event.KeySym.L:
+                 return MovementAction(dx=1, dy=0)
+```
+
+Notice the `|` between patterns. Inside a `case` it means "match any of these". It looks like the `|` we used to combine the SDL window flags, but this one is pattern syntax, not a bitwise operation. `KP_8` is the numpad 8, and tcod names letter keys with capitals: `KeySym.K` is the `k` key.
+
+!!! info "Why `hjkl`, of all keys?"
+    Because of one keyboard. vi was written on an [ADM-3A](https://en.wikipedia.org/wiki/ADM-3A) (1976) terminal, which had no dedicated arrow keys: the arrows were printed directly on the `h`, `j`, `k`, `l` keycaps, so those keys became the cursor keys. *Rogue* was developed on the same terminals and kept the convention.
+
+    The ADM-3A also printed "Home" on the `~` key. That is why `~` still means the home directory on Unix systems today.
 
 ### Wiring it together
 
@@ -400,7 +432,7 @@ def main() -> None:
     screen_width  = 80
     screen_height = 50
 
-    player_x = screen_width // 2
+    player_x = screen_width  // 2
     player_y = screen_height // 2
 
     tileset = tcod.tileset.load_tilesheet(
@@ -423,7 +455,7 @@ def main() -> None:
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0"  # Nearest pixel sampling
+        b"0",   # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -548,7 +580,7 @@ Then draw that codepoint instead of `"@"`:
 
 ### Doing it properly, later
 
-This recipe is enough to *see* a sprite. Once the game grows, two more tiny changes make sprites behave well, and you will meet them in later parts:
+This recipe is enough to *see* a sprite. Once the game grows, two more tiny changes make sprites behave well, and you will be able to see it later:
 
 - **Do not tint sprites.** `console.print(..., fg=color)` multiplies the tile by `fg`. That is what paints a green `o` for an orc, but it also stains a full-color sprite. When you add the `Entity` class (Part 2), force `fg` to white for sprite entities so the art keeps its own colors.
 - **Tell a codepoint from a character.** Once entities render through the map (Part 3), an entity's glyph may be a real character like `"#"` or a sprite codepoint like `0xE000`. Convert the integer with `chr()` before printing it.
@@ -565,10 +597,10 @@ The full, switchable setup (a `USE_SPRITES` flag, a small `sprites` module with 
 Run `python main.py`:
 
 - [ ] A window opens with a white `@` in the center
-- [ ] Arrow keys move the `@` in all four directions
+- [ ] Arrow keys, the numpad, and the `h`, `j`, `k`, `l` keys move the `@` in all four directions
 - [ ] The `@` does not leave a trail
 - [ ] Pressing `Escape` or clicking the X closes the game
-- [ ] The `@` can move off-screen (we will fix this in Part 2)
+- [ ] The `@` can still move off-screen (exercise 2 below builds the walls that stop it)
 
 ---
 
@@ -607,12 +639,72 @@ game/
 
 1. **Add diagonal movement**:
 
-    The numpad keys `1`, `3`, `7`, `9` (and vim editor keys `y`, `u`, `b`, `n`) conventionally move diagonally in roguelikes. Add cases for them in `event_keydown`. A diagonal move has both `dx` and `dy` set to non-zero (e.g. `MovementAction(dx=1, dy=-1)` for up-right).
+    The main text already handles the four cardinal directions for arrows, numpad, and vi keys. The diagonals are still missing, and both alternative schemes have them:
 
-2. **Keep the player on screen**:
+    ```text
+     vi keys    numpad
 
-    Right now the player can move beyond the console boundaries. Before applying a `MovementAction`, compute the destination position and only update `player_x` and `player_y` if the destination is inside `0 <= x < screen_width` and `0 <= y < screen_height`. You will need `screen_width` and `screen_height` inside `game_loop`, so pass them in from `main` along with the starting coordinates. Try holding a movement key at each edge of the window.
+      y k u      7 8 9
+       \|/        \|/
+     h--+--l    4--5--6
+       /|\        /|\
+      b j n      1 2 3
+    ```
+
+    Add the four diagonal cases to `event_keydown`. A diagonal move has both `dx` and `dy` set to non-zero (e.g. `MovementAction(dx=1, dy=-1)` for up-right).
+
+2. **Build the walls**:
+
+    Right now the player can walk straight out of the window. Give the room its walls: after `console.clear()`, draw a border of `#` around the screen, but leave the top row out of the room: start the border at `y = 1` (exercise 3 will put that free row to use). There are several ways to do it; try one before peeking.
+
+    ??? note "Three ways to draw the border"
+        Whole rows at a time, plus a loop for the side columns:
+
+        ```python
+        console.print(x=0, y=1, text="#" * screen_width)
+        console.print(x=0, y=screen_height - 1, text="#" * screen_width)
+
+        for y in range(2, screen_height - 1):
+            console.print(x=0, y=y, text="#")
+            console.print(x=screen_width - 1, y=y, text="#")
+        ```
+
+        One `#` at a time, with two loops:
+
+        ```python
+        for x in range(screen_width):
+            console.print(x=x, y=1, text="#")
+            console.print(x=x, y=screen_height - 1, text="#")
+
+        for y in range(2, screen_height - 1):
+            console.print(x=0, y=y, text="#")
+            console.print(x=screen_width - 1, y=y, text="#")
+        ```
+
+        Or a single call to a tcod method we have not met yet:
+
+        ```python
+        console.draw_frame(
+            x          = 0,
+            y          = 1,
+            width      = screen_width,
+            height     = screen_height - 1,
+            decoration = "#########",  # nine tiles: corners, edges, center
+            clear      = False,
+        )
+        ```
+
+        All three produce the same walls.
+
+    ![Screenshot 3](images/part_1_screenshot_3.png)
+
+    Then stop the player before the wall, by hand: before applying a `MovementAction`, compute the destination position and only update `player_x` and `player_y` if it stays inside `0 < x < screen_width - 1` and `1 < y < screen_height - 1` (the `y` range starts one row lower because the top wall sits at `y = 1`). You will need `screen_width` and `screen_height` inside `game_loop`, so pass them in from `main` along with the starting coordinates. Try holding a movement key at each edge: the `@` should stop right next to the wall.
+
+    !!! note "Why this trick will not survive"
+        This check works only because our room is a single rectangle: two comparisons describe every wall in it. A real dungeon has dozens of rooms and corridors, and no `if` condition can describe all of their walls. The right question is not "is the destination inside the rectangle?" but "what is at the destination?", and answering it requires storing the map itself as data. That is exactly what we start building in Part 2.
 
 3. **Add a wait action**:
 
     In many roguelikes, pressing `.` or `5` (numpad) passes a turn without moving. Create a `WaitAction(Action)` class and handle it in both `game/input_handlers.py` and `main.py`.
+
+    Done? Then you will notice that... nothing happens. The `@` stays put, and there is no way to tell whether the game even heard you. Make the turn visible: keep a `turn` counter in `game_loop`, add 1 every time `dispatch` returns an action that is not `None`, and draw it each frame with `console.print(x=1, y=0, text=f"Turn: {turn}")`, in the top row that exercise 2 left outside the walls. Now hold `.` down: the `@` stands still while time passes. That is the soul of a roguelike, in one corner of the screen: time only passes when you act.
