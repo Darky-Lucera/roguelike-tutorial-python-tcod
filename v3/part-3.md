@@ -2,7 +2,7 @@
 
 ## What You Will Build
 
-By the end of this part, your roguelike will generate a new dungeon layout made of rooms and tunnels each time it starts, instead of using a single hand-written room.
+By the end of this part, your roguelike will generate a new dungeon layout made of rooms and tunnels each time it starts, instead of the single hand-written map from Part 2.
 
 ## Learning goals
 
@@ -15,7 +15,7 @@ By the end of this part, your roguelike will generate a new dungeon layout made 
 
 ## Procedural generation
 
-A hand-crafted dungeon is fixed: every player sees the same thing. A procedurally generated dungeon is created algorithmically at runtime: different every time, potentially infinite in variety.
+A hand-crafted dungeon is fixed: every player sees the same thing. A procedurally generated dungeon is created algorithmically at runtime: different on every run, with more variety than you could ever exhaust.
 
 The classic roguelike dungeon uses the **rooms-and-corridors** approach:
 
@@ -24,7 +24,7 @@ The classic roguelike dungeon uses the **rooms-and-corridors** approach:
 3. If not, place it and dig a tunnel to the previous room
 4. Keep trying until we have enough rooms, or until we run out of placement attempts.
 
-This gives dungeons that feel hand-designed (recognizable rooms connected by corridors) but with endless variety.
+This gives dungeons that feel hand-designed (recognizable rooms connected by corridors) while being different on every run.
 
 !!! example "Other algorithms"
     Many alternatives exist:
@@ -36,7 +36,7 @@ This gives dungeons that feel hand-designed (recognizable rooms connected by cor
     | Cellular automata | Organic caves | Medium |
     | Wave Function Collapse | Highly varied, tile-pattern aware | High |
 
-    We use rooms-and-corridors because it is the most intuitive to understand and produces instantly recognizable roguelike dungeons. The architecture we build here can be swapped for another generator later without changing anything else.
+    We use rooms-and-corridors because it is the most intuitive to understand and produces instantly recognizable roguelike dungeons. The architecture we build here can be swapped for another generator later without touching the rest of the game.
 
 ---
 
@@ -85,7 +85,7 @@ The original libtcod tutorial put dungeon generation inside the `GameMap` class.
 The better approach: a separate `game/map/map_generator.py` module that takes configuration parameters and returns a `GameMap`.
 
 !!! info "Design decision: Separate map generator module"
-    `GameMap` is responsible for *storing* and *rendering* the tile grid. `game/map/map_generator.py` is responsible for *filling* it. This is the Single Responsibility Principle: each module does one thing. Swapping algorithms later is then a one-line change in `main.py`.
+    `GameMap` is responsible for *storing* and *rendering* the tile grid. `game/map/map_generator.py` is responsible for *filling* it. This is the Single Responsibility Principle: each module does one thing. Swapping algorithms later means changing only the call in `main.py`.
 
 ---
 
@@ -102,8 +102,8 @@ from typing import TYPE_CHECKING
 
 import tcod
 
-from game.map.game_map import GameMap
 from game.map import tile_types
+from game.map.game_map import GameMap
 
 if TYPE_CHECKING:
     from game.entity import Entity
@@ -119,27 +119,33 @@ class RectangularRoom:
 
     @property
     def center(self) -> tuple[int, int]:
-        return (self.x1 + self.x2) // 2, (self.y1 + self.y2) // 2
+        return (
+            (self.x1 + self.x2) // 2,
+            (self.y1 + self.y2) // 2,
+        )
 
     @property
     def inner(self) -> tuple[slice, slice]:
         """The interior of the room as numpy slices."""
-        return slice(self.x1 + 1, self.x2), slice(self.y1 + 1, self.y2)
+        return (
+            slice(self.x1 + 1, self.x2),
+            slice(self.y1 + 1, self.y2),
+        )
 
     def intersects(self, other: RectangularRoom) -> bool:
-        """True if this room overlaps with another."""
+        """True if this room overlaps another. Sharing just the outer wall does not count."""
         return (
-            self.x1 <= other.x2
-            and self.x2 >= other.x1
-            and self.y1 <= other.y2
-            and self.y2 >= other.y1
+            self.x1 < other.x2
+            and self.x2 > other.x1
+            and self.y1 < other.y2
+            and self.y2 > other.y1
         )
 ```
 
 !!! question "What does `@property` do?"
     `@property` lets us call a method like an attribute. Instead of writing `room.center()`, we write `room.center`. This is useful for values that are computed from the object's current state but feel like data: a room's center is derived from `x1`, `y1`, `x2`, and `y2`.
 
-Two rectangles overlap if and only if their projections overlap on **both** the X and Y axes. The four conditions check exactly that: each axis must have at least one common point.
+Two rectangles overlap if and only if their projections overlap on **both** the X and Y axes. The strict comparisons (`<`, `>`) deliberately leave one case out: two rooms whose outer walls only touch do not count as overlapping, they simply share that wall. The next section shows why that sharing is safe.
 
 ### Why `inner` adds 1
 
@@ -164,7 +170,7 @@ Without +1:                  With +1 (what we do):
 !!! info "About `+` and `#`"
     Here `+` is only used to highlight the wall tiles preserved by the `+1` offset. In the actual game, these are still normal wall tiles.
 
-Two rooms next to each other will always have a wall between them.
+Two rooms next to each other will always have a wall between them when they are dug. Only tunnels break through these walls, and that is deliberate: it is exactly how rooms get connected in the next section.
 
 ---
 
@@ -281,7 +287,7 @@ The algorithm in plain language:
 `max_rooms` is the maximum number of rooms we want to keep, not the number of placement attempts. Since many attempts are rejected because they overlap existing rooms, we give the generator extra chances with `max_room_attempts`. The loop stops early once enough rooms have been placed.
 
 !!! tip "Tweaking the dungeon"
-    The three parameters `max_rooms`, `room_min_size`, and `room_max_size` control the dungeon character. More rooms = denser dungeon. Smaller rooms = tighter corridors. Experiment after Part 3 is working.
+    The three parameters `max_rooms`, `room_min_size`, and `room_max_size` control the dungeon character. More rooms = denser dungeon. Smaller rooms = more corridor-heavy, maze-like floors. Experiment after Part 3 is working.
 
 ---
 
@@ -301,6 +307,9 @@ The generator digs floors out of a solid wall map. Update `game/map/game_map.py`
 -        self.tiles[half_width-10:half_width+10+1, half_height] = tile_types.wall
 +        self.tiles = np.full((width, height), fill_value=tile_types.wall, order="F")
 ```
+
+!!! note "If you completed Part 2's water-tile exercise"
+    Delete the lines that paint the lake while you are here. A fixed obstacle can cut a corridor or block a room entrance in a generated dungeon, which makes it harder to tell whether a problem comes from the generator or from the old test feature. You can keep the `water` tile definition in `tile_types.py`; only remove the code that paints it into the map.
 
 ---
 
@@ -342,7 +351,13 @@ def main() -> None:
 
     event_handler = EventHandler()
 
-    player = Entity(x=0, y=0, char="@", color=(255, 255, 255))
+    player = Entity(
+        x     = 0,
+        y     = 0,
+        char  = "@",
+        color = (255, 255, 255),
+        name  = "Player",          # Part-2. Exercise 1: Add names to entities
+    )
 
     game_map = generate_dungeon(
         max_rooms     = max_rooms,
@@ -367,11 +382,11 @@ def main() -> None:
     tcod.lib.SDL_SetAppMetadata(
         title.encode("utf-8"),
         version.encode("utf-8"),
-        app_id.encode("utf-8")
+        app_id.encode("utf-8"),
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0" # Nearest pixel sampling
+        b"0",   # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -392,7 +407,7 @@ if __name__ == "__main__":
 
 Notice that the player starts at `(0, 0)`, a wall. `generate_dungeon` will move the player to the center of the first room before the game begins. We also removed the `npc` entity since it was just for demonstration.
 
-<!-- TODO: screenshot: a generated dungeon: rooms connected by L-shaped tunnels, the player inside the first room -->
+![Screenshot 1](images/part_3_screenshot_1.png)
 
 ---
 
@@ -456,10 +471,6 @@ game/
 
 ## Exercises
 
-0. **Remove lake if you implemented it**:
-
-    If you completed Part 2's water-tile exercise, remove the hard-coded lake before testing procedural generation. A fixed obstacle can accidentally cut a corridor or block a room entrance, which makes it harder to tell whether a problem comes from the dungeon generator or from the old test feature. Keep the `water` tile definition if you want, but remove any code that paints water into the generated map for now.
-
 1. **Reproducible dungeons**:
 
     Add a `seed` parameter to `generate_dungeon` and call `random.seed(seed)` at the top of the function. With a fixed seed, the dungeon is always the same. This is useful for debugging: if you find a problematic layout, record its seed to reproduce it.
@@ -496,7 +507,7 @@ game/
 
     We compare squared distances instead of real distances because we only need to know which room is closest. Taking a square root would make every distance slower to compute, and it would not change the ordering: if one squared distance is smaller than another, its real distance is smaller too.
 
-    A simple explicit loop is a good fit here: keep track of the closest room found so far and update it when you find a shorter distance. This avoids extra imports and keeps type checkers happy.
+    A simple explicit loop is a good fit here: keep track of the closest room found so far and update it when you find a shorter distance. (`min()` with a `key` function is a fine alternative, but the loop reads better for a check this small.)
 
 3. **Connect rooms using rough centers**:
 

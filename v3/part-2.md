@@ -176,7 +176,9 @@ class GameMap:
         half_height = height // 2
 
         # A small wall for testing: we will remove it in Part 3
-        self.tiles[half_width-10:half_width+10+1, half_height] = tile_types.wall
+        self.tiles[half_width-10:half_width+10+1, half_height] = (
+            tile_types.wall
+        )
 
     def in_bounds(self, x: int, y: int) -> bool:
         """True if (x, y) is inside the map."""
@@ -274,9 +276,9 @@ if self.game_map.tiles["walkable"][dest_x, dest_y]:
 This reads the `walkable` field at the destination tile. If it is `False` (a wall), the move is rejected.
 
 !!! note "If you completed the turn-counter exercise"
-    Part 1, Exercise 3 made waiting visible by adding a `turn` counter inside
-    `game_loop`. Since `game_loop` now lives in `Engine`, move that state into
-    the engine too:
+    Part 1, Exercise 3 made waiting visible by adding a `turn_count` counter
+    inside `game_loop`. Since `game_loop` now lives in `Engine`, move that state
+    into the engine too:
 
     ```diff
      class Engine:
@@ -294,7 +296,7 @@ This reads the `walkable` field at the destination tile. If it is `False` (a wal
              self.player        = player
     +
     +        # Part-1. Exercise 3: Add a wait action
-    +        self.turn          = 0
+    +        self.turn_count    = 0
     ```
 
     Then increment it after the engine receives a real action:
@@ -304,7 +306,7 @@ This reads the `walkable` field at the destination tile. If it is `False` (a wal
                      continue
     +
     +            # Part-1. Exercise 3: Add a wait action
-    +            self.turn += 1
+    +            self.turn_count += 1
     ```
 
     Finally, draw it in one of the unused bottom rows:
@@ -318,7 +320,7 @@ This reads the `walkable` field at the destination tile. If it is `False` (a wal
                  console.print(entity.x, entity.y, entity.char, fg=entity.color)
     +
     +        # Part-1. Exercise 3: Add a wait action
-    +        console.print(x=0, y=44, text=f"Turn: {self.turn}")
+    +        console.print(x=0, y=44, text=f"Turn: {self.turn_count}")
 
              context.present(console)
     ```
@@ -366,8 +368,18 @@ def main() -> None:
 
     event_handler = EventHandler()
 
-    player = Entity(screen_width // 2, screen_height // 2, "@", (255, 255, 255))
-    npc    = Entity(screen_width // 2, screen_height // 2 - 5, "N", (255, 255, 0))
+    player = Entity(
+        x     = screen_width // 2,
+        y     = screen_height // 2,
+        char  = "@",
+        color = (255, 255, 255),
+    )
+    npc    = Entity(
+        x     = screen_width // 2,
+        y     = screen_height // 2 - 5,
+        char  = "N",
+        color = (255, 255, 0),
+    )
 
     entities = {npc, player}
 
@@ -391,7 +403,7 @@ def main() -> None:
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0"  # Nearest pixel sampling
+        b"0",   # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -523,7 +535,7 @@ replacing the whole `match` block:
                  continue
 
              # Part-1. Exercise 3: Add a wait action
-             self.turn += 1
+             self.turn_count += 1
 
 -            match action:
 -                case MovementAction(dx=dx, dy=dy):
@@ -537,7 +549,7 @@ replacing the whole `match` block:
 +            action.perform(self, self.player)
 ```
 
-If you did not add the Part 1 turn counter, omit the `self.turn += 1` line.
+If you did not add the Part 1 turn counter, omit the `self.turn_count += 1` line.
 The important refactor is that the old `match` block becomes
 `action.perform(self, self.player)`.
 
@@ -610,3 +622,5 @@ game/
 3. **Add a new tile type**:
 
     In `game/tile_types.py`, define a new `water` tile with a blue background, `walkable=False`, and `transparent=True`. In `GameMap.__init__`, paint a small lake somewhere on the map. Verify that it renders differently and blocks movement just like the wall.
+
+    ![Screenshot 2](images/part_2_screenshot_2.png)

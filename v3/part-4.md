@@ -35,7 +35,7 @@ Legend:
 # # # # # # # # # # # # # # # # #
 ```
 
-The wall blocks line of sight. The player can see the floor tiles on the left, but the tiles behind the wall are unseen, even if they are physically part of the same map.
+The wall blocks line of sight. The player can see the floor tiles on the left, but the tiles behind the wall are unseen, even if they are physically part of the same map. The dark corners of the open room are a different effect: the diagram also assumes a short sight radius, an idea the code below meets as `radius=8`.
 
 This creates tension (you never know what is around the next corner) and makes exploration meaningful.
 
@@ -62,21 +62,22 @@ Update `game/map/tile_types.py`:
 ```python
 from __future__ import annotations
 
-
 import numpy as np
 
+# Describes how to draw one tile: character + foreground + background colors
 graphic_dtype = np.dtype(
     [
-        ("ch", np.int32),
-        ("fg", "3B"),
-        ("bg", "3B"),
+        ("ch", np.int32),   # Unicode codepoint of the character
+        ("fg", "3B"),       # foreground RGB (3 unsigned bytes)
+        ("bg", "3B"),       # background RGB
     ]
 )
 
+# Describes one tile: its gameplay properties + its appearance
 tile_dtype = np.dtype(
     [
-        ("walkable",    np.bool_),
-        ("transparent", np.bool_),
+        ("walkable",    np.bool_),      # True if entities can walk here
+        ("transparent", np.bool_),      # True if this tile doesn't block FOV
         ("out_of_fov",  graphic_dtype), # appearance when explored but outside FOV
         ("in_fov",      graphic_dtype), # appearance when inside the player's FOV
     ]
@@ -93,6 +94,7 @@ def new_tile(
     out_of_fov: tuple[int, tuple[int, int, int], tuple[int, int, int]],
     in_fov: tuple[int, tuple[int, int, int], tuple[int, int, int]],
 ) -> np.ndarray:
+    """Create a single tile definition."""
     return np.array((walkable, transparent, out_of_fov, in_fov), dtype=tile_dtype)
 
 
@@ -110,9 +112,19 @@ wall = new_tile(
     out_of_fov  = (ord("#"), (80, 80, 120), (0, 0, 70)),
     in_fov      = (ord("#"), (220, 210, 170), (110, 95, 60)),
 )
+
+# Part-2. Exercise 3: Add a new tile type
+water = new_tile(
+    walkable    = False,
+    transparent = True,
+    out_of_fov  = (ord("~"), (64, 255, 255), (0, 0, 180)),
+    in_fov      = (ord("~"), (180, 255, 255), (20, 90, 220)),
+)
 ```
 
 `UNSEEN` is a single graphic (not a full tile struct) that we use for unseen cells.
+
+If you did not complete that exercise, ignore the `water` tile definition; it is not used elsewhere in this chapter.
 
 ---
 
@@ -156,6 +168,7 @@ class GameMap:
         self.explored = np.full((width, height), fill_value=False, order="F")
 
     def in_bounds(self, x: int, y: int) -> bool:
+        """True if (x, y) is inside the map."""
         return 0 <= x < self.width and 0 <= y < self.height
 
     def render(self, console: Console) -> None:
@@ -259,6 +272,9 @@ Key points:
 - It is called after every action in `handle_events` so moving updates the view
 - `explored |= visible`: the bitwise OR accumulates explored tiles over time: once seen, always remembered
 
+!!! note "If you kept the Part 1 turn counter"
+    This listing replaces `engine.py` wholesale, so carry your three `# Part-1. Exercise 3` lines over: `self.turn_count    = 0` at the end of `__init__`, `self.turn_count += 1` after the `if action is None:` block in `handle_events`, and the `console.print(x=0, y=44, text=f"Turn: {self.turn_count}")` in `render()`, before `context.present(console)`. Part 10 will build on this counter.
+
 !!! note "What does `[:]` mean?"
     `visible[:] = ...` updates the contents of the existing array in-place. Without `[:]`, the assignment would replace the array with a new one, and any other code holding a reference to the original would still see the old data.
 
@@ -269,7 +285,7 @@ Key points:
     The radius controls how far the player can see. Eight tiles is a common default: large enough to see across a room, small enough that corridors stay mysterious. Change it to taste, or make it a character stat later.
 
 !!! example "FOV algorithms"
-    tcod ships several FOV algorithms: `FOV_BASIC`, `FOV_DIAMOND`, `FOV_SHADOW`, `FOV_PERMISSIVE_*` (eight variants), `FOV_RESTRICTIVE`, and `FOV_SYMMETRIC_SHADOWCAST`. They differ in how they handle corners, walls, and symmetry (whether A seeing B implies B seeing A). We pick `FOV_SHADOW` (recursive shadowcasting) because it produces clean sight lines with few artifacts and is the traditional roguelike choice. It is not fully symmetric; `FOV_SYMMETRIC_SHADOWCAST` exists specifically to fix that, at a higher cost, for games where mutual sight matters. Try the others to see how they change the feel of corridors and walls.
+    tcod ships several FOV algorithms: `FOV_BASIC`, `FOV_DIAMOND`, `FOV_SHADOW`, `FOV_PERMISSIVE_*` (nine variants, levels 0-8), `FOV_RESTRICTIVE`, and `FOV_SYMMETRIC_SHADOWCAST`. They differ in how they handle corners, walls, and symmetry (whether A seeing B implies B seeing A). We pick `FOV_SHADOW` (recursive shadowcasting) because it produces clean sight lines with few artifacts and is the traditional roguelike choice. It is not fully symmetric; `FOV_SYMMETRIC_SHADOWCAST` exists specifically to fix that, for games where mutual sight matters. Try the others to see how they change the feel of corridors and walls.
 
 ---
 
@@ -295,7 +311,7 @@ If you completed Part 3's exercise with `random.seed(seed)`, replace it now (fro
 +    # Part-3. Exercise 1: Reproducible dungeons
 +    rng = random.Random(seed)
 +
-     dungeon = GameMap(map_width, map_height)
+     dungeon = GameMap(map_width, map_height, entities=[player])
 
      rooms: list[RectangularRoom] = []
 
@@ -343,6 +359,39 @@ And its call site, inside `generate_dungeon`:
 
 `rng` now stands in for every bare `random.*` call the generator makes. Nothing outside `generate_dungeon` and the functions it calls is affected: combat rolls, AI decisions, and anything else that calls `random` directly keeps using Python's ordinary, unseeded generator, exactly as before.
 
+!!! note "If you did Part 3's rough-centers exercise"
+    `roughly_center` also draws random numbers, so it needs the same conversion, or a fixed seed will not reproduce the same dungeon. A property cannot receive arguments, so it stops being a property and becomes a method that takes `rng`:
+
+    ```diff
+    -    @property
+    -    def roughly_center(self) -> tuple[int, int]:
+    -        # Part-3. Exercise 3: Connect rooms using rough centers
+    -        return (
+    -            random.randint(self.x1 + 2, self.x2 - 2),
+    -            random.randint(self.y1 + 2, self.y2 - 2),
+    -        )
+    +    def roughly_center(self, rng: random.Random) -> tuple[int, int]:
+    +        # Part-3. Exercise 3: Connect rooms using rough centers
+    +        return (
+    +            rng.randint(self.x1 + 2, self.x2 - 2),
+    +            rng.randint(self.y1 + 2, self.y2 - 2),
+    +        )
+    ```
+
+    Then pass `rng` at every call site. Your tunnel line differs from the main-path one shown above, so this replaces that change; combined with the nearest-room exercise, the loop becomes:
+
+    ```diff
+                 for x, y in tunnel_between(
+    -                nearest_room.roughly_center,
+    -                new_room.roughly_center,
+    +                rng,
+    +                nearest_room.roughly_center(rng),
+    +                new_room.roughly_center(rng),
+                 ):
+    ```
+
+    If you connect to the previous room instead, the same change applies on that single line: `tunnel_between(rng, rooms[-1].roughly_center(rng), new_room.roughly_center(rng))`.
+
 ---
 
 ## Simplifying main.py
@@ -386,7 +435,13 @@ def main() -> None:
         tcod.tileset.CHARMAP_TCOD,
     )
 
-    player = Entity(x=0, y=0, char="@", color=(255, 255, 255))
+    player = Entity(
+        x     = 0,
+        y     = 0,
+        char  = "@",
+        color = (255, 255, 255),
+        name  = "Player",          # Part-2. Exercise 1: Add names to entities
+    )
 
     game_map = generate_dungeon(
         max_rooms     = max_rooms,
@@ -407,11 +462,11 @@ def main() -> None:
     tcod.lib.SDL_SetAppMetadata(
         title.encode("utf-8"),
         version.encode("utf-8"),
-        app_id.encode("utf-8")
+        app_id.encode("utf-8"),
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0" # Nearest pixel sampling
+        b"0",   # Nearest pixel sampling
     )
 
     with tcod.context.new(
@@ -443,7 +498,7 @@ if __name__ == "__main__":
     (or any number) before running it again, twice in a row: both runs should produce
     the exact same dungeon.
 
-<!-- TODO: screenshot: a lit starting room, a dimmed already-explored corridor behind the player, and solid black unexplored area, ideally with a one-line caption per zone -->
+    ![Screenshot 1](images/part_4_screenshot_1.png)
 
 ---
 
@@ -510,7 +565,7 @@ game/
 
 3. **Remember a discovered marker**:
 
-    Some roguelikes keep certain entities visible after you have seen them once, even when they leave your current FOV. Add an `stays_visible` flag to `Entity`, defaulting to `False`. Create a marker entity with char="P" and with `stays_visible=True`, add it to `game_map.entities`, and update `GameMap.render()` so this entity is drawn when either:
+    Some roguelikes keep certain entities visible after you have seen them once, even when they leave your current FOV. Add a `stays_visible` flag to `Entity`, defaulting to `False`. Create a marker entity with char="P" and with `stays_visible=True`, add it to `game_map.entities`, and update `GameMap.render()` so this entity is drawn when either:
 
     - its tile is currently visible, or
     - `stays_visible` is true and its tile has been explored.

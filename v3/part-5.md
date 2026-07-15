@@ -694,23 +694,27 @@ Update `generate_dungeon` to call `place_entities` and accept the new parameter:
 ```
 
 !!! note "If you did the Part 3 exercises"
-    The tunnel line above is the main-path version (connect to the previous room with `tunnel_between(rng, rooms[-1].center, new_room.center)`). If you connected to the nearest room (Exercise 2) or used `roughly_center` as the tunnel endpoints (Exercise 3), keep your own version of that line, passing `rng` first the same way. The only additions Part 5 needs are the `max_monsters_per_room` parameter and the `place_entities(rng, new_room, dungeon, max_monsters_per_room)` call inside the `else` branch.
+    The tunnel line above is the main-path version (connect to the previous room with `tunnel_between(rng, rooms[-1].center, new_room.center)`). If you connected to the nearest room (Exercise 2) or used `roughly_center` as the tunnel endpoints (Exercise 3, converted to take `rng` in Part 4), keep your own version of those lines. The only additions Part 5 needs are the `max_monsters_per_room` parameter and the `place_entities(rng, new_room, dungeon, max_monsters_per_room)` call inside the `else` branch:
 
     ```diff
-         else:
-             nearest_room = min(
-                 rooms,
-                 key = lambda room: (
-                     (room.center[0] - new_room.center[0]) ** 2 +
-                     (room.center[1] - new_room.center[1]) ** 2
-                 ),
-             )
-             for x, y in tunnel_between(
-                 rng,
-                 nearest_room.roughly_center,
-                 new_room.roughly_center,
-             ):
-                 dungeon.tiles[x, y] = tile_types.floor
+             else:
+                 # Part-3. Exercise 2: Connect to the nearest room
+                 nearest_room = rooms[0]
+                 nearest_distance = new_room.squared_distance(nearest_room)
+
+                 for room in rooms[1:]:
+                     distance = new_room.squared_distance(room)
+                     if distance < nearest_distance:
+                         nearest_room = room
+                         nearest_distance = distance
+
+                 # All subsequent rooms: dig a tunnel to another room
+                 for x, y in tunnel_between(
+                     rng,
+                     nearest_room.roughly_center(rng),
+                     new_room.roughly_center(rng),
+                 ):
+                     dungeon.tiles[x, y] = tile_types.floor
     +
     +            place_entities(rng, new_room, dungeon, max_monsters_per_room)
     ```
@@ -836,7 +840,7 @@ def main() -> None:
     )
     tcod.lib.SDL_SetHint(
         b"SDL_RENDER_SCALE_QUALITY",
-        b"0"  # Nearest pixel sampling
+        b"0",   # Nearest pixel sampling
     )
 
     with tcod.context.new(
