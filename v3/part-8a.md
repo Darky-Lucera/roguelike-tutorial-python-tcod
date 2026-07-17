@@ -67,7 +67,7 @@ Compare the alternatives. Returning `None` is silent: the caller has to check fo
 
 Part 8a introduces the visual constants for both item types: the health potion, the chest, and the gold color. The colors used for action rejections and the inventory overlay will be introduced in Part 8b, at the point where they are first used.
 
-In `game/constants/sprites.py`, add both item sprites. `CHEST` belongs in the entity section (before `CORPSE`); `HEALTH_POTION` opens a new items section below:
+In `game/data/sprites.py`, add both item sprites. `CHEST` belongs in the entity section (before `CORPSE`); `HEALTH_POTION` opens a new items section below:
 
 ```diff
 +CHEST   = "$"
@@ -77,7 +77,7 @@ In `game/constants/sprites.py`, add both item sprites. `CHEST` belongs in the en
 +HEALTH_POTION = "!"
 ```
 
-In `game/constants/colors.py`, add `CHEST` in the entity colors section (between `TROLL` and `CORPSE`) and `HEALTH_POTION` in a new item colors section right below:
+In `game/data/colors.py`, add `CHEST` in the entity colors section (between `TROLL` and `CORPSE`) and `HEALTH_POTION` in a new item colors section right below:
 
 ```diff
  TROLL            = Color(  0, 127,   0)
@@ -450,7 +450,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from game.constants import colors
+from game.data import colors
 from game.entities.components.base_component import ItemComponent
 from game.exceptions import Impossible
 from game.message_log import MessageLog
@@ -533,7 +533,7 @@ The file defines three classes: `Consumable` as the base for all item effects, `
 Every `Actor` now requires an `Inventory`. Add the component to the existing templates, and also import both consumable classes and `Item`:
 
 ```diff
- from game.constants import colors, sprites
+ from game.data import colors, sprites
  from game.entities.components.ai import HostileEnemy
 +from game.entities.components.consumable import HealingConsumable, TreasureConsumable
  from game.entities.components.fighter import Fighter

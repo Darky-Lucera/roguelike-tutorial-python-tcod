@@ -14,27 +14,31 @@ By the end of this part, enemies will appear in the dungeon, block movement, cha
 
 ---
 
-## A constants package for sprites and colors
+## A data package for sprites and colors
 
 So far our glyphs (`"@"`, `"#"`, `" "`) and colors (`(255, 255, 255)`, `(35, 35, 90)`, etc.) have been hardcoded inline. With the player plus two enemies (and items, scrolls, equipment coming in later parts), the same magic values would soon appear in many places. If we ever want to recolor the orc, change the player glyph, render floors as `"."` instead of blank spaces, or build a colorblind theme, we want **one place** to change.
 
-We introduce a small `game/constants/` package with two modules: `sprites` for single-character glyphs and `colors` for RGB tuples.
+We introduce a small `game/data/` package with two modules: `sprites` for single-character glyphs and `colors` for RGB tuples.
 
-!!! question "Why a constants package?"
+!!! question "Why a data package?"
     A central place for visual constants is a standard good-practice pattern. Three concrete benefits:
 
-    1. **Discoverability**: a developer reading `game/constants/sprites.py` can see every glyph the game uses at a glance.
+    1. **Discoverability**: a developer reading `game/data/sprites.py` can see every glyph the game uses at a glance.
     2. **Theming**: changing the orc's color or the floor appearance is a one-line edit instead of a code search.
     3. **Self-documentation**: `colors.PLAYER` is easier to understand than `(255, 255, 255)` at a call site.
 
     We use `UPPERCASE` names because they are module-level constants (PEP 8). We give each entity its **own named constant** even when colors repeat: `colors.WHITE` would tell us *which* color, but `colors.PLAYER` tells us *who* uses it.
 
-Create `game/constants/__init__.py` (empty file, marks the folder as a Python package):
+    One naming note: we call the package `data`, not `constants`. Colors and sprites are constants, but the package will gain members that are not: key maps arrive later in this same part, and configuration follows in later parts. `data` covers them all.
 
-```python
-```
+!!! info "What is a PEP?"
+    A **PEP** (*Python Enhancement Proposal*) is a numbered design document where the Python community records its decisions: new language features, conventions, processes. PEP 8 is the style guide; every feature this tutorial uses started life as one of these documents.
 
-Create `game/constants/sprites.py`:
+    Most ecosystems have an equivalent: Java has JEPs, JavaScript changes go through TC39 proposals, and the internet itself is specified in RFCs. When you see a PEP cited, it is a pointer to the original discussion and rationale, free to read at peps.python.org.
+
+Create `game/data/__init__.py` as an empty file; it marks the folder as a Python package.
+
+Create `game/data/sprites.py`:
 
 ```python
 from __future__ import annotations
@@ -49,9 +53,10 @@ UNKNOWN = "?"
 UNSEEN  = " "
 FLOOR   = " "
 WALL    = "#"
+WATER   = "~" # Part-2. Exercise 3: Add a new tile type
 ```
 
-Create `game/constants/colors.py`:
+Create `game/data/colors.py`:
 
 ```python
 from __future__ import annotations
@@ -79,58 +84,69 @@ class Color(NamedTuple):
 
 
 # Generic colors
-DEFAULT_FG         = Color(255, 255, 255)
+DEFAULT_FG          = Color(255, 255, 255)
 
 # Entity colors
-PLAYER             = Color(255, 255, 255)
-ORC                = Color( 63, 127,  63)
-TROLL              = Color(  0, 127,   0)
+PLAYER              = Color(255, 255, 255)
+ORC                 = Color( 63, 127,  63)
+TROLL               = Color(  0, 127,   0)
+
+DEBUG_MARKER        = Color(255, 255,   0)  # Part-4. Exercise 2: Add a debug marker entity
+PERSISTENT_MARKER   = Color(255,   0, 255)  # Part-4. Exercise 3: Remember a discovered marker
 
 # Map colors: unseen
-UNSEEN_FG          = Color(255, 255, 255)
-UNSEEN_BG          = Color(  0,   0,   0)
+UNSEEN_FG           = Color(255, 255, 255)
+UNSEEN_BG           = Color(  0,   0,   0)
 
 # Map colors: floor
-FLOOR_FG           = Color(255, 255, 255)
-FLOOR_OUT_OF_FOV   = Color( 35,  35,  90)
-FLOOR_IN_FOV       = Color(190, 170,  80)
+FLOOR_FG            = Color(255, 255, 255)
+FLOOR_OUT_OF_FOV    = Color( 35,  35,  90)
+FLOOR_IN_FOV        = Color(190, 170,  80)
 
 # Map colors: wall
-WALL_FG_OUT_OF_FOV = Color( 80,  80, 120)
-WALL_BG_OUT_OF_FOV = Color(  0,   0,  70)
-WALL_FG_IN_FOV     = Color(220, 210, 170)
-WALL_BG_IN_FOV     = Color(110,  95,  60)
+WALL_FG_OUT_OF_FOV  = Color( 80,  80, 120)
+WALL_BG_OUT_OF_FOV  = Color(  0,   0,  70)
+WALL_FG_IN_FOV      = Color(220, 210, 170)
+WALL_BG_IN_FOV      = Color(110,  95,  60)
+
+# Part-2. Exercise 3: Add a new tile type
+# Map colors: water
+WATER_FG_OUT_OF_FOV = Color( 64, 255, 255)
+WATER_BG_OUT_OF_FOV = Color(  0,   0, 180)
+WATER_FG_IN_FOV     = Color(180, 255, 255)
+WATER_BG_IN_FOV     = Color( 20,  90, 220)
 ```
 
-`Color` is a `NamedTuple` with three integer fields (`r`, `g`, `b`). Because `NamedTuple` subclasses `tuple`, `tcod` accepts any `Color` value wherever it expects a plain `(r, g, b)` tuple. Two built-in methods come along for free: `color.scale(factor)` returns a dimmed copy (used later for the fireball highlight), and `color.grey` returns a greyscale copy. Any module can use `Color(r, g, b)` as a constructor and import the type with `from game.constants.colors import Color`.
+`Color` is a `NamedTuple` with three integer fields (`r`, `g`, `b`). Because `NamedTuple` subclasses `tuple`, `tcod` accepts any `Color` value wherever it expects a plain `(r, g, b)` tuple. Two built-in methods come along for free: `color.scale(factor)` returns a dimmed copy (used later for the fireball highlight), and `color.grey` returns a greyscale copy. Any module can use `Color(r, g, b)` as a constructor and import the type with `from game.data.colors import Color`.
 
-We will extend both files as the game grows: more sprites in Parts 8 (items), 9 (scrolls), 11 (stairs), 13 (equipment); more colors in Parts 6 (corpse), 7 (UI and combat messages), 8-13 (each new feature).
+We will extend both files as the game grows: more sprites in Parts 8 (items), 9 (scrolls), 11 (stairs), 13 (equipment); more colors in Parts 6 (corpse), 7 (UI and combat messages), 8-13 (each new feature). A third module joins the package later in this same part: `keys.py`, for key bindings.
 
 Now update `game/map/tile_types.py` to use those constants instead of inline visual values:
 
 ```python
 from __future__ import annotations
 
-
 import numpy as np
 
-from game.constants import colors, sprites
-from game.constants.colors import Color
+from game.data import colors, sprites
+from game.data.colors import Color
 
+# Describes how to draw one tile: character + foreground + background colors
 graphic_dtype = np.dtype(
     [
-        ("ch", np.int32),
-        ("fg", "3B"),
-        ("bg", "3B"),
+        ("ch", np.int32),   # Unicode codepoint of the character
+        ("fg", "3B"),       # foreground RGB (3 unsigned bytes)
+        ("bg", "3B"),       # background RGB
     ]
 )
 
+# Describes one tile: its gameplay properties + its appearance
 tile_dtype = np.dtype(
     [
-        ("walkable",    np.bool_),
-        ("transparent", np.bool_),
-        ("out_of_fov",  graphic_dtype),  # appearance when explored but outside FOV
-        ("in_fov",      graphic_dtype),      # appearance when inside the player's FOV
+        ("walkable",    np.bool_),      # True if entities can walk here
+        ("transparent", np.bool_),      # True if this tile doesn't block FOV
+        ("out_of_fov",  graphic_dtype), # appearance when explored but outside FOV
+        ("in_fov",      graphic_dtype), # appearance when inside the player's FOV
     ]
 )
 
@@ -139,7 +155,7 @@ UNSEEN = np.array(
     (
         ord(sprites.UNSEEN),
         colors.UNSEEN_FG,
-        colors.UNSEEN_BG
+        colors.UNSEEN_BG,
     ),
     dtype=graphic_dtype,
 )
@@ -152,6 +168,7 @@ def new_tile(
     out_of_fov: tuple[int, Color, Color],
     in_fov: tuple[int, Color, Color],
 ) -> np.ndarray:
+    """Create a single tile definition."""
     return np.array((walkable, transparent, out_of_fov, in_fov), dtype=tile_dtype)
 
 
@@ -169,15 +186,85 @@ wall = new_tile(
     out_of_fov  = (ord(sprites.WALL), colors.WALL_FG_OUT_OF_FOV, colors.WALL_BG_OUT_OF_FOV),
     in_fov      = (ord(sprites.WALL), colors.WALL_FG_IN_FOV, colors.WALL_BG_IN_FOV),
 )
+
+# Part-2. Exercise 3: Add a new tile type
+water = new_tile(
+    walkable    = False,
+    transparent = True,
+    out_of_fov  = (ord(sprites.WATER), colors.WATER_FG_OUT_OF_FOV, colors.WATER_BG_OUT_OF_FOV),
+    in_fov      = (ord(sprites.WATER), colors.WATER_FG_IN_FOV, colors.WATER_BG_IN_FOV),
+)
 ```
 
-This keeps all visual choices in `game/constants/`: entity sprites, terrain sprites, entity colors, and terrain colors.
+This keeps all visual choices in `game/data/`: entity sprites, terrain sprites, entity colors, and terrain colors. If you did not complete the Part 2 water exercise, ignore the `water` tile definition, same as in Part 4. If you kept it, its inline values still work; moving them into `game/data/` as your own `WATER_*` constants is a nice extra polish.
+
+Now make one short cleanup pass over the entity colors that already exist.
+
+In `main.py`, import the new data module and replace the player's inline color:
+
+```diff
+ import tcod
+
++from game.data import colors
+ from game.engine import Engine
+ from game.entity import Entity
+ from game.map.map_generator import generate_dungeon
+@@
+     player = Entity(
+         x     = 0,
+         y     = 0,
+         char  = "@",
+-        color = (255, 255, 255),
++        color = colors.PLAYER,
+         name  = "Player",          # Part-2. Exercise 1: Add names to entities
+     )
+```
+
+If you completed the Part 4 marker exercises, update those two marker entities in `game/map/map_generator.py` too. Add the data import:
+
+```diff
++from game.data import colors
+```
+
+Then replace the two inline marker colors:
+
+```diff
+                 dungeon.entities.add(
+                     Entity(
+                         x     = debug_x,
+                         y     = debug_y,
+                         char  = "N",
+-                        color = Color(255, 255, 0),
++                        color = colors.DEBUG_MARKER,
+                         name  = "Debug marker",
+                     )
+                 )
+@@
+                 dungeon.entities.add(
+                     Entity(
+                         x             = debug_x + 1,
+                         y             = debug_y,
+                         char          = "P",
+-                        color         = Color(255, 0, 255),
++                        color         = colors.PERSISTENT_MARKER,
+                         name          = "Persistent marker",
+                         stays_visible = True,
+                     )
+                 )
+```
+
+If `map_generator.py` only imported `Color` for those two calls, remove that import after the replacement.
+
+!!! tip "Run it now"
+    If you run the game at this point, you can check that nothing has changed: same dungeon, same colors as at the end of Part 4. That is exactly what success looks like here. This section was a *refactor*: it changed how the code is organized, not what it does.
+
+    Running the game after each self-contained change like this is a good habit: it confirms that everything up to this point works, while the last change is still fresh in your mind.
 
 ---
 
 ## Updating Entity
 
-So far we create entities inline, like `Entity(0, 0, "@", (255, 255, 255))`. To turn entity types into reusable templates that we can copy into the dungeon, the `Entity` class needs to grow first. We add two new fields, `name` and `blocks_movement`, and a `spawn()` method that copies a template onto a map at a chosen position. The next section uses all three to define our monster prototypes.
+So far we create entities inline, like `Entity(0, 0, "@", (255, 255, 255))`. To turn entity types into reusable templates that we can copy into the dungeon, the `Entity` class needs to grow first. We add a new field, `blocks_movement`, and a `spawn()` method that copies a template onto a map at a chosen position. The `name` field is not new: it was Exercise 1 in Part 2. If you skipped that exercise, the listing below adds the field for you; from this part on it belongs to the main code, because entity templates and the combat messages of the coming parts depend on it. The next section uses `name`, `blocks_movement`, and `spawn()` to define our monster prototypes.
 
 If you completed the `stays_visible` exercise in Part 4, keep that field; it remains useful for entities that should stay visible after being discovered.
 
@@ -189,8 +276,8 @@ from __future__ import annotations
 import copy
 from typing import TYPE_CHECKING
 
-from game.constants import colors, sprites
-from game.constants.colors import Color
+from game.data import colors, sprites
+from game.data.colors import Color
 
 if TYPE_CHECKING:
     from game.map.game_map import GameMap
@@ -205,17 +292,17 @@ class Entity:
         y: int                = 0,
         char: str             = sprites.UNKNOWN,
         color: Color          = colors.DEFAULT_FG,
-        name: str             = "<unnamed>",
+        name: str             = "<unnamed>",    # Part-2. Exercise 1: Add names to
+        stays_visible: bool   = False,          # Part-4. Exercise 3: Remember a discovered marker
         blocks_movement: bool = False,
-        stays_visible: bool   = False,
     ) -> None:
-        self.x = x
-        self.y = y
-        self.char = char
-        self.color = color
-        self.name = name
+        self.x               = x
+        self.y               = y
+        self.char            = char
+        self.color           = color
+        self.name            = name             # Part-2. Exercise 1: Add names to entities
+        self.stays_visible   = stays_visible    # Part-4. Exercise 3: Remember a discovered marker
         self.blocks_movement = blocks_movement
-        self.stays_visible = stays_visible
 
     def spawn(self, game_map: GameMap, x: int, y: int) -> Entity:
         """Create a deep copy of this entity and place it on the map."""
@@ -243,6 +330,8 @@ Position defaults to `(0, 0)` so templates can be defined without coordinates.
 !!! info "Design decision: templates vs subclasses"
     We could create `class Orc(Entity): ...` for each monster type. But once we add components (Fighter, AI), the difference between an Orc and a Troll is just their stats: same code, different numbers. Templates let us define that difference as data, not code. Adding a new monster type is then a one-liner in `game/entity_factories.py`.
 
+    This convenience has a known cost. Templates like these are module-level objects, created the moment the module is imported, and in bigger projects that timing is a classic source of import-order problems and serialization surprises. We accept the price here; we will meet one of those surprises, and fix it, in Part 13.
+
 ---
 
 ## Entity templates
@@ -254,7 +343,7 @@ Create `game/entity_factories.py`:
 ```python
 from __future__ import annotations
 
-from game.constants import colors, sprites
+from game.data import colors, sprites
 from game.entity import Entity
 
 player = Entity(
@@ -280,6 +369,11 @@ troll = Entity(
 ```
 
 These are *prototypes*: for dungeon entities, we call `spawn()` on them to create positioned copies. The player is a small startup special case (covered in the `main.py` section below) because they need to exist before any map does.
+
+!!! question "Why lowercase `orc` when `colors.ORC` is uppercase?"
+    The UPPERCASE convention is for constant *values*: passive data you read, like a color tuple. A template is an *object* with identity and behavior: it has `spawn()`, and from the next part it will carry a fighter component with hit points. Python names module-level instances in lowercase; an uppercase `ORC` would promise an immutability that a live object cannot keep.
+
+    The difference in case also carries information. The same word lives in three namespaces: `sprites.ORC` and `colors.ORC` are values from the `data` package, while `entity_factories.orc` is a prototype you clone. The casing tells you which layer of the game you are touching.
 
 ---
 
@@ -331,6 +425,7 @@ class EscapeAction(Action):
         raise SystemExit()
 
 
+# Part-1. Exercise 3: Add a wait action
 class WaitAction(Action):
 
     def perform(self, engine: Engine, entity: Entity) -> None:
@@ -408,21 +503,22 @@ class BumpAction(ActionWithDirection):
     The input handler does not know what is at the destination; it just knows the player pressed right. `BumpAction` resolves the ambiguity at perform-time by checking the map. This keeps the input handler simple and decouples input from game logic.
 
 !!! info "About `WaitAction`"
-    If you completed the wait-action exercise from Part 1 or Part 2, this is the canonical version: the same empty `pass` body, now formally part of the action set so the engine can route a "skip turn" intent through the same machinery as a move or an attack.
+    If you completed the wait-action exercise from Part 1 and/or Part 2, this is the canonical version: the same empty `pass` body, now formally part of the action set so the engine can route a "skip turn" intent through the same machinery as a move or an attack.
 
 ---
 
 ## Updating the input handler
 
-Replace the individual key checks with two module-level lookups and add support for wait, numpad, and vi keys. `MOVE_KEYS` is a dictionary that maps each movement key to a `(dx, dy)` offset; `WAIT_KEYS` is a `set`, because for a wait key we only need to check membership, not retrieve a value. Update `game/input_handlers.py`:
+Replace the individual key checks with two module-level lookups and add support for wait, numpad, and vi keys. `MOVE_KEYS` is a dictionary that maps each movement key to a `(dx, dy)` offset; `WAIT_KEYS` is a `set`, because for a wait key we only need to check membership, not retrieve a value.
+
+These two tables are data, not logic, so they belong in the `game/data/` package we just created: the same argument that centralized sprites and colors applies to key bindings. With every binding in one module, remapping any control is a one-line edit, and the input handler stays focused on turning events into actions. This also delivers the key maps promised in the naming note at the start of this part. While we are at it, the `Escape` key gets a named constant too: `KEY_QUIT_GAME` says *what the key does*, where `KeySym.ESCAPE` only says which key it is.
+
+Create `game/data/keys.py`:
 
 ```python
 from __future__ import annotations
 
-
 import tcod.event
-
-from game.actions import Action, BumpAction, EscapeAction, WaitAction
 
 MOVE_KEYS = {
     # Arrow keys
@@ -458,38 +554,42 @@ WAIT_KEYS = {
     tcod.event.KeySym.CLEAR,
 }
 
+KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
+```
 
-class EventHandler:
+`game/input_handlers.py` needs the new import; `dispatch` and `event_quit` stay unchanged, and `event_keydown` is rewritten to use the lookup tables instead of `match`/`case`. Update the imports:
 
-    def dispatch(self, event: tcod.event.Event) -> Action | None:
-        match event:
-            case tcod.event.Quit():
-                return self.event_quit(event)
+```diff
+ import tcod.event
 
-            case tcod.event.KeyDown():
-                return self.event_keydown(event)
+-from game.actions import Action, EscapeAction, MovementAction, WaitAction
++from game.actions import Action, BumpAction, EscapeAction, WaitAction
++from game.data import keys
+```
 
-            case _:
-                return None
+Then replace the whole body of `event_keydown` with:
 
-    def event_quit(self, _event: tcod.event.Quit) -> Action | None:
-        return EscapeAction()
-
+```python
     def event_keydown(self, event: tcod.event.KeyDown) -> Action | None:
         key = event.sym
 
-        if key in MOVE_KEYS:
-            dx, dy = MOVE_KEYS[key]
+        if key in keys.MOVE_KEYS:
+            dx, dy = keys.MOVE_KEYS[key]
             return BumpAction(dx, dy)
 
-        if key in WAIT_KEYS:
+        if key in keys.WAIT_KEYS:
             return WaitAction()
 
-        if key == tcod.event.KeySym.ESCAPE:
+        if key == keys.KEY_QUIT_GAME:
             return EscapeAction()
 
         return None
 ```
+
+One honest note about the vi keys: they are temporary. Part 8 starts using letter keys for items and actions, several of those letters collide with the vi block, and that chapter removes it (with the full reasoning there). Arrow keys and the numpad work unchanged for the rest of the tutorial.
+
+!!! tip "Run it now"
+    If you run the game now, you can try the new movement keys: the numpad and the vi keys move you diagonally, and the wait keys are accepted too (waiting will start to matter once enemies take their turns, later in this chapter). Checking each change while it is still small is much easier than debugging all of them together at the end.
 
 ---
 
@@ -497,10 +597,7 @@ class EventHandler:
 
 Enemies need to act on their turn. We model this with an `AI` component: a class with a `perform()` method that the engine calls each enemy turn.
 
-Create `game/components/__init__.py` (empty file, makes `components` a Python package):
-
-```python
-```
+Create `game/components/__init__.py` as an empty file; it makes `components` a Python package.
 
 Create `game/components/ai.py`:
 
@@ -557,6 +654,14 @@ class HostileEnemy(BaseAI):
 
 ## Extending Entity with an AI slot
 
+And extend the existing `TYPE_CHECKING` imports at the top of `game/entity.py`:
+
+```diff
+ if TYPE_CHECKING:
++    from game.components.ai import BaseAI
+     from game.map.game_map import GameMap
+```
+
 Entities that have AI (enemies) need an `ai` attribute. Add it to `Entity`:
 
 ```diff
@@ -577,21 +682,13 @@ Entities that have AI (enemies) need an `ai` attribute. Add it to `Entity`:
 +        self.ai = ai
 ```
 
-And extend the existing `TYPE_CHECKING` imports at the top of `game/entity.py`:
-
-```diff
- if TYPE_CHECKING:
-+    from game.components.ai import BaseAI
-     from game.map.game_map import GameMap
-```
-
 Update `game/entity_factories.py` to assign AI to enemies:
 
 ```python
 from __future__ import annotations
 
 from game.components.ai import HostileEnemy
-from game.constants import colors, sprites
+from game.data import colors, sprites
 from game.entity import Entity
 
 player = Entity(
@@ -655,6 +752,8 @@ def place_entities(
 
 `place_entities` takes the same `rng` instance `generate_dungeon` already owns, instead of calling the shared `random` module. This keeps monster placement reproducible from the same dungeon seed, without reseeding anything global.
 
+Also notice the `if not any(...)` check: when the chosen tile is already occupied, that monster is simply not placed. So `max_monsters` is an upper limit, not a guaranteed count; if you count the monsters in a room, finding fewer than the roll asked for is normal.
+
 Update `generate_dungeon` to call `place_entities` and accept the new parameter:
 
 ```diff
@@ -668,20 +767,24 @@ Update `generate_dungeon` to call `place_entities` and accept the new parameter:
      player: Entity,
      seed: int,
  ) -> GameMap:
-     dungeon = GameMap(map_width, map_height, entities=[player])
-     rooms: list[RectangularRoom] = []
-     max_room_attempts = max_rooms * 2
+     """Generate a new dungeon map and place the player."""
+     # Part-3. Exercise 1: Reproducible dungeons
+     rng = random.Random(seed)
 
+     dungeon = GameMap(map_width, map_height, entities=[player])
+
+     rooms: list[RectangularRoom] = []
+
+     max_room_attempts = max_rooms * 2
      for _ in range(max_room_attempts):
          ...
          if not rooms:
+             # First room: place the player here
              player.set_position(*new_room.center)
+
          else:
-             for x, y in tunnel_between(
-                rng,
-                rooms[-1].center,
-                new_room.center
-             ):
+             # All subsequent rooms: dig a tunnel to the previous room
+             for x, y in tunnel_between(rng, rooms[-1].center, new_room.center):
                  dungeon.tiles[x, y] = tile_types.floor
 +
 +            place_entities(rng, new_room, dungeon, max_monsters_per_room)
@@ -741,7 +844,7 @@ The `Iterable` and `Any` imports are already in `game/engine.py` from Part 4. We
                  continue
              action.perform(self, self.player)
 +            self.handle_enemy_turns()
-             self.update_fov()
+             self.update_fov()  # recompute after every action
 
 +    def handle_enemy_turns(self) -> None:
 +        for entity in set(self.game_map.entities) - {self.player}:
@@ -775,92 +878,65 @@ Two things happen in `set(self.game_map.entities) - {self.player}`. First, `set(
 
 The player is a special case: `spawn()` requires a `GameMap` to add the entity to, but at startup the map does not exist yet. We bypass `spawn()` and `copy.deepcopy` the template directly. `entity_factories.player` is a *template*, a singleton entity object never placed on a map, so deep-copying it gives us an independent instance for this run.
 
-```python
-from __future__ import annotations
+Update `main.py`:
 
-import copy
-import os
-from pathlib import Path
-import random
+```diff
+ from __future__ import annotations
 
-import tcod
+-import os
+-from pathlib import Path
+-import random
++import copy
++import os
++import random
++from pathlib import Path
 
-from game import entity_factories
-from game.engine import Engine
-from game.map.map_generator import generate_dungeon
+ import tcod
 
++from game import entity_factories
+ from game.engine import Engine
+-from game.entity import Entity
+ from game.map.map_generator import generate_dungeon
+@@
+     seed = int(os.environ.get("GAME_SEED", random.getrandbits(64)))
++    # seed = 12345  # Write here the game seed to reproduce a map
+     print(f"Game seed: {seed}")
+@@
+     max_rooms = 30
++    max_monsters_per_room = 2
+@@
+-    player = Entity(
+-        x     = 0,
+-        y     = 0,
+-        char  = "@",
+-        color = (255, 255, 255),
+-        name  = "Player",          # Part-2. Exercise 1: Add names to entities
+-    )
++    player = copy.deepcopy(entity_factories.player)
 
-def main() -> None:
-    # Part-3. Exercise 1: Reproducible dungeons
-    seed = int(os.environ.get("GAME_SEED", random.getrandbits(64)))
-    print(f"Game seed: {seed}")
-
-    screen_width  = 80
-    screen_height = 50
-
-    map_width  = 80
-    map_height = 44
-
-    room_max_size = 12
-    room_min_size = 7
-
-    max_rooms = 30
-    max_monsters_per_room = 2
-
-    tileset = tcod.tileset.load_tilesheet(
-        Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png",
-        32,
-        8,
-        tcod.tileset.CHARMAP_TCOD,
-    )
-
-    player = copy.deepcopy(entity_factories.player)
-
-    game_map = generate_dungeon(
-        max_rooms             = max_rooms,
-        room_min_size         = room_min_size,
-        room_max_size         = room_max_size,
-        map_width             = map_width,
-        map_height            = map_height,
-        max_monsters_per_room = max_monsters_per_room,
-        player                = player,
-        seed                  = seed,
-    )
-
-    engine = Engine(game_map=game_map, player=player)
-
-    title   = "Roguelike Tutorial"
-    version = "0.1.0"
-    app_id  = "com.tutorial.roguelike"
-
-    tcod.lib.SDL_SetAppMetadata(
-        title.encode("utf-8"),
-        version.encode("utf-8"),
-        app_id.encode("utf-8"),
-    )
-    tcod.lib.SDL_SetHint(
-        b"SDL_RENDER_SCALE_QUALITY",
-        b"0",   # Nearest pixel sampling
-    )
-
-    with tcod.context.new(
-        columns          = screen_width,
-        rows             = screen_height,
-        tileset          = tileset,
-        title            = title,
-        vsync            = True,
-        sdl_window_flags = tcod.context.SDL_WINDOW_ALLOW_HIGHDPI | tcod.context.SDL_WINDOW_RESIZABLE,
-    ) as context:
-        console = tcod.console.Console(screen_width, screen_height, order="F")
-        engine.run(context, console)
-
-
-if __name__ == "__main__":
-    main()
+     game_map = generate_dungeon(
+-        max_rooms     = max_rooms,
+-        room_min_size = room_min_size,
+-        room_max_size = room_max_size,
+-        map_width     = map_width,
+-        map_height    = map_height,
+-        player        = player,
+-        seed          = seed,
++        max_rooms             = max_rooms,
++        room_min_size         = room_min_size,
++        room_max_size         = room_max_size,
++        map_width             = map_width,
++        map_height            = map_height,
++        max_monsters_per_room = max_monsters_per_room,
++        player                = player,
++        seed                  = seed,    # Part-3. Exercise 1: Reproducible dungeons
+     )
 ```
 
+Everything else, `Engine(...)`, the SDL metadata calls, and the `tcod.context.new` block, stays exactly as it was.
+
 !!! note "Part 4 exercise carry-overs"
-    If you completed the variable torch radius or fading memory exercises in Part 4, keep passing those arguments when you build the engine here, for example `Engine(game_map=game_map, player=player, fading_memory=True)`. The listing above shows the main path without them.
+    If you completed the variable torch radius or fading memory exercises in Part 4, `Engine(...)` already takes `fov_radius` and `memory_duration` there; this diff does not touch that call, so keep those arguments exactly as you have them. If you did not do those exercises, `Engine(game_map=game_map, player=player)` does not change either.
 
 ---
 
@@ -875,6 +951,8 @@ Run `python main.py`:
 - [ ] Pressing `.` or numpad 5 passes a turn; if a visible enemy is pursuing you, it takes one step
 - [ ] When an adjacent enemy takes a turn, it prints `"Orc attacks Player!"` (the `MeleeAction` stub)
 - [ ] Diagonal movement works (numpad or vi keys)
+
+<!-- TODO: screenshot -->
 
 ---
 
@@ -895,7 +973,7 @@ Enemies are now in the dungeon and the turn system is running. Key patterns intr
 - `game/map/map_generator.py`: places enemies while generating rooms
 - `components/ai.py`: gives enemies turn behavior
 - `Engine`: runs player action, enemy turns, then FOV update
-- `constants/`: centralizes entity and terrain sprites/colors
+- `data/`: centralizes entity and terrain sprites/colors, plus the key bindings
 
 **Class Diagram**:
 
@@ -912,9 +990,10 @@ game/
 ├── entity.py               ← modified
 ├── entity_factories.py     ← new
 ├── input_handlers.py       ← modified
-├── constants/
+├── data/
 │   ├── __init__.py         ← new
 │   ├── colors.py           ← new
+│   ├── keys.py             ← new
 │   └── sprites.py          ← new
 ├── components/
 │   ├── __init__.py         ← new

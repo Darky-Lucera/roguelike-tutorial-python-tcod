@@ -30,7 +30,6 @@ Games like *NetHack*, *DCSS*, *Brogue*, and *Caves of Qud* all descend from this
 !!! info "Roguelike vs. roguelite"
     A **roguelite** keeps some roguelike DNA (procedural levels, permadeath, run-based structure) but typically swaps the core for **real-time action** instead of turn-based tactics, and adds **meta-progression**: currency, unlocks, or permanent upgrades that persist across deaths, so the player gets stronger over many runs. *Hades*, *Dead Cells*, and *The Binding of Isaac* are popular examples. They are great games, but they sit on a different design axis than what we are building here. If at any point you find yourself wanting "permanent upgrades between runs", you are designing a roguelite, not a roguelike. Both are valid; just know which you are aiming at.
 
-
 ---
 
 ## Why Python and tcod?
@@ -230,7 +229,7 @@ roguelike-tutorial/
       game_map.py        ← the tile grid
       tile_types.py      ← tile definitions (floor, wall, ...)
       map_generator.py   ← dungeon generator
-    constants/           ← visual constants
+    data/                ← visual data (colors, sprites)
       __init__.py
       sprites.py         ← single-character glyphs (PLAYER, ORC, TROLL, ...)
       colors.py          ← RGB tuples (PLAYER, HP_BAR_FILLED, MENU_TITLE, ...)
@@ -238,7 +237,7 @@ roguelike-tutorial/
   pyproject.toml
 ```
 
-The structure is deliberate: `main.py` at the root is a thin entry point, `game/` is a Python package that holds all the game modules, `res/` keeps static assets (fonts, images) out of the code folders, `game/map/` groups map-related code, and `game/constants/` centralizes visual values so retheming or recoloring is a one-line edit. We will build all of this gradually; each part adds one or two files.
+The structure is deliberate: `main.py` at the root is a thin entry point, `game/` is a Python package that holds all the game modules, `res/` keeps static assets (fonts, images) out of the code folders, `game/map/` groups map-related code, and `game/data/` centralizes game data defined as code (colors, sprites, later also key maps and configuration), so retheming or recoloring is a one-line edit. We will build all of this gradually; each part adds one or two files.
 
 ---
 

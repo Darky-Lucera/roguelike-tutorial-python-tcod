@@ -100,7 +100,7 @@ class Effects:
 
 ## Wiring the hybrid loop
 
-Name the frame budget in `game/constants/config.py`:
+Name the frame budget in `game/data/config.py`:
 
 ```python
 FRAME_TIME = 1 / 60   # seconds per frame while something is animating
@@ -117,7 +117,7 @@ Then `run()` in `main.py` learns about time. `time.monotonic()` is the standard 
 +        previous = time.monotonic()
          while True:
 +            now        = time.monotonic()
-+            delta_time = min(now - previous, constants.FRAME_TIME)
++            delta_time = min(now - previous, config.FRAME_TIME)
 +            previous   = now
 +
 +            Effects.update(delta_time)
@@ -128,7 +128,7 @@ Then `run()` in `main.py` learns about time. `time.monotonic()` is the standard 
              context.present(console)
 
 -            for event in tcod.event.wait():
-+            timeout = constants.FRAME_TIME if Effects.any_playing() else None
++            timeout = config.FRAME_TIME if Effects.any_playing() else None
 +            for event in tcod.event.wait(timeout=timeout):
                  converted_event = context.convert_event(event)
                  state = state.handle_events(converted_event)

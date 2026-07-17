@@ -38,11 +38,11 @@ For now, this tutorial dedicates 44 rows to the map and 6 rows to a UI panel at 
 
 ---
 
-## Extending `game/constants/colors.py` with UI colors
+## Extending `game/data/colors.py` with UI colors
 
-`game/constants/colors.py` already holds entity colors (`PLAYER`, `ORC`, `TROLL`, `CORPSE` from Parts 5 and 6). The UI we are about to build needs more constants: combat message colors, the welcome banner, and the health bar's filled and empty states.
+`game/data/colors.py` already holds entity colors (`PLAYER`, `ORC`, `TROLL`, `CORPSE` from Parts 5 and 6). The UI we are about to build needs more constants: combat message colors, the welcome banner, and the health bar's filled and empty states.
 
-Extend `game/constants/colors.py`:
+Extend `game/data/colors.py`:
 
 ```python
 # Generic colors
@@ -75,8 +75,8 @@ We split the new constants into three sections (`Generic colors`, `Combat messag
 !!! note "If you kept earlier exercises"
     Extra exercise messages can get their own colors here as well. For example, the reference implementation uses optional colors such as `ENEMY_FLEE`, `ATTACK_MISS`, and `BLOCK_MOVEMENT` for Part 5/6 exercise feedback. They are useful, but not required for the base tutorial path.
 
-!!! question "Why this lives in `constants/`, not in `engine.py`"
-    `game/constants/colors.py` is imported by `hud`, `message_log`, `fighter`, and eventually every UI component. Putting colors in `game/engine.py` would force circular imports, those modules would need to import `engine` just for a tuple.
+!!! question "Why this lives in `data/`, not in `engine.py`"
+    `game/data/colors.py` is imported by `hud`, `message_log`, `fighter`, and eventually every UI component. Putting colors in `game/engine.py` would force circular imports, those modules would need to import `engine` just for a tuple.
 
 ---
 
@@ -93,8 +93,8 @@ import textwrap
 
 import tcod
 
-from game.constants import colors
-from game.constants.colors import Color
+from game.data import colors
+from game.data.colors import Color
 
 
 class Message:
@@ -186,7 +186,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from game.constants import colors
+from game.data import colors
 
 if TYPE_CHECKING:
     from tcod.console import Console
@@ -281,7 +281,7 @@ Each state:
 
     → [Game Programming Patterns: State](https://gameprogrammingpatterns.com/state.html)
 
-Replace `game/input_handlers.py` with `game/game_states.py`:
+Replace `game/input_handlers.py` with `game/game_states.py`. Note a small bonus of the Part 5 decision to keep key tables in `game/data/keys.py`: there are no key maps to carry along, so the new file contains only states and their rendering helpers:
 
 ```python
 from __future__ import annotations
@@ -296,45 +296,11 @@ from game.actions import (
     EscapeAction,
     WaitAction,
 )
-from game.constants import colors
-from game.constants.colors import Color
+from game.data import colors, keys
+from game.data.colors import Color
 
 if TYPE_CHECKING:
     from game.engine import Engine
-
-MOVE_KEYS = {
-    # Arrow keys
-    tcod.event.KeySym.UP:       ( 0, -1),
-    tcod.event.KeySym.DOWN:     ( 0,  1),
-    tcod.event.KeySym.LEFT:     (-1,  0),
-    tcod.event.KeySym.RIGHT:    ( 1,  0),
-
-    # Numpad
-    tcod.event.KeySym.KP_1:     (-1,  1), # LEFT  - DOWN
-    tcod.event.KeySym.KP_2:     ( 0,  1), #         DOWN
-    tcod.event.KeySym.KP_3:     ( 1,  1), # RIGHT - DOWN
-    tcod.event.KeySym.KP_4:     (-1,  0), # LEFT
-    tcod.event.KeySym.KP_6:     ( 1,  0), # RIGHT
-    tcod.event.KeySym.KP_7:     (-1, -1), # LEFT  - UP
-    tcod.event.KeySym.KP_8:     ( 0, -1), #         UP
-    tcod.event.KeySym.KP_9:     ( 1, -1), # RIGHT - UP
-
-    # Vi keys
-    tcod.event.KeySym.B:        (-1,  1), # LEFT  - DOWN
-    tcod.event.KeySym.J:        ( 0,  1), #         DOWN
-    tcod.event.KeySym.N:        ( 1,  1), # RIGHT - DOWN
-    tcod.event.KeySym.H:        (-1,  0), # LEFT
-    tcod.event.KeySym.L:        ( 1,  0), # RIGHT
-    tcod.event.KeySym.Y:        (-1, -1), # LEFT  - UP
-    tcod.event.KeySym.K:        ( 0, -1), #         UP
-    tcod.event.KeySym.U:        ( 1, -1), # RIGHT - UP
-}
-
-WAIT_KEYS = {
-    tcod.event.KeySym.PERIOD,
-    tcod.event.KeySym.KP_5,
-    tcod.event.KeySym.CLEAR,
-}
 
 
 def _draw_panel(
@@ -412,14 +378,14 @@ class MainGameState(GameState):
     def event_keydown(self, event: tcod.event.KeyDown) -> Action | None:
         key = event.sym
 
-        if key in MOVE_KEYS:
-            dx, dy = MOVE_KEYS[key]
+        if key in keys.MOVE_KEYS:
+            dx, dy = keys.MOVE_KEYS[key]
             return BumpAction(dx, dy)
 
-        if key in WAIT_KEYS:
+        if key in keys.WAIT_KEYS:
             return WaitAction()
 
-        if key == tcod.event.KeySym.ESCAPE:
+        if key == keys.KEY_QUIT_GAME:
             return EscapeAction()
 
         return None
@@ -476,7 +442,7 @@ class GameOverState(GameState):
         )
 
     def event_keydown(self, event: tcod.event.KeyDown) -> Action | None:
-        if event.sym == tcod.event.KeySym.ESCAPE:
+        if event.sym == keys.KEY_QUIT_GAME:
             return EscapeAction()
 
         return None
@@ -619,7 +585,7 @@ Add the imports:
 
 ```diff
  from game.entities import factories
-+from game.constants import colors
++from game.data import colors
  from game.engine import Engine
  from game.map.map_generator import generate_dungeon
 +from game.message_log import MessageLog
@@ -745,7 +711,7 @@ Run `python main.py`:
 
 The UI panel is now live. Key additions:
 
-- **`game/constants/colors.py`**: centralized color constants for the whole project
+- **`game/data/colors.py`**: centralized color constants for the whole project
 - **`MessageLog`**: static class that stores and renders recent events with stacking and color
 - **`hud`**: stateless HUD helpers for the bar and mouse names
 - **`_draw_panel()`**: shared shadow + fill + frame helper reused by every later menu and popup
@@ -775,9 +741,10 @@ game/
 ├── hud.py                      ← new
 ├── game_states.py              ← renamed from input_handlers.py
 ├── message_log.py              ← new
-├── constants/
+├── data/
 │   ├── __init__.py
 │   ├── colors.py               ← modified
+│   ├── keys.py
 │   └── sprites.py
 ├── entities/
 │   ├── __init__.py
@@ -821,7 +788,7 @@ game/
 
 2. **Scroll the message panel**:
 
-    The message log shows only the five most recent wrapped lines. Add `Page Up` / `Page Down` bindings that shift which portion of the log is visible. Store the current scroll value in `MessageLog`. When rendering, wrap all messages first, clamp `scroll` between `0` and `max(0, total - height)`, then use it to offset the visible slice: `start = max(0, total - height - scroll)` and `end = start + height`. Reset `scroll` to `0` when a new message is added.
+    The message log shows only the five most recent wrapped lines. Add `Page Up` / `Page Down` bindings that shift which portion of the log is visible. Define them in `game/data/keys.py` like every other binding (`SCROLL_UP = tcod.event.KeySym.PAGEUP`, `SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN`). Store the current scroll value in `MessageLog`. When rendering, wrap all messages first, clamp `scroll` between `0` and `max(0, total - height)`, then use it to offset the visible slice: `start = max(0, total - height - scroll)` and `end = start + height`. Reset `scroll` to `0` when a new message is added.
 
 3. **Entity details**:
 

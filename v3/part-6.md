@@ -132,9 +132,9 @@ From this point on, AI follows the same component convention as `Fighter`: the o
 
 ## Adding corpse constants
 
-Dead enemies will turn into a `%` glyph in dark red. Following our convention from Part 5, add those values to the constants package.
+Dead enemies will turn into a `%` glyph in dark red. Following our convention from Part 5, add those values to the data package.
 
-Extend `game/constants/sprites.py` in the entity sprites section:
+Extend `game/data/sprites.py` in the entity sprites section:
 
 ```diff
  PLAYER  = "@"
@@ -144,7 +144,7 @@ Extend `game/constants/sprites.py` in the entity sprites section:
 +CORPSE  = "%"
 ```
 
-Extend `game/constants/colors.py` in the entity colors section:
+Extend `game/data/colors.py` in the entity colors section:
 
 ```diff
  PLAYER             = Color(255, 255, 255)
@@ -188,7 +188,7 @@ Before we introduce combat entities, every entity needs to know where it belongs
 Update `game/entities/entity.py`:
 
 ```diff
- from game.constants import colors, sprites
+ from game.data import colors, sprites
 +from game.entities.render_order import RenderOrder
 
  if TYPE_CHECKING:
@@ -233,7 +233,7 @@ Create `game/entities/components/fighter.py`:
 from __future__ import annotations
 
 from game.entities.components.base_component import BaseComponent
-from game.constants import colors, sprites
+from game.data import colors, sprites
 from game.entities.render_order import RenderOrder
 
 
@@ -344,7 +344,7 @@ We wire both back-references the same way: `self.fighter.entity = self` and `sel
 ```python
 from __future__ import annotations
 
-from game.constants import colors, sprites
+from game.data import colors, sprites
 from game.entities.components.ai import HostileEnemy
 from game.entities.components.fighter import Fighter
 from game.entities.entity import Actor, Entity
@@ -423,7 +423,7 @@ Add a TYPE_CHECKING import for `Actor` to `game/entities/components/fighter.py` 
 +from typing import TYPE_CHECKING
 
  from game.entities.components.base_component import BaseComponent
- from game.constants import colors, sprites
+ from game.data import colors, sprites
  from game.entities.render_order import RenderOrder
 +
 +if TYPE_CHECKING:
@@ -647,7 +647,7 @@ class GameOverEventHandler(EventHandler):
     """Handles input after the player has died."""
 
     def event_keydown(self, event: tcod.event.KeyDown) -> Action | None:
-        if event.sym == tcod.event.KeySym.ESCAPE:
+        if event.sym == keys.KEY_QUIT_GAME:
             return EscapeAction()
 
         return None  # All other keys are ignored
@@ -749,9 +749,10 @@ game/
 ├── actions.py                  ← modified
 ├── engine.py                   ← modified
 ├── input_handlers.py           ← modified
-├── constants/
+├── data/
 │   ├── __init__.py
 │   ├── colors.py               ← modified
+│   ├── keys.py
 │   └── sprites.py              ← modified
 ├── entities/
 │   ├── __init__.py             ← new

@@ -559,7 +559,7 @@ Selection now has two namespaces, so `InventoryState.event_keydown` checks numbe
 
             return self.on_item_selected(selected_item)
 
-        if key == tcod.event.KeySym.ESCAPE:
+        if key == keys.KEY_EXIT:
             self.engine.game_state = MainGameState(self.engine)
             return None
 
@@ -639,7 +639,7 @@ The two key ranges never overlap, so a number always means "equip or unequip" an
                  return None
     ```
 
-    Finally, give the equipment templates fixed number keys in `game/constants/keys.py`, reserving **1-5 for weapons and 6-0 for armor** so the two ranges never collide:
+    Finally, give the equipment templates fixed number keys in `game/data/keys.py`, reserving **1-5 for weapons and 6-0 for armor** so the two ranges never collide:
 
     ```python
     # Part-13: equipment keys are numbers; weapons 1-5, armor 6-0.
@@ -657,7 +657,7 @@ The two key ranges never overlap, so a number always means "equip or unequip" an
 
 Each piece of equipment gets its own named sprite and color, even though daggers and swords share `/` and the two armors share `[`. Per the convention from Part 5, `colors.SWORD` reads better at a call site than a reused `colors.DAGGER` or a hardcoded tuple.
 
-Add to `game/constants/sprites.py`:
+Add to `game/data/sprites.py`:
 
 ```diff
 +# Equipment sprites
@@ -667,7 +667,7 @@ Add to `game/constants/sprites.py`:
 +CHAIN_MAIL    = "["
 ```
 
-Add to `game/constants/colors.py`:
+Add to `game/data/colors.py`:
 
 ```diff
 +# Equipment colors
@@ -702,7 +702,7 @@ Every actor now needs an `Equipment` component. Add the empty default to the thr
 ```diff
  player = Actor(
      ...
-     level     = Level(level_up_base=constants.DEFAULT_LEVEL_UP_BASE),
+     level     = Level(level_up_base=config.DEFAULT_LEVEL_UP_BASE),
 +    equipment = Equipment(),
  )
 ```
@@ -954,10 +954,11 @@ game/
 ├── game_states.py              ← modified
 ├── message_log.py
 ├── setup_game.py
-├── constants/
+├── data/
 │   ├── __init__.py
 │   ├── colors.py               ← modified
 │   ├── config.py
+│   ├── keys.py
 │   └── sprites.py              ← modified
 ├── entities/
 │   ├── __init__.py
@@ -1040,6 +1041,6 @@ You have built a complete roguelike. Here are directions to take it further:
 
 - Push the game to a public repository with a README, a screenshot, and the run command; a project that starts with `uv run python main.py` is easy for anyone to try
 
-The architecture you built (entities and components, actions, game states as a state machine, pickle serialization, data-driven spawn tables) scales to a much larger game. [Yet Another Roguelike Tutorial](https://www.rogueliketutorials.com/), the tutorial this one descends from, makes a good comparison point: same genre, same library, different decisions in the places where this tutorial deliberately diverged (game states instead of event handlers, a static message log, the constants and factories packages, guaranteed equipment). Reading code that solves the same problems differently is one of the fastest ways to grow.
+The architecture you built (entities and components, actions, game states as a state machine, pickle serialization, data-driven spawn tables) scales to a much larger game. [Yet Another Roguelike Tutorial](https://www.rogueliketutorials.com/), the tutorial this one descends from, makes a good comparison point: same genre, same library, different decisions in the places where this tutorial deliberately diverged (game states instead of event handlers, a static message log, the data and factories packages, guaranteed equipment). Reading code that solves the same problems differently is one of the fastest ways to grow.
 
 Good luck with the dungeon.

@@ -162,7 +162,7 @@ The entity half gains a guard, and it is not paranoia. For *visible* entities yo
 
 ## Wiring it into the `Engine`
 
-The camera needs a size before anything else, and constants must exist before the code that uses them. Name the viewport in `game/constants/config.py`:
+The camera needs a size before anything else, and constants must exist before the code that uses them. Name the viewport in `game/data/config.py`:
 
 ```diff
  # Screen / window
@@ -177,18 +177,18 @@ The camera needs a size before anything else, and constants must exist before th
 
 The 6 comes from the HUD panel, and note what this diff does *not* fix: the HUD's own row numbers (44 to 49, spread across `hud.py` and `Engine.render`) stay hardcoded, and they only agree with `VIEWPORT_HEIGHT` by construction. That is acceptable while the viewport height never changes; deriving the HUD layout from `VIEWPORT_HEIGHT` is the first of the exercise seeds.
 
-Now the camera needs a home, somewhere both the renderer and the event handlers can reach: the `Engine`. In `game/engine.py` (this file already imports the config module under the `constants` alias):
+Now the camera needs a home, somewhere both the renderer and the event handlers can reach: the `Engine`. In `game/engine.py` (this file already imports the config module):
 
 ```diff
  from game import hud
 +from game.camera import Camera
- from game.constants import colors
+ from game.data import colors
 ```
 
 ```diff
      ) -> None:
          self.mouse_location: tuple[int, int] = (0, 0)
-+        self.camera = Camera(constants.VIEWPORT_WIDTH, constants.VIEWPORT_HEIGHT)
++        self.camera = Camera(config.VIEWPORT_WIDTH, config.VIEWPORT_HEIGHT)
          self.player = player
 ```
 
@@ -214,7 +214,7 @@ Because `follow` runs at the start of every frame, there is nothing to update an
 
     Either delete old saves, as Part 11 and Part 13 already made you do, or supply the missing attributes with the `__getattr__` migration trick from Part 10.
 
-Finally, the payoff. Grow the map in `game/constants/config.py`:
+Finally, the payoff. Grow the map in `game/data/config.py`:
 
 ```diff
  # Map generation
@@ -357,7 +357,7 @@ The Part 9 targeting states mix the two spaces in four places, and each one foll
 
 The centered camera has one aesthetic flaw: it moves every single step, so the world never holds still and the `@` never visibly walks. Many games prefer **scroll margins** (also called a dead zone): the camera stays put while the player moves inside a comfortable inner rectangle, and only scrolls when the player pushes into the margin near an edge.
 
-Add the margin to `game/constants/config.py`:
+Add the margin to `game/data/config.py`:
 
 ```diff
  # Field of view
@@ -367,7 +367,7 @@ Add the margin to `game/constants/config.py`:
 +SCROLL_MARGIN = 10
 ```
 
-Then replace `follow` in `game/camera.py`. The file now needs the config import the rest of the project uses (`from game.constants import config as constants`); constants are configuration, not game state, so the class stays easy to test:
+Then replace `follow` in `game/camera.py`. The file now needs the config import the rest of the project uses (`from game.data import config`); configuration is not game state, so the class stays easy to test:
 
 ```python
     def follow(
@@ -391,7 +391,7 @@ Then replace `follow` in `game/camera.py`. The file now needs the config import 
 
     @staticmethod
     def _follow_axis(position: int, target: int, viewport: int, map_size: int) -> int:
-        margin = min(constants.SCROLL_MARGIN, (viewport - 1) // 2)
+        margin = min(config.SCROLL_MARGIN, (viewport - 1) // 2)
 
         if target < position + margin:
             position = target - margin

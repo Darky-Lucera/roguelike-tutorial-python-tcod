@@ -11,9 +11,6 @@ By the end of this part, the player will be able to use scrolls with targeted ef
 - Show a visual radius ring for Area of Effect (AoE) targeting
 - Add a `ConfusedEnemy` AI that wanders randomly
 
-!!! note "Prerequisite: Part 8 Exercise 4"
-    This part assumes you completed Exercise 4 from Part 8: centralising all keybindings in `game/constants/keys.py`. That exercise moved every key constant into one file so they are not spread across `game_states.py`, `actions.py`, or anywhere else. If you skipped it, complete it before continuing; the code in this chapter references `keys.*` throughout.
-
 ---
 
 ## Targeting as a game state
@@ -109,25 +106,20 @@ Adding a new modal state in the future requires no changes to `handle_events`.
 
 This part builds two targeting states: `SingleRangedAttackState` (single-tile cursor) and `AreaRangedAttackState` (AoE radius ring). Both share cursor movement, keyboard shortcuts, and mouse-click logic. `SelectIndexState` extracts that common behavior so each concrete state only needs to implement `on_index_selected`:
 
-Before writing the class, add the cursor navigation constants to `game/constants/keys.py`:
+Before writing the class, add the cursor navigation constants to `game/data/keys.py`:
 
 ```diff
- KEY_QUIT_GAME   = tcod.event.KeySym.ESCAPE
- KEY_EXIT        = tcod.event.KeySym.ESCAPE
-+KEY_SELECT      = {tcod.event.KeySym.RETURN, tcod.event.KeySym.KP_ENTER}
+ KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
+ KEY_EXIT      = tcod.event.KeySym.ESCAPE
++KEY_SELECT    = {tcod.event.KeySym.RETURN, tcod.event.KeySym.KP_ENTER}
 +
-+CURSOR_FAST     = tcod.event.Modifier.LSHIFT | tcod.event.Modifier.RSHIFT  # ×5
-+CURSOR_FASTER   = tcod.event.Modifier.LCTRL  | tcod.event.Modifier.RCTRL   # ×10
++CURSOR_FAST   = tcod.event.Modifier.LSHIFT | tcod.event.Modifier.RSHIFT  # ×5
++CURSOR_FASTER = tcod.event.Modifier.LCTRL  | tcod.event.Modifier.RCTRL   # ×10
 ```
 
-`KEY_EXIT` already exists from Part 8 Exercise 4 and covers any modal overlay (menus, cursors, dialogs), so there is nothing to rename here; we only add the cursor-navigation keys `KEY_SELECT`, `CURSOR_FAST`, and `CURSOR_FASTER`.
+`KEY_EXIT` already exists from Part 8 and covers any modal overlay (menus, cursors, dialogs), so there is nothing to rename here; we only add the cursor-navigation keys `KEY_SELECT`, `CURSOR_FAST`, and `CURSOR_FASTER`.
 
-Now add to `game/game_states.py`. This class uses the centralised key bindings from Part 8 Exercise 4, so make sure the imports at the top include `keys`:
-
-```python
-from game.constants import colors, keys
-from game.constants.colors import Color
-```
+Now add to `game/game_states.py`:
 
 ```python
 class SelectIndexState(ActionModalState):
@@ -148,7 +140,6 @@ class SelectIndexState(ActionModalState):
 
     def event_keydown(self, event: tcod.event.KeyDown) -> Action | None:
         key = event.sym
-        # Part-8. Exercise 4: Centralise keybindings (keys.*)
         if key in keys.MOVE_KEYS:
             modifier = 1
             if event.mod & keys.CURSOR_FAST:
@@ -217,7 +208,7 @@ The `callback` is a function that accepts `(x, y)` and returns an `Action`. The 
 
 `AreaRangedAttackState` extends `SelectIndexState` and asks the player to pick an explosion center. It highlights the affected area on every frame so the player sees exactly which tiles will be hit.
 
-The state does not hardcode a color. Different spells may want different highlight colors, so `color` is passed as a parameter alongside `radius`. The calling consumable decides which color to use. Add `FIREBALL_AOE` to `game/constants/colors.py`:
+The state does not hardcode a color. Different spells may want different highlight colors, so `color` is passed as a parameter alongside `radius`. The calling consumable decides which color to use. Add `FIREBALL_AOE` to `game/data/colors.py`:
 
 ```python
 FIREBALL_AOE = Color(255, 0, 0)
@@ -497,7 +488,7 @@ The bounds `min_x/max_x/min_y/max_y` are precomputed to avoid iterating the enti
 
 Three new sprites and three new colors. All scrolls share the same `~` glyph but each gets its own named constant so they can be retextured independently.
 
-Extend `game/constants/sprites.py`:
+Extend `game/data/sprites.py`:
 
 ```diff
  HEALTH_POTION = "!"
@@ -507,7 +498,7 @@ Extend `game/constants/sprites.py`:
 +LIGHTNING_SCROLL = "~"
 ```
 
-Extend `game/constants/colors.py`:
+Extend `game/data/colors.py`:
 
 ```diff
  HEALTH_POTION = Color(127, 0, 255)
@@ -541,7 +532,7 @@ The fix is a thin data class in `game/actions.py`. `get_action()` returns it; `G
 Add to `game/actions.py`, after `DropItem`. Also add this import at the top of the file:
 
 ```python
-from game.constants.colors import Color
+from game.data.colors import Color
 ```
 
 ```python
@@ -695,7 +686,7 @@ Update the imports at the top of `consumable.py`. The targeting classes now come
 +from game.entities.components.ai import ConfusedEnemy
 ```
 
-Add the targeting colors to `game/constants/colors.py` (used by the confusion message below and, shortly, by the targeting prompt in `handle_events`):
+Add the targeting colors to `game/data/colors.py` (used by the confusion message below and, shortly, by the targeting prompt in `handle_events`):
 
 ```python
 NEEDS_TARGET          = Color(63, 255, 255)
@@ -813,8 +804,8 @@ class FireballDamageConsumable(Consumable):
 
 ## game/entities/factories.py: add scrolls
 
-!!! note "If you skipped Part 8 Exercises 2 or 3"
-    This section reuses two optional Part 8 exercises. **Exercise 2** added `BackpackConsumable` and the `backpack_scroll` template: if you skipped it, omit the `BackpackConsumable` import and the `backpack_scroll` line in `item_chances`. **Exercise 3** added the `key` parameter to `Item`: if you skipped it, omit the `key=` lines on each scroll. (Exercise 4, the declared prerequisite, normally implies Exercise 3.)
+!!! note "If you skipped Part 8 Exercises 2, 3 or 4"
+    This section reuses optional Part 8 exercises. **Exercise 2** added `BackpackConsumable` and the `backpack_scroll` template: if you skipped it, omit the `BackpackConsumable` import and the `backpack_scroll` line in `item_chances`. **Exercise 3** added the `key` parameter to `Item`: if you skipped it, omit the `key=` lines on each scroll and the `keys.py` hotkey additions below. **Exercise 4** gave those hotkeys named constants: if you did Exercise 3 but not 4, write raw values (`key=tcod.event.KeySym.C`) instead of the `keys.*` constants.
 
 Add the scroll hotkeys to `keys.py`:
 
@@ -827,7 +818,7 @@ Add the scroll hotkeys to `keys.py`:
 ```
 
 ```python
-from game.constants import colors, keys, sprites
+from game.data import colors, keys, sprites
 from game.entities.components.consumable import (
     BackpackConsumable,  # Part-8. Exercise 2: Backpack growing scroll
     ConfusionConsumable,
@@ -843,7 +834,7 @@ confusion_scroll = Item(
     name       = "Confusion Scroll",
     consumable = ConfusionConsumable(number_of_turns=10),
     # Part-8. Exercise 3: Persistent item keys
-    key        = keys.CONFUSION_SCROLL,     # Part-8. Exercise 4: Centralise keybindings (keys.*)
+    key        = keys.CONFUSION_SCROLL,     # Part-8. Exercise 4: Item hotkey constants and key_label
 )
 
 fireball_scroll = Item(
@@ -852,7 +843,7 @@ fireball_scroll = Item(
     name       = "Fireball Scroll",
     consumable = FireballDamageConsumable(damage=12, radius=3),
     # Part-8. Exercise 3: Persistent item keys
-    key        = keys.FIREBALL_SCROLL,       # Part-8. Exercise 4: Centralise keybindings (keys.*)
+    key        = keys.FIREBALL_SCROLL,       # Part-8. Exercise 4: Item hotkey constants and key_label
 )
 
 lightning_scroll = Item(
@@ -861,7 +852,7 @@ lightning_scroll = Item(
     name       = "Lightning Scroll",
     consumable = LightningDamageConsumable(damage=20, maximum_range=5),
     # Part-8. Exercise 3: Persistent item keys
-    key        = keys.LIGHTNING_SCROLL,      # Part-8. Exercise 4: Centralise keybindings (keys.*)
+    key        = keys.LIGHTNING_SCROLL,      # Part-8. Exercise 4: Item hotkey constants and key_label
 )
 ```
 
@@ -1022,9 +1013,10 @@ game/
 ├── hud.py
 ├── game_states.py              ← modified
 ├── message_log.py
-├── constants/
+├── data/
 │   ├── __init__.py
 │   ├── colors.py               ← modified
+│   ├── keys.py                 ← modified
 │   └── sprites.py              ← modified
 ├── entities/
 │   ├── __init__.py

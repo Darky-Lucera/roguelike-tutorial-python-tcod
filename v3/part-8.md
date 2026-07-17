@@ -68,7 +68,7 @@ Compare the alternatives. Returning `None` is silent: the caller has to check fo
 
 This chapter uses visuals for health potions and chests, plus colors for item messages and the inventory overlays. Add them to the constants files.
 
-In `game/constants/sprites.py`, make sure `CHEST` exists in the entity section, then add `HEALTH_POTION` below it:
+In `game/data/sprites.py`, make sure `CHEST` exists in the entity section, then add `HEALTH_POTION` below it:
 
 ```diff
 +CHEST   = "$"
@@ -78,7 +78,7 @@ In `game/constants/sprites.py`, make sure `CHEST` exists in the entity section, 
 +HEALTH_POTION = "!"
 ```
 
-In `game/constants/colors.py`, make sure `CHEST` exists in the entity colors section, then add `HEALTH_POTION` below the entity colors:
+In `game/data/colors.py`, make sure `CHEST` exists in the entity colors section, then add `HEALTH_POTION` below the entity colors:
 
 ```diff
  TROLL             = Color(  0, 127,   0)
@@ -447,7 +447,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from game.constants import colors
+from game.data import colors
 from game.entities.components.base_component import ItemComponent
 from game.exceptions import Impossible
 from game.message_log import MessageLog
@@ -515,7 +515,7 @@ The file defines `Consumable` as the base class for all item effects and `Healin
 Every `Actor` now requires an `Inventory`. Add the component to the existing templates:
 
 ```diff
- from game.constants import colors, sprites
+ from game.data import colors, sprites
  from game.entities.components.ai import HostileEnemy
 +from game.entities.components.consumable import HealingConsumable
  from game.entities.components.fighter import Fighter
@@ -705,7 +705,7 @@ Then simplify `handle_events()` to a one-line dispatch:
 +        self.game_state.handle_events(event)
 ```
 
-Also add `INVALID` to `game/constants/colors.py`, since the rewritten `handle_events` uses it for rejection messages:
+Also add `INVALID` to `game/data/colors.py`, since the rewritten `handle_events` uses it for rejection messages:
 
 ```diff
  WELCOME_TEXT = Color(0x20, 0xA0, 0xFF)
@@ -715,7 +715,7 @@ Also add `INVALID` to `game/constants/colors.py`, since the rewritten `handle_ev
 
 `INVALID` is yellow: it is used for every rejection the player should read, from a full inventory to an already-healed condition.
 
-Now rewrite `GameState.handle_events()` in `game/game_states.py` to own the full execution cycle. `from game.constants import colors` was already imported in Part 7; only `Impossible` is new:
+Now rewrite `GameState.handle_events()` in `game/game_states.py` to own the full execution cycle. `from game.data import colors` was already imported in Part 7; only `Impossible` is new:
 
 ```diff
 +from game.exceptions import Impossible
@@ -772,7 +772,7 @@ The return type of `handle_events` changes from `Action | None` to `None`. Updat
 
 Vi keys (`b`, `h`, `j`, `k`, `l`, `n`, `u`, `y`) have been part of roguelikes since the original *Rogue* (1980), which ran on VT100 terminals with no arrow keys. On a modern keyboard, arrow keys and the numpad cover the same directions with less ambiguity, and freeing those letters matters here: this chapter adds `G`, `I`, and `D` as action keys, and Exercise 3 assigns the remaining letters to items for direct use from the map.
 
-Remove the vi keys block from `MOVE_KEYS` in `game/game_states.py`:
+Remove the vi keys block from `MOVE_KEYS` in `game/data/keys.py`:
 
 ```diff
 -    # Vi keys
@@ -793,19 +793,28 @@ Remove the vi keys block from `MOVE_KEYS` in `game/game_states.py`:
 
 ## Update `MainGameState`
 
-Add three key bindings at the end of `event_keydown`:
+The three new actions get named bindings in `game/data/keys.py` first, like every key since Part 5. Add them just above `KEY_QUIT_GAME`:
 
 ```diff
-         if key == tcod.event.KeySym.ESCAPE:
++KEY_PICKUP    = tcod.event.KeySym.G
++KEY_INVENTORY = tcod.event.KeySym.I
++KEY_DROP      = tcod.event.KeySym.D
+ KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
+```
+
+Then add the three checks at the end of `event_keydown`:
+
+```diff
+         if key == keys.KEY_QUIT_GAME:
              return EscapeAction()
 
-+        if key == tcod.event.KeySym.G:
++        if key == keys.KEY_PICKUP:
 +            return PickupAction()
 +
-+        if key == tcod.event.KeySym.I:
++        if key == keys.KEY_INVENTORY:
 +            self.engine.game_state = InventoryUseState(self.engine)
 +
-+        if key == tcod.event.KeySym.D:
++        if key == keys.KEY_DROP:
 +            self.engine.game_state = InventoryDropState(self.engine)
 +
          return None
@@ -819,7 +828,7 @@ Add three key bindings at the end of `event_keydown`:
 
 Three new state classes go at the bottom of `game/game_states.py`.
 
-Add the inventory overlay colors to `game/constants/colors.py`:
+Add the inventory overlay colors to `game/data/colors.py`:
 
 ```diff
  INVALID = Color(0xFF, 0xFF, 0x00)
@@ -858,6 +867,18 @@ def _trim_text(text: str, max_width: int) -> str:
 
     return f"{text[:max_width - 3]}..."
 ```
+
+One more binding before the states themselves: the overlay closes with `Escape`, and that gets its own name in `game/data/keys.py`, right after `KEY_QUIT_GAME`:
+
+```diff
+ KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
++KEY_EXIT      = tcod.event.KeySym.ESCAPE
+```
+
+!!! question "Two names for the same key?"
+    `KEY_QUIT_GAME` and `KEY_EXIT` both map to `ESCAPE`, on purpose. The name records *intent*: `KEY_QUIT_GAME` ends the program, `KEY_EXIT` closes an overlay and returns to the map.
+
+    Today they happen to share a physical key. If you later decide overlays should close with `Q` or `Backspace` instead, that is a one-line remap in `keys.py`; with a single shared constant, the two meanings would be tangled together and the change would need a code hunt.
 
 Now the three state classes:
 
@@ -1017,7 +1038,7 @@ class InventoryState(GameState):
 
             return self.on_item_selected(selected_item)
 
-        if key == tcod.event.KeySym.ESCAPE:
+        if key == keys.KEY_EXIT:
             self.engine.game_state = MainGameState(self.engine)
             return None
 
@@ -1227,7 +1248,7 @@ The chest introduced in Part 5 has been blocking movement without doing anything
 
 ### New color constant
 
-In `game/constants/colors.py`:
+In `game/data/colors.py`:
 
 ```diff
  INVALID = Color(0xFF, 0xFF, 0x00)
@@ -1436,9 +1457,10 @@ game/
 ├── hud.py                      ← modified
 ├── game_states.py              ← modified
 ├── message_log.py
-├── constants/
+├── data/
 │   ├── __init__.py
 │   ├── colors.py               ← modified
+│   ├── keys.py                 ← modified
 │   └── sprites.py              ← modified
 ├── entities/
 │   ├── __init__.py
@@ -1520,26 +1542,22 @@ game/
 
         `MainGameState.event_keydown()`: add a fallback at the end that scans the inventory for an item whose `key` matches `event.sym` and calls `item.consumable.get_action()`. Same effect as opening the inventory and selecting it; if it needs targeting (Part 9), the targeting UI opens just the same.
 
-        `PickupAction`: after the `"You picked up the ..."` message, if `item.key is not None`, log a second line. Import `from game.constants.keys import key_label` and write `MessageLog.add_message(f"Press {key_label(item.key)} to use it.")` (`key_label` makes a badge like `[ H ]`; you add it in Exercise 4).
+        `PickupAction`: after the `"You picked up the ..."` message, if `item.key is not None`, log a second line. Import `from game.data.keys import key_label` and write `MessageLog.add_message(f"Press {key_label(item.key)} to use it.")` (`key_label` makes a badge like `[ H ]`; you add it in Exercise 4).
 
         With vi keys removed, `a`–`z` minus `g`, `i`, `d` gives 23 conflict-free hotkey slots.
 
-4. **Centralise keybindings in `game/constants/keys.py`**:
+4. **Item hotkey constants and `key_label`**:
 
-    Right now your keybindings are scattered, and as raw `tcod.event.KeySym` values: movement, wait and action keys in `game/game_states.py`, item hotkeys in `game/entities/factories.py`. Centralize them into one new `game/constants/keys.py`: the `MOVE_KEYS` / `WAIT_KEYS` dictionaries, every `KEY_*` constant, and a small `key_label` helper that formats a key as a badge like `[ H ]` or `[ Esc ]` (the pickup hint from Exercise 3 and the Part 10 main menu both render through it). Then make every file reference `keys.*` instead of a raw `KeySym`. The payoff is real: a player can remap every control by editing one file, without touching any state or factory.
+    Exercise 3 wired the item hotkeys as raw `tcod.event.KeySym` values in `game/entities/factories.py`; they are the only bindings left outside `game/data/keys.py`. Bring them home as named constants (`HEALTH_POTION`, `BACKPACK_SCROLL`), and add a small `key_label` helper that formats a key as a badge like `[ H ]` or `[ Esc ]` (the pickup hint from Exercise 3 renders through it, and the Part 10 main menu will use it too).
 
     !!! tip "How `key_label` picks a name"
         Three rules, in order: an entry in `_SPECIAL_KEY_NAMES` wins first (`ESCAPE` becomes `Esc`); otherwise, a printable ASCII code (32 to 126) becomes `chr(v).upper()`, so the period key reads `.` instead of the verbose `"PERIOD"`; everything else falls back to `sym.name` (`"F1"`, `"KP_8"`, `"UP"`).
 
     ??? note "Reference implementation"
-        The whole file, `game/constants/keys.py`. `KEY_QUIT_GAME` and `KEY_EXIT` both map to `ESCAPE` but carry different names to express intent (quit the game vs close an overlay):
+        Additions to `game/data/keys.py`. The helper goes near the top of the file, after the `tcod.event` import; the hotkey constants go at the end. The `SCROLL_*` block appears as context: it comes from Part 7 Exercise 2, not from this one:
 
         ```python
-        from __future__ import annotations
-
-        import tcod.event
-
-
+        # Part-8. Exercise 4: Item hotkey constants and key_label
         _SPECIAL_KEY_NAMES = {
             tcod.event.KeySym.ESCAPE: "Esc",
         }
@@ -1548,46 +1566,14 @@ game/
             v    = int(sym)
             name = _SPECIAL_KEY_NAMES.get(sym) or (chr(v).upper() if 32 <= v <= 126 else sym.name)
             return f"[ {name} ]"
+        ```
 
-
-        # Part-8. Exercise 4: Centralise keybindings in game/constants/keys.py
-        MOVE_KEYS = {
-            # Arrow keys
-            tcod.event.KeySym.UP:    ( 0, -1),
-            tcod.event.KeySym.DOWN:  ( 0,  1),
-            tcod.event.KeySym.LEFT:  (-1,  0),
-            tcod.event.KeySym.RIGHT: ( 1,  0),
-
-            # Numpad
-            tcod.event.KeySym.KP_8:  ( 0, -1),
-            tcod.event.KeySym.KP_2:  ( 0,  1),
-            tcod.event.KeySym.KP_4:  (-1,  0),
-            tcod.event.KeySym.KP_6:  ( 1,  0),
-
-            # Part-1. Exercise 1: Add diagonal movement
-            tcod.event.KeySym.KP_7:  (-1, -1),
-            tcod.event.KeySym.KP_9:  ( 1, -1),
-            tcod.event.KeySym.KP_1:  (-1,  1),
-            tcod.event.KeySym.KP_3:  ( 1,  1),
-        }
-
-        WAIT_KEYS = {
-            tcod.event.KeySym.PERIOD,
-            tcod.event.KeySym.KP_5,
-            tcod.event.KeySym.CLEAR,
-        }
-
-        KEY_PICKUP    = tcod.event.KeySym.G
-        KEY_INVENTORY = tcod.event.KeySym.I
-        KEY_DROP      = tcod.event.KeySym.D
-        KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
-        KEY_EXIT      = tcod.event.KeySym.ESCAPE
-
+        ```python
         # Part-7. Exercise 2: Scroll the message panel
         SCROLL_UP   = tcod.event.KeySym.PAGEUP
         SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN
 
-        # Part-8. Exercise 3: Persistent item keys
+        # Part-8. Exercise 4: Item hotkey constants and key_label
         HEALTH_POTION   = tcod.event.KeySym.H
         BACKPACK_SCROLL = tcod.event.KeySym.B
         ```
@@ -1595,8 +1581,8 @@ game/
         In `game/entities/factories.py`, import `keys`, drop the now-unused `import tcod.event`, and point the item hotkeys at the constants:
 
         ```diff
-        -from game.constants import colors, sprites
-        +from game.constants import colors, keys, sprites
+        -from game.data import colors, sprites
+        +from game.data import colors, keys, sprites
         -import tcod.event
         ```
 
@@ -1607,22 +1593,6 @@ game/
         -    key        = tcod.event.KeySym.B,
         +    key        = keys.BACKPACK_SCROLL,
         ```
-
-        In `game/game_states.py`, move the `MOVE_KEYS` and `WAIT_KEYS` dicts out to `keys.py`, import `keys`, and reference everything through it:
-
-        ```diff
-        -from game.constants import colors
-        +from game.constants import colors, keys
-        ```
-
-        ```diff
-        -if key in MOVE_KEYS:
-        -    dx, dy = MOVE_KEYS[key]
-        +if key in keys.MOVE_KEYS:
-        +    dx, dy = keys.MOVE_KEYS[key]
-        ```
-
-        Then do the same for `keys.WAIT_KEYS` and every `keys.KEY_*` / `keys.SCROLL_*` check through the file.
 
 ---
 

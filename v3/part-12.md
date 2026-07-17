@@ -70,7 +70,7 @@ The same format works for things that are not weights at all. A table like `[(1,
 
 ## config.py: spawn limits become tables
 
-The four per-room constants from Part 5 turn into floor-keyed tables. Update `game/constants/config.py`:
+The four per-room constants from Part 5 turn into floor-keyed tables. Update `game/data/config.py`:
 
 ```diff
  # Map generation
@@ -99,7 +99,7 @@ The minimum tables keep their old behavior (always 0), but now they can scale to
 
 Floor-keyed weights only earn their keep if there is something worth saving for the deep floors. The dungeon has two monsters so far; let's add a third that belongs at the bottom. Meet the **ogre**: a slab of muscle that hits twice as hard as an orc and soaks up far more punishment. It has no special trick, and that is the point. By the depth where ogres appear you should already be carrying Lightning, Fireball, and Confusion scrolls, and the ogre is the monster that makes you reach for them: trading blows toe-to-toe is a losing war of attrition, so the smart play is to open from range or stun it before it closes.
 
-Add its glyph to `game/constants/sprites.py`:
+Add its glyph to `game/data/sprites.py`:
 
 ```diff
  PLAYER  = "@"
@@ -108,7 +108,7 @@ Add its glyph to `game/constants/sprites.py`:
 +OGRE    = "O"
 ```
 
-And its color to `game/constants/colors.py`:
+And its color to `game/data/colors.py`:
 
 ```diff
  PLAYER             = Color(255, 255, 255)
@@ -200,7 +200,7 @@ Floor 1 now offers only potions and chests. New scrolls then arrive about one fl
 The selection logic lives in `game/map/map_generator.py`, next to its only caller. First add the import for the new config tables:
 
 ```diff
-+from game.constants import config as constants
++from game.data import config
  from game.entities import factories
 ```
 
@@ -265,12 +265,12 @@ def place_entities(
     current_floor: int,
 ) -> None:
     number_of_monsters = rng.randint(
-        get_value_for_floor(constants.MIN_MONSTERS_BY_FLOOR, current_floor),
-        get_value_for_floor(constants.MAX_MONSTERS_BY_FLOOR, current_floor),
+        get_value_for_floor(config.MIN_MONSTERS_BY_FLOOR, current_floor),
+        get_value_for_floor(config.MAX_MONSTERS_BY_FLOOR, current_floor),
     )
     number_of_items = rng.randint(
-        get_value_for_floor(constants.MIN_ITEMS_BY_FLOOR, current_floor),
-        get_value_for_floor(constants.MAX_ITEMS_BY_FLOOR, current_floor),
+        get_value_for_floor(config.MIN_ITEMS_BY_FLOOR, current_floor),
+        get_value_for_floor(config.MAX_ITEMS_BY_FLOOR, current_floor),
     )
 
     monsters = get_entities_at_random(
@@ -404,15 +404,15 @@ Finally, remove the four arguments from `new_game()` in `game/setup_game.py`:
 ```diff
      engine.game_world = GameWorld(
          engine        = engine,
-         max_rooms     = constants.MAX_ROOMS,
-         room_min_size = constants.ROOM_MIN_SIZE,
-         room_max_size = constants.ROOM_MAX_SIZE,
-         map_width     = constants.MAP_WIDTH,
-         map_height    = constants.MAP_HEIGHT,
--        min_monsters_per_room = constants.MIN_MONSTERS_PER_ROOM,
--        max_monsters_per_room = constants.MAX_MONSTERS_PER_ROOM,
--        min_items_per_room    = constants.MIN_ITEMS_PER_ROOM,
--        max_items_per_room    = constants.MAX_ITEMS_PER_ROOM,
+         max_rooms     = config.MAX_ROOMS,
+         room_min_size = config.ROOM_MIN_SIZE,
+         room_max_size = config.ROOM_MAX_SIZE,
+         map_width     = config.MAP_WIDTH,
+         map_height    = config.MAP_HEIGHT,
+-        min_monsters_per_room = config.MIN_MONSTERS_PER_ROOM,
+-        max_monsters_per_room = config.MAX_MONSTERS_PER_ROOM,
+-        min_items_per_room    = config.MIN_ITEMS_PER_ROOM,
+-        max_items_per_room    = config.MAX_ITEMS_PER_ROOM,
          seed          = seed,
      )
 ```
@@ -497,7 +497,7 @@ game/
 ├── game_states.py
 ├── message_log.py
 ├── setup_game.py               ← modified
-├── constants/
+├── data/
 │   ├── __init__.py
 │   ├── colors.py
 │   ├── config.py               ← modified
@@ -599,13 +599,13 @@ game/
         +        self.heal(drained_life)
         ```
 
-        Add the ghoul's glyph and color first, mirroring the ogre. In `game/constants/sprites.py`:
+        Add the ghoul's glyph and color first, mirroring the ogre. In `game/data/sprites.py`:
 
         ```python
         GHOUL = "g"
         ```
 
-        In `game/constants/colors.py`:
+        In `game/data/colors.py`:
 
         ```python
         GHOUL = Color(127, 191, 127)

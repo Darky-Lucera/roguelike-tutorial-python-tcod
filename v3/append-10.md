@@ -196,7 +196,7 @@ Add `add_chars` to `main.py`, right above `main()`: that is where the tileset al
 
 ```diff
  tileset = tcod.tileset.load_tilesheet(
-     constants.RES_DIR / "dejavu12x12_gs_tc.png",
+     config.RES_DIR / "dejavu12x12_gs_tc.png",
      32,
      8,
      tcod.tileset.CHARMAP_TCOD,
@@ -209,7 +209,7 @@ Add `add_chars` to `main.py`, right above `main()`: that is where the tileset al
 
     ```diff
      tileset = tcod.tileset.load_tilesheet(
-         constants.RES_DIR / ("dejavu12x12_gs_tc_ex.png" if sprites.USE_SPRITES else "dejavu12x12_gs_tc.png"),
+         config.RES_DIR / ("dejavu12x12_gs_tc_ex.png" if sprites.USE_SPRITES else "dejavu12x12_gs_tc.png"),
          32,
          (13 if sprites.USE_SPRITES else 8),
          tcod.tileset.CHARMAP_TCOD,
@@ -217,7 +217,6 @@ Add `add_chars` to `main.py`, right above `main()`: that is where the tileset al
     +add_chars(tileset)
      sprites.init_sprites(tileset)
     ```
-
 
 !!! tip "Run it now"
     Add a throwaway line at the end of `MainMenuState.on_render`, such as `console.print(0, 0, "< ñÑáéíóú¡¿ >", fg=colors.WHITE)`, and start the game. You should see those letters drawn, not blank cells. Remove the line once you have confirmed it.
@@ -229,7 +228,7 @@ Add `add_chars` to `main.py`, right above `main()`: that is where the tileset al
 
 ## A Home For Text
 
-Create `game/constants/messages.py`. This file is the one place a translator should be able to open and say, "Here is the game's text."
+Create `game/data/messages.py`. This file is the one place a translator should be able to open and say, "Here is the game's text."
 
 Like every other file in the project, it starts with the future-annotations import, plus the standard library module that reports which language and region the operating system is configured for:
 
@@ -618,12 +617,12 @@ def set_lang(lang: str) -> None:
 `Messages.current` is the class the game reads from. `Messages.lang` is the small stable id, useful for toggling and for saving a user preference later if you choose to add one. This is the same shape Appendix 7 used for `CurrentGlyphs`: a name annotated `type[...]` that holds a class, not an instance, so the whole game can switch behavior by reassigning one pointer.
 
 !!! tip "Run it now"
-    Temporarily add `from game.constants.messages import Messages` to `game_states.py`'s imports (the permanent import for this file lands later, in Menus And Popups), then add `MessageLog.add_message(Messages.current.TEST)` as the last line of `GameState.__init__`. Start the game, press `N` for a new game, and check the message log: every symbol from the earlier glyph test should still show correctly, this time routed through the real message log pipeline, word wrapping included, instead of a raw `console.print`. That confirms both that the hundred-plus keys you just pasted import cleanly and that the log itself renders every accented letter.
+    Temporarily add `from game.data.messages import Messages` to `game_states.py`'s imports (the permanent import for this file lands later, in Menus And Popups), then add `MessageLog.add_message(Messages.current.TEST)` as the last line of `GameState.__init__`. Start the game, press `N` for a new game, and check the message log: every symbol from the earlier glyph test should still show correctly, this time routed through the real message log pipeline, word wrapping included, instead of a raw `console.print`. That confirms both that the hundred-plus keys you just pasted import cleanly and that the log itself renders every accented letter.
 
     Remove the line once you have confirmed it.
 
 !!! note "One import, every file"
-    From here on, any file that calls `Messages.current` needs `from game.constants.messages import Messages` added to its imports. This appendix only spells out that import line explicitly where it is shown for the first time, in `setup_game.py` and `game_states.py`. Add the same line yourself wherever else a diff below adds a `Messages.current` call:
+    From here on, any file that calls `Messages.current` needs `from game.data.messages import Messages` added to its imports. This appendix only spells out that import line explicitly where it is shown for the first time, in `setup_game.py` and `game_states.py`. Add the same line yourself wherever else a diff below adds a `Messages.current` call:
 
     - `actions.py`
     - `hud.py`
@@ -659,8 +658,8 @@ On many systems Spanish looks like `es_ES`; on Windows it can look like `Spanish
 Call this early in `main()`:
 
 ```diff
- from game.constants import config as constants, sprites
-+from game.constants.messages import set_default_lang
+ from game.data import config, sprites
++from game.data.messages import set_default_lang
  ...
  def main() -> None:
 +    set_default_lang()
@@ -676,7 +675,7 @@ That chooses the first language before the menu is drawn.
 
 Choosing a language at startup is enough for many tutorials. It is not enough to test localization comfortably. You do not want to change your OS locale every time you tweak a line of Spanish.
 
-Add a debug key in `game/constants/keys.py`:
+Add a debug key in `game/data/keys.py`:
 
 ```python
 DEBUG_KEY_LANGUAGE = tcod.event.KeySym.F12
@@ -704,7 +703,7 @@ def get_current_language_name() -> str:
 `BaseGameState.dispatch` handles the language key for states that do not have a game engine, such as the main menu and popup messages:
 
 ```diff
-+from game.constants.messages import Messages, get_current_language_name, toggle_lang
++from game.data.messages import Messages, get_current_language_name, toggle_lang
  ...
  class BaseGameState:
      def dispatch(self, event: tcod.event.Event) -> Action | BaseGameState | None:
@@ -751,10 +750,10 @@ The main menu also advertises the key. Before this appendix, `menu_options` was 
 
          menu_options = [
 -            (keys.KEY_NEW_GAME, "Play a new game", True),
--            (keys.KEY_CONTINUE, "Continue last game", constants.SAVE_PATH.exists()),
+-            (keys.KEY_CONTINUE, "Continue last game", config.SAVE_PATH.exists()),
 -            (keys.KEY_QUIT_GAME, "Quit", True),
 +            (keys.KEY_NEW_GAME,  Messages.current.MENU_NEW_GAME, True),
-+            (keys.KEY_CONTINUE,  Messages.current.MENU_CONTINUE, constants.SAVE_PATH.exists()),
++            (keys.KEY_CONTINUE,  Messages.current.MENU_CONTINUE, config.SAVE_PATH.exists()),
 +            (
 +                keys.DEBUG_KEY_LANGUAGE,
 +                Messages.current.MENU_LANGUAGE.format(language=get_current_language_name()),
@@ -850,7 +849,6 @@ The message log itself is intentionally not retranslated. A line that was writte
 
     ![In Game F12](images/append_10_game_f12.png)
 
-
 ---
 
 ## Moving The Game Text
@@ -860,7 +858,7 @@ With `Messages.current` in place, most of what is left is repetitive: find a har
 `game/setup_game.py`:
 
 ```diff
-+from game.constants.messages import Messages
++from game.data.messages import Messages
 +
  def new_game() -> Engine:
      ...
@@ -1024,12 +1022,12 @@ The two places `MainMenuState` opens that popup also localize:
 
 ```diff
  case keys.KEY_CONTINUE:
-     if not constants.SAVE_PATH.exists():
+     if not config.SAVE_PATH.exists():
 -        return PopupMessageState(self, "No saved game to load.")
 +        return PopupMessageState(self, Messages.current.NO_SAVED_GAME)
 
      try:
-         return load_game(constants.SAVE_PATH)
+         return load_game(config.SAVE_PATH)
 
      except FileNotFoundError:
 -        return PopupMessageState(self, "No saved game to load.")
@@ -1062,11 +1060,11 @@ The two places `MainMenuState` opens that popup also localize:
 
 ### Text That Was In `config.py`
 
-Part 11 stored `EXPLORATION_MESSAGES` in `game/constants/config.py`, next to the XP thresholds that choose when those messages fire. That made sense before localization. Now the XP thresholds stay in `config.py`, but the prose moves to `messages.py`. Delete the `EXPLORATION_MESSAGES` tuple from `config.py` and update the one place that read it, in `game/engine.py`:
+Part 11 stored `EXPLORATION_MESSAGES` in `game/data/config.py`, next to the XP thresholds that choose when those messages fire. That made sense before localization. Now the XP thresholds stay in `config.py`, but the prose moves to `messages.py`. Delete the `EXPLORATION_MESSAGES` tuple from `config.py` and update the one place that read it, in `game/engine.py`:
 
 ```diff
  MessageLog.add_message(
--    constants.EXPLORATION_MESSAGES[index].format(xp=xp_reward),
+-    config.EXPLORATION_MESSAGES[index].format(xp=xp_reward),
 +    Messages.current.EXPLORATION_MESSAGES[index].format(xp=xp_reward),
      message_color,
  )

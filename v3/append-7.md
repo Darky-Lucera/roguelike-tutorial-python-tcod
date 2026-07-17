@@ -1,6 +1,6 @@
 # Appendix 7: Using Graphics Instead of Characters
 
-Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2), the `game/constants/` package (Part 5), and the centralized `RES_DIR` (Part 10). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
+Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2), the `game/data/` package (Part 5), and the centralized `RES_DIR` (Part 10). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
 
 Part 1 ends with a quick trick: point a free codepoint at a tile in the sheet and draw `chr(0xE000)` instead of `"@"`. That is enough to see a sprite, but it does not scale to a full game with dozens of entities, monsters that face left and right, and a switch to flip the whole game back to ASCII.
 
@@ -34,7 +34,7 @@ Rather than hunt for gaps, take the sprite ids from the Unicode **Private Use Ar
 
 ## A `sprites` module
 
-Collect every sprite decision in one place: `game/constants/sprites.py`. Two pieces live here: a set of named codepoints, and a function that wires them to the sheet.
+Collect every sprite decision in one place: `game/data/sprites.py`. Two pieces live here: a set of named codepoints, and a function that wires them to the sheet.
 
 ```python
 from __future__ import annotations
@@ -172,8 +172,8 @@ Load the right sheet for the current mode, with its matching row count, and call
 
 ```diff
      tileset = tcod.tileset.load_tilesheet(
--        constants.RES_DIR / "dejavu12x12_gs_tc.png",
-+        constants.RES_DIR / ("dejavu12x12_gs_tc_ex.png" if sprites.USE_SPRITES else "dejavu12x12_gs_tc.png"),
+-        config.RES_DIR / "dejavu12x12_gs_tc.png",
++        config.RES_DIR / ("dejavu12x12_gs_tc_ex.png" if sprites.USE_SPRITES else "dejavu12x12_gs_tc.png"),
          32,
 -        8,
 +        (13 if sprites.USE_SPRITES else 8), # 5 Monster rows
