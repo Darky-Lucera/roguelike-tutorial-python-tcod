@@ -668,11 +668,11 @@ Update `Fighter.die()` in `game/entities/components/fighter.py` to write to the 
 
 ```diff
 -def die(self) -> None:
+-    # Differentiate the message: the player gets a second-person line, enemies the third-person one
 -    if self.entity.ai:
 -        death_message = f"The {self.entity.name} is dead!"
 -    else:
 -        death_message = "You died!"
--
 -    print(death_message)
 +def die(self) -> None:
 +    if self.entity.ai is None:

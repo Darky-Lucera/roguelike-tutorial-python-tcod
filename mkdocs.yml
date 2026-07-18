@@ -74,6 +74,7 @@ plugins:
       fallback_to_build_date: true
       type: date                 # format: May 19, 2026
   - glightbox
+  - open-in-new-tab
 
 nav:
   - Home: index.md

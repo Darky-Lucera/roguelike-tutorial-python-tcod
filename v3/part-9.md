@@ -709,7 +709,7 @@ class ConfusionConsumable(Consumable):
         if action.target_pos is None:
             raise Impossible("You need to select a target")
 
-        target = engine.game_map.get_actor_at_location(*action.target_pos)
+        target = engine.game_map.get_actor_at(*action.target_pos)
 
         if not target:
             raise Impossible("You must select an enemy to target.")

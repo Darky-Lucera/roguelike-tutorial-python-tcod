@@ -145,8 +145,8 @@ The entity weight tables stay where Part 5 Exercise 2 put them: in `game/entitie
 ```diff
 -# Part-5. Exercise 2: Weighted monster table
 -monster_chances = [
--    (orc,   25),
--    (troll, 75),
+-    (orc,   75),
+-    (troll, 25),
 -]
 +# Spawn weights by floor: (floor_minimum, weight), sorted by floor
 +monster_chances = {

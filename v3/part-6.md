@@ -24,7 +24,7 @@ Components keep combat data separate from the base `Entity`. In this part, entit
 !!! info "Design decision: Fighter component + Actor subclass"
     This is composition-over-inheritance applied where it pays off. The alternative is an `Actor` base class with HP and a separate `Item` hierarchy with its own data: two parallel trees that grow apart over time. We keep one `Entity` base, introduce `Actor` only as the small specialization that bundles the components needed to fight, and let new systems (a `Poisoned` status, a `Trader` component) be added by writing a component class instead of editing the hierarchy.
 
-    At a larger scale than this tutorial, many engines drop the entity class hierarchy entirely and switch to an entity-component-system (ECS) library such as `tcod-ecs`, where an entity is only an ID and every capability, including position and HP, is a component. That trade pays off once a project has far more entity types and cross-cutting systems than we do here; for this tutorial's scope, `Entity`/`Actor` plus components is the simpler choice.
+    At a larger scale than this tutorial, many engines drop the entity class hierarchy entirely and switch to an entity-component-system (ECS) library such as [tcod-ecs](https://github.com/HexDecimal/python-tcod-ecs), where an entity is only an ID and every capability, including position and HP, is a component. That trade pays off once a project has far more entity types and cross-cutting systems than we do here; for this tutorial's scope, `Entity`/`Actor` plus components is the simpler choice.
 
 !!! info "Pattern: Component"
     `Fighter` and `AI` are *components*: interchangeable behaviors attached to entities at construction time. The entity does not inherit capabilities; it delegates to them. This keeps the base `Entity` small and lets new systems be added as new component classes without touching the entity hierarchy. `Inventory` joins this same pattern in Part 8.
@@ -42,12 +42,12 @@ From this part on, everything that defines what entities *are* lives under `game
 ```text
 game/entities/
 ├── entity.py          ← was game/entity.py
-├── render_order.py
+├── render_order.py    ← new this part
 ├── factories.py       ← was game/entity_factories.py
 └── components/
-    ├── base_component.py
+    ├── base_component.py ← new this part
     ├── ai.py
-    └── fighter.py     ← new this part
+    └── fighter.py        ← new this part
 ```
 
 Move `game/entity.py` to `game/entities/entity.py` and `game/entity_factories.py` to `game/entities/factories.py` (the `entity_` prefix is redundant inside `entities/`). The `game/components/` folder also moves to `game/entities/components/`. Create empty `__init__.py` files in both new folders so Python treats them as packages:
@@ -57,7 +57,7 @@ game/entities/__init__.py
 game/entities/components/__init__.py
 ```
 
-All code blocks in this part already use the new paths. Two files outside `game/entities/` import the moved modules and need their import lines updated.
+All code blocks in this part already use the new paths. `main.py`, `map_generator.py`, and `engine.py`'s import line are not otherwise touched in this part, so we fix them right now; every other file that still imports `game.entity`, `game.entity_factories`, or `game.components` (`actions.py`, `game_map.py`, and `entity.py`'s own internal import) gets its import line fixed as we reach it below.
 
 Update `main.py`:
 
@@ -71,13 +71,43 @@ Update `main.py`:
 +    player = copy.deepcopy(factories.player)
 ```
 
-Update the top-level import in `game/map/map_generator.py`:
+Update the imports at the top of `game/map/map_generator.py`:
+
+```diff
+-from game import entity_factories
+-from game.entity import Entity
++from game.entities import factories
++from game.entities.entity import Entity
+ from game.map import tile_types
+```
+
+`entity_factories` renamed to `factories` too, so update every call site in `place_entities`:
+
+```diff
+         if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
+             if rng.random() < 0.8:  # 80% chance of troll
+-                entity_factories.troll.spawn(dungeon, x, y)
++                factories.troll.spawn(dungeon, x, y)
+
+             else:
+-                entity_factories.orc.spawn(dungeon, x, y)
++                factories.orc.spawn(dungeon, x, y)
+```
+
+!!! tip "If you completed the Part 5 exercises"
+    Rename `entity_factories` to `factories` in that code too, wherever you spawn from the weighted table (Exercise 2) or the chest template (Exercise 3).
+
+`game/engine.py` also imports `Entity` at the top level (not inside `TYPE_CHECKING`, so it runs every time the game starts). Fix its path now too, even though the rest of that file is not touched until later in this part:
 
 ```diff
 -from game.entity import Entity
 +from game.entities.entity import Entity
- from game.map import tile_types
 ```
+
+!!! tip "Run it now"
+    If you run the game at this point, you can check that nothing has changed: same dungeon, same player and enemies, same combat-free bumping into orcs and trolls as at the end of Part 5. That is exactly what success looks like here. So far this part was a *refactor*: it moved files and fixed the imports that pointed at them, without changing what the code does.
+
+    If you get a `ModuleNotFoundError` instead, it is almost certainly a leftover `game.entity`, `game.entity_factories`, or `game.components` import somewhere outside the three files above; the traceback tells you exactly which file and line to fix.
 
 ---
 
@@ -116,7 +146,8 @@ Update `game/entities/components/ai.py`:
 
  if TYPE_CHECKING:
      from game.engine import Engine
-     from game.entities.entity import Entity
+-    from game.entity import Entity
++    from game.entities.entity import Entity
 
 
 -class BaseAI:
@@ -192,7 +223,8 @@ Update `game/entities/entity.py`:
 +from game.entities.render_order import RenderOrder
 
  if TYPE_CHECKING:
-     from game.entities.components.ai import BaseAI
+-    from game.components.ai import BaseAI
++    from game.entities.components.ai import BaseAI
      from game.map.game_map import GameMap
 
 
@@ -210,15 +242,15 @@ Update `game/entities/entity.py`:
 +        render_order: RenderOrder = RenderOrder.UNKNOWN,
          ai: BaseAI | None         = None,
      ) -> None:
-         self.x     = x
-         self.y     = y
-         self.char  = char
-         self.color = color
-         self.name  = name
+         self.x               = x
+         self.y               = y
+         self.char            = char
+         self.color           = color
+         self.name            = name
          self.blocks_movement = blocks_movement
          self.stays_visible   = stays_visible
 +        self.render_order    = render_order
-         self.ai    = ai
+         self.ai              = ai
 ```
 
 The default value for render_order is `UNKNOWN` because plain `Entity` objects have not declared what kind of thing they are yet. Rendering them last is a useful debugging default: if you forgot to assign a more specific order, the entity stays visible instead of being hidden under actors or corpses. Specialized classes and factories should still pass a deliberate render order when they know one.
@@ -232,8 +264,8 @@ Create `game/entities/components/fighter.py`:
 ```python
 from __future__ import annotations
 
-from game.entities.components.base_component import BaseComponent
 from game.data import colors, sprites
+from game.entities.components.base_component import BaseComponent
 from game.entities.render_order import RenderOrder
 
 
@@ -263,21 +295,25 @@ class Fighter(BaseComponent):
             death_message = "You died!"
         print(death_message)
 
-        self.entity.char = sprites.CORPSE
-        self.entity.color = colors.CORPSE
+        self.entity.char            = sprites.CORPSE
+        self.entity.color           = colors.CORPSE
         self.entity.blocks_movement = False
-        self.entity.ai = None
-        self.entity.name = f"remains of {self.entity.name}"
-        self.entity.render_order = RenderOrder.CORPSE
+        self.entity.ai              = None
+        self.entity.name            = f"remains of {self.entity.name}"
+        self.entity.render_order    = RenderOrder.CORPSE
 ```
 
 !!! question "What does `@hp.setter` do?"
     `@property` lets us read `fighter.hp` like a normal attribute even though it calls the `hp()` method. `@hp.setter` defines what happens when code assigns to that same property, like `fighter.hp -= damage`. The setter clamps the value between `0` and `max_hp`, stores it in the private backing field `_hp`, and triggers `die()` when HP reaches zero. We use `_hp` inside the setter because assigning to `self.hp` there would call the setter again forever.
 
+    A setter that triggers `die()` is a hidden side effect: assigning to `fighter.hp` silently transforms the entity, kills it, and prints a message, none of which is visible at the call site.
+
+    Some teams ban this on principle and require an explicit call instead, like `take_damage()` or `apply_death()`. We accept the hidden trigger here because it makes the invariant "HP 0 means dead" impossible to bypass: every code path that drains HP, present or future, gets death handling for free. Part 7 adds the explicit verb anyway, `take_damage()`, so call sites read clearly while the setter still guarantees the invariant underneath.
+
 With that in place, combat code can reduce HP directly and let the component handle the consequences.
 
 !!! info "Player and enemies share the same death path"
-    `die()` runs for both the player and enemies: same visual change (a red `%`), same name update, same render order. The only difference is the message (`"You died!"` vs `"The Orc is dead!"`), which we pick by checking `self.entity.ai`: the player has no AI, enemies do. In Part 7 we will replace the `entity.ai` check with `entity is engine.player`, which reads more directly once the engine is in scope.
+    `die()` runs for both the player and enemies: same visual change (a red `%`), same name update, same render order. The only difference is the message (`"You died!"` vs `"The Orc is dead!"`), which we pick by checking `self.entity.ai`: the player has no AI, enemies do. In Part 7 this becomes `self.entity.ai is None`, the same idea spelled out explicitly, and each branch gets its own message color. If you ever add a player-controlling AI (a "possession" scroll, an autopilot mode), this check stops working and needs to identify the player some other way.
 
 ---
 
@@ -339,43 +375,52 @@ We wire both back-references the same way: `self.fighter.entity = self` and `sel
 
 ---
 
-## Setting up `entities/factories.py`
+## Updating `entities/factories.py`
 
-```python
-from __future__ import annotations
+`player`, `orc`, and `troll` become `Actor` instances with a `Fighter` component. Update `game/entities/factories.py`:
 
-from game.data import colors, sprites
-from game.entities.components.ai import HostileEnemy
-from game.entities.components.fighter import Fighter
-from game.entities.entity import Actor, Entity
-from game.entities.render_order import RenderOrder
+```diff
+ from __future__ import annotations
 
-player = Actor(
-    char            = sprites.PLAYER,
-    color           = colors.PLAYER,
-    name            = "Player",
-    ai              = None,  # player is controlled by the keyboard
-    fighter         = Fighter(hp=30, defense=2, attack=5),
-)
+-from game.components.ai import HostileEnemy
+ from game.data import colors, sprites
+-from game.entity import Entity
++from game.entities.components.ai import HostileEnemy
++from game.entities.components.fighter import Fighter
++from game.entities.entity import Actor
 
-orc = Actor(
-    char            = sprites.ORC,
-    color           = colors.ORC,
-    name            = "Orc",
-    ai              = HostileEnemy(),
-    fighter         = Fighter(hp=18, defense=1, attack=4),
-)
+-player = Entity(
++player = Actor(
+     char            = sprites.PLAYER,
+     color           = colors.PLAYER,
+     name            = "Player",
+-    blocks_movement = True,
++    ai              = None,  # player is controlled by the keyboard
++    fighter         = Fighter(hp=30, defense=2, attack=5),
+ )
 
-troll = Actor(
-    char            = sprites.TROLL,
-    color           = colors.TROLL,
-    name            = "Troll",
-    ai              = HostileEnemy(),
-    fighter         = Fighter(hp=12, defense=0, attack=3),
-)
+-orc = Entity(
++orc = Actor(
+     char            = sprites.ORC,
+     color           = colors.ORC,
+     name            = "Orc",
+-    blocks_movement = True,
+     ai              = HostileEnemy(),
++    fighter         = Fighter(hp=18, defense=1, attack=4),
+ )
+
+-troll = Entity(
++troll = Actor(
+     char            = sprites.TROLL,
+     color           = colors.TROLL,
+     name            = "Troll",
+-    blocks_movement = True,
+     ai              = HostileEnemy(),
++    fighter         = Fighter(hp=12, defense=0, attack=3),
+ )
 ```
 
-Orcs are harder to kill (more HP, some defense) and hit harder than trolls. These starting numbers are deliberately simple so we can verify the combat system works; Part 12 rebalances them alongside the procedural difficulty tables.
+Orcs are harder to kill (more HP, some defense) and hit harder than trolls, yet the troll is the common spawn (80% in Part 5's `place_entities`). That is deliberate, not a mismatch: the troll is the weak enemy you meet constantly, and its real trick, fleeing at low HP and regenerating, arrives in the exercises below and gets a full role in Part 12. These starting numbers are deliberately simple so we can verify the combat system works; Part 12 rebalances them alongside the procedural difficulty tables.
 
 `blocks_movement=True` disappeared from `player`, `orc`, and `troll` because `Actor.__init__` now passes it to `Entity` internally. Anything that can fight blocks movement by default.
 
@@ -393,8 +438,8 @@ Orcs are harder to kill (more HP, some defense) and hit harder than trolls. Thes
     ```python
     # Part-5. Exercise 2: Weighted monster table
     monster_chances = [
-        (orc,   25),
-        (troll, 75),
+        (orc,   75),
+        (troll, 25),
     ]
 
     # Part-5. Exercise 3: Passive blocking entity
@@ -447,6 +492,8 @@ Add a TYPE_CHECKING import for `Actor` to `game/entities/components/fighter.py` 
 
 The damage formula is classic roguelike: `attack - defense`. If the attacker's `attack` does not exceed the defender's defense, the attack deals 0 damage. Simple and predictable.
 
+If you want to understand how this formula behaves and see some alternatives (smoothed curves, attacker-scaled defense, and more), see [Appendix 1: Damage Formulas](append-1.md).
+
 `MeleeAction` now only resolves who is fighting and delegates. It needs the `Actor` class to check that both sides can fight, so import it at the top of `game/actions.py`:
 
 ```diff
@@ -457,7 +504,8 @@ The damage formula is classic roguelike: `attack - defense`. If the attacker's `
 
  if TYPE_CHECKING:
      from game.engine import Engine
-     from game.entities.entity import Entity
+-    from game.entity import Entity
++    from game.entities.entity import Entity
 ```
 
 Then rewrite `MeleeAction`:
@@ -481,6 +529,9 @@ class MeleeAction(ActionWithDirection):
 
 We check `isinstance` for **both** sides. In practice today only `Actor` instances can fight, so bumping into a blocking-but-not-fighting entity (a chest, a door) does nothing instead of crashing. If you kept the Part 5 chest exercise, this changes its behavior: the chest still blocks movement, but it no longer triggers a melee attack because it is not combat-capable. Later, those entities can get their own interaction action.
 
+!!! tip "Run it now"
+    This is a good moment to run the game. Combat already works: bumping into an enemy deals real damage (watch the messages in the terminal) and an enemy reduced to 0 HP turns into a red `%`. The enemies still chase you in a greedy straight line and get stuck on corners; proper A* pathfinding is coming up next.
+
 ---
 
 ## GameMap: the actors property
@@ -497,7 +548,8 @@ Update `game/map/game_map.py`:
  from game.map import tile_types
 
  if TYPE_CHECKING:
-     from game.entities.entity import Entity
+-    from game.entity import Entity
++    from game.entities.entity import Entity
 
 
  class GameMap:
@@ -511,10 +563,39 @@ Update `game/map/game_map.py`:
 +        )
 ```
 
-`actors` filters `self.entities` down to the `Actor` instances that are still alive (`is_alive` comes from the `Actor` class). The AI uses it next for pathfinding, and the engine will use it to run enemy turns.
+`actors` filters `self.entities` down to the `Actor` instances that are still alive (`is_alive` comes from the `Actor` class). The AI uses it next for pathfinding, and the engine uses it right away for enemy turns.
 
-!!! tip "Run it now"
-    This is a good moment to run the game. Combat already works: bumping into an enemy deals real damage (watch the messages in the terminal) and an enemy reduced to 0 HP turns into a red `%`. The enemies chase you, but they still move in a greedy straight line and get stuck on corners. The next section replaces that greedy step with proper A* pathfinding.
+Wire it into `Engine` now, so `handle_enemy_turns` iterates the same `Actor` instances that the pathfinding coming up next expects, instead of the raw `entities` set:
+
+```diff
+-from game.entity import Entity
++from game.entities.entity import Actor
+ from game.input_handlers import EventHandler
+ from game.map.game_map import GameMap
+
+
+ class Engine:
+
+     def __init__(
+         self,
+         game_map: GameMap,
+-        player: Entity,
++        player: Actor,
+     ) -> None:
+         ...
+
+     def handle_enemy_turns(self) -> None:
+-        for entity in set(self.game_map.entities) - {self.player}:
+-            if entity.ai:
+-                entity.ai.perform(self, entity)
++        for actor in set(self.game_map.actors) - {self.player}:
++            if actor.ai:
++                actor.ai.perform(self, actor)
+```
+
+If you completed the variable torch radius or fading memory exercises in Part 4, keep the `fov_radius`, `fading_memory`, and `memory_duration` parameters and their assignments in `Engine.__init__()`. This diff only changes the player type and the enemy turn loop.
+
+---
 
 ## Proper pathfinding for enemies
 
@@ -567,9 +648,17 @@ class BaseAI(BaseComponent):
         # [1:] drops the starting position (current tile)
         path: list[list[int]] = pathfinder.path_to((dest_x, dest_y))[1:].tolist()
 
+        # pylint: disable=unnecessary-comprehension
         return [(x, y) for x, y in path]
+```
 
+Adding `10` to the cost of an occupied tile is high enough that the pathfinder prefers to route around another entity, yet it still passes through when there is truly no other way. `tcod.path.SimpleGraph` creates a weighted graph from the cost array. Cardinal moves cost 2, diagonal moves cost 3 (this approximates real distance without floating point). `pathfinder.path_to` returns the full path including the start; we drop the first element (`[1:]`) since that is the entity's current position. If the entity is already standing on the destination, that leaves an empty list and the caller simply does nothing.
 
+If you run `pylint`, it flags the final line as `unnecessary-comprehension`, assuming `[(x, y) for x, y in path]` is just a roundabout copy of `path` you could replace with `list(path)`. That is a false positive: `path` holds `list[int]` pairs, and the comprehension turns each pair into a `tuple[int, int]`, which is what the return type promises. `list(path)` would keep the inner lists instead, silently breaking that contract. The `# pylint: disable` comment silences the check on this one line rather than leaving you hunting for a "fix" that would make the code worse.
+
+`HostileEnemy` puts `get_path_to` to work, falling back to it only when the player is not already adjacent:
+
+```python
 class HostileEnemy(BaseAI):
 
     def perform(self, engine: Engine, entity: Actor) -> None:
@@ -594,8 +683,6 @@ class HostileEnemy(BaseAI):
             ).perform(engine, entity)
 ```
 
-Adding `10` to the cost of an occupied tile is high enough that the pathfinder prefers to route around another entity, yet it still passes through when there is truly no other way. `tcod.path.SimpleGraph` creates a weighted graph from the cost array. Cardinal moves cost 2, diagonal moves cost 3 (this approximates real distance without floating point). `pathfinder.path_to` returns the full path including the start; we drop the first element (`[1:]`) since that is the entity's current position. If the entity is already standing on the destination, that leaves an empty list and the caller simply does nothing.
-
 !!! note "Enemies forget you the instant you leave their sight"
     The opening `if not engine.game_map.visible[entity.x, entity.y]: return` means a monster freezes the moment it loses sight of you, even if it was chasing you a tile ago. This keeps the AI as simple as it can be while you learn the pattern, but it is not very convincing: something that just watched you round a corner should at least walk to where you were. Part 12 fixes this in its Exercise 4, *Monsters that remember*, by giving each enemy a `last_known_position` to head toward. That one change also turns breaking line of sight into a tactic, letting you lure monsters out of a room you would rather not fight in.
 
@@ -605,10 +692,12 @@ Adding `10` to the cost of an occupied tile is high enough that the pathfinder p
 
 Two more changes to `GameMap`. First, a small location lookup that later targeting code will use. Second, rendering should draw entities with a higher `render_order` last, so they appear on top.
 
+`get_actor_at` and the `actors` property both scan every entity on the floor. A linear scan is fine at this scale (dozens of entities); if your game grows to hundreds of entities per floor, the standard fix is a position-keyed dict or spatial grid kept in sync on every move.
+
 Update `game/map/game_map.py`:
 
 ```diff
-+    def get_actor_at_location(self, x: int, y: int) -> Actor | None:
++    def get_actor_at(self, x: int, y: int) -> Actor | None:
 +        for actor in self.actors:
 +            if actor.x == x and actor.y == y:
 +                return actor
@@ -621,6 +710,7 @@ Update `game/map/game_map.py`:
              choicelist = [self.tiles["in_fov"], self.tiles["out_of_fov"]],
              default    = tile_types.UNSEEN,
          )
+
 -        for entity in self.entities:
 -            if self.visible[entity.x, entity.y]:
 +        for entity in sorted(self.entities, key=lambda e: e.render_order.value):
@@ -640,6 +730,9 @@ Sorting by `render_order.value` ensures corpses (`CORPSE=1`) render before items
 
 When the player's HP hits zero, `Fighter.die()` already runs: the player turns into a red `%` and the message `"You died!"` is printed. What we still need is to **stop accepting movement input** so the player cannot keep walking around as a corpse.
 
+!!! note "A very short-lived haunting"
+    Without this fix, dying does not actually stop you: `blocks_movement=False` lets your corpse walk anywhere, and nothing in `MeleeAction` checks `is_alive`, so a dead player can still attack. If your corpse finishes off the very enemy that killed you, its corpse also stops blocking, and since both corpses share `render_order.CORPSE`, they can land on the same tile with only one `%` drawn (which one wins is not guaranteed, since `entities` is a `set`). For one confusing turn, it looks like you are dragging the body of whoever killed you around the dungeon.
+
 Update `game/input_handlers.py`. `EventHandler` stays exactly as it is; we only add a `GameOverEventHandler` subclass below it that ignores every key except `Escape`:
 
 ```python
@@ -653,23 +746,14 @@ class GameOverEventHandler(EventHandler):
         return None  # All other keys are ignored
 ```
 
-Now update `Engine` to swap the handler after each turn if the player is no longer alive, and at the same time switch `handle_enemy_turns` to iterate `actors` (which already filters out corpses):
+Now update `Engine` to swap the event handler after each turn if the player is no longer alive:
 
 ```diff
--from game.entities.entity import Entity
-+from game.entities.entity import Actor
 -from game.input_handlers import EventHandler
 +from game.input_handlers import EventHandler, GameOverEventHandler
 
  class Engine:
-
-     def __init__(
-         self,
-         game_map: GameMap,
--        player: Entity,
-+        player: Actor,
-     ) -> None:
-         ...
+     ...
 
      def handle_events(self, events: Iterable[Any]) -> None:
          for event in events:
@@ -682,17 +766,7 @@ Now update `Engine` to swap the handler after each turn if the player is no long
 +
 +            if not self.player.is_alive:
 +                self.event_handler = GameOverEventHandler()
-
-     def handle_enemy_turns(self) -> None:
--        for entity in set(self.game_map.entities) - {self.player}:
--            if entity.ai:
--                entity.ai.perform(self, entity)
-+        for actor in set(self.game_map.actors) - {self.player}:
-+            if actor.ai:
-+                actor.ai.perform(self, actor)
 ```
-
-If you completed the variable torch radius or fading memory exercises in Part 4, keep the `fov_radius`, `fading_memory`, and `memory_duration` parameters and their assignments in `Engine.__init__()`. This diff only changes the player type and the death handler.
 
 We check `is_alive` **after** `handle_enemy_turns`, so a player killed by an enemy on its turn is detected before the next event is processed. After this point, only `Escape` is accepted. The player is stuck looking at their remains.
 
@@ -713,6 +787,8 @@ Run `python main.py`:
 
 !!! info "Player HP is not displayed yet"
     There is no health bar. You can track player HP by adding `print(f"HP: {engine.player.fighter.hp}")` temporarily in `handle_events`. Part 7 adds the full UI.
+
+<!-- TODO: screenshot -->
 
 ---
 
@@ -743,7 +819,7 @@ Combat is now fully functional. Key additions:
 **File structure**:
 
 ```text
-main.py
+main.py                               ← modified
 game/
 ├── __init__.py
 ├── actions.py                  ← modified
@@ -768,7 +844,7 @@ game/
     ├── __init__.py
     ├── game_map.py             ← modified
     ├── tile_types.py
-    └── map_generator.py
+    └── map_generator.py        ← modified
 ```
 
 ---

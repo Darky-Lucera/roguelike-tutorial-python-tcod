@@ -743,11 +743,11 @@ def place_entities(
         y = rng.randint(room.y1 + 1, room.y2 - 1)
 
         if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
-            if rng.random() < 0.8:  # 80% chance of orc
-                entity_factories.orc.spawn(dungeon, x, y)
+            if rng.random() < 0.8:  # 80% chance of troll
+                entity_factories.troll.spawn(dungeon, x, y)
 
             else:
-                entity_factories.troll.spawn(dungeon, x, y)
+                entity_factories.orc.spawn(dungeon, x, y)
 ```
 
 `place_entities` takes the same `rng` instance `generate_dungeon` already owns, instead of calling the shared `random` module. This keeps monster placement reproducible from the same dungeon seed, without reseeding anything global.
@@ -1011,11 +1011,11 @@ game/
 
 1. **Minimum monsters per room**:
 
-    Add a `min_monsters` parameter to `place_entities` and use `rng.randint(min_monsters, max_monsters)`. Keep it at `0` by default, then try `1` and observe how much more crowded and dangerous the dungeon feels.
+    Add a `min_monsters` parameter to `place_entities` and use `rng.randint(min_monsters, max_monsters)`. Keep it at `0`, then try `1` and observe how much more crowded and dangerous the dungeon feels.
 
 2. **Weighted monster table**:
 
-    The current 80/20 split is hardcoded. Replace it with a list of `(entity_template, weight)` tuples and use `rng.choices(population, weights)` to pick. This makes adding new monster types a one-line change.
+    The current 80/20 split (troll common, orc rare) is hardcoded. Replace it with a list of `(entity_template, weight)` tuples and use `rng.choices(population, weights)` to pick. Try flipping the ratio, e.g. `(orc, 75), (troll, 25)`, so the orc stops being a rare sight. This makes adding new monster types a one-line change.
 
 3. **Passive blocking entities**:
 
