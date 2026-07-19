@@ -952,7 +952,7 @@ Run `python main.py`:
 - [ ] When an adjacent enemy takes a turn, it prints `"Orc attacks Player!"` (the `MeleeAction` stub)
 - [ ] Diagonal movement works (numpad or vi keys)
 
-<!-- TODO: screenshot -->
+![Screenshot 1](images/part_5_screenshot_1.png)
 
 ---
 

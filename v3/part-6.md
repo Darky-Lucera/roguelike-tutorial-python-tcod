@@ -788,7 +788,7 @@ Run `python main.py`:
 !!! info "Player HP is not displayed yet"
     There is no health bar. You can track player HP by adding `print(f"HP: {engine.player.fighter.hp}")` temporarily in `handle_events`. Part 7 adds the full UI.
 
-<!-- TODO: screenshot -->
+![Screenshot 1](images/part_6_screenshot_1.png)
 
 ---
 
