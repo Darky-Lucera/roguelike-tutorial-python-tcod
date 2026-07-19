@@ -475,24 +475,35 @@ Add a TYPE_CHECKING import for `Actor` to `game/entities/components/fighter.py` 
 +    from game.entities.entity import Actor
 ```
 
+The obvious formula here is `attack - defense`: subtract one stat from the other. It reads well, but it has a structural flaw. The moment `defense` reaches `attack`, every hit deals exactly `0`, permanently, no matter how the fight got there. A troll with `attack = 3` facing a player whose `defense` has grown to `3` or more, from armor added in a later part, cannot hurt that player at all anymore: not weakened, not risky, just harmless. Subtraction has a floor, and once a matchup lands on it, that matchup is over for the rest of the game.
+
+`melee_attack` uses a formula where defense reduces damage as a ratio of the attacker's own power instead of a flat amount subtracted from it:
+
 ```python
     def melee_attack(self, target: Actor) -> None:
-        damage = self.attack - target.fighter.defense
+        damage = (self.attack * self.attack) / (self.attack + target.fighter.defense)
         attack_msg = f"{self.entity.name.capitalize()} attacks {target.name}"
 
-        if damage > 0:
-            print(f"{attack_msg} for {damage:.1f} hit points.")
-            target.fighter.hp -= damage
-
-        else:
-            print(f"{attack_msg} but does no damage.")
+        print(f"{attack_msg} for {damage:.1f} hit points.")
+        target.fighter.hp -= damage
 ```
 
 `self.entity` is the attacker (`BaseComponent` always knows its owner). `die()` still triggers automatically through the `hp` setter when HP reaches zero.
 
-The damage formula is classic roguelike: `attack - defense`. If the attacker's `attack` does not exceed the defender's defense, the attack deals 0 damage. Simple and predictable.
+Unlike `attack - defense`, this formula never reaches exactly `0` as long as `attack > 0`: `defense` can only shrink the result toward zero, it can never cross it. That is also why `melee_attack` no longer branches on `damage > 0`: there is no "no damage" case left to report, only larger or smaller hits.
 
-If you want to understand how this formula behaves and see some alternatives (smoothed curves, attacker-scaled defense, and more), see [Appendix 1: Damage Formulas](append-1.md).
+The idea: instead of asking "how much defense do you have", it asks "how much defense do you have *relative to what is hitting you*". A `defense` of `2` barely matters against an attacker with `attack = 20`, but meaningfully softens a hit from an attacker with `attack = 3`. Defense still matters, it just never becomes an absolute wall.
+
+At this chapter's numbers, the two formulas mostly agree, but the trend already shows:
+
+| Matchup | Linear (`attack - defense`) | New (`attack² / (attack + defense)`) |
+| --- | ---: | ---: |
+| Player → Orc | `5 - 1 = 4` | `25 / 6 ≈ 4.2` |
+| Player → Troll | `5 - 0 = 5` | `25 / 5 = 5.0` |
+| Orc → Player | `4 - 2 = 2` | `16 / 6 ≈ 2.7` |
+| Troll → Player | `3 - 2 = 1` | `9 / 5 = 1.8` |
+
+If you want the full comparison (a third, simpler-to-tune variant, plus rounding rules, minimum damage, critical hits, and more), see [Appendix 1: Damage Formulas](append-1.md).
 
 `MeleeAction` now only resolves who is fighting and delegates. It needs the `Actor` class to check that both sides can fight, so import it at the top of `game/actions.py`:
 
@@ -776,8 +787,8 @@ We check `is_alive` **after** `handle_enemy_turns`, so a player killed by an ene
 
 Run `python main.py`:
 
-- [ ] Walking into an orc prints: `"Player attacks Orc for 4.0 hit points."` (the damage shows a decimal because attack and defense are stored as floats)
-- [ ] Orcs attack back when adjacent: `"Orc attacks Player for 2.0 hit points."`
+- [ ] Walking into an orc prints: `"Player attacks Orc for 4.2 hit points."`
+- [ ] Orcs attack back when adjacent: `"Orc attacks Player for 2.7 hit points."`
 - [ ] When an enemy's HP reaches zero, it prints `"The Orc is dead!"` and its tile changes to a red `%`
 - [ ] Dead enemies no longer block movement: you can walk through corpses
 - [ ] Enemies navigate around corners and other entities (A* pathfinding)
@@ -798,7 +809,7 @@ Combat is now fully functional. Key additions:
 
 - **Fighter component**: owns HP, defense, attack, and triggers death at 0 HP
 - **Actor**: an `Entity` subclass that always has a Fighter and optionally AI
-- **Damage formula**: `attack - defense`, predictable and moddable
+- **Damage formula**: `attack² / (attack + defense)`, scales with the attacker so defense never blocks a hit outright
 - **A* pathfinding**: enemies route around obstacles via `tcod.path`
 - **RenderOrder**: enum that controls draw order on shared tiles
 - **GameOverEventHandler**: locks input after player death
@@ -862,7 +873,7 @@ game/
     Add `critical_chance: float = 0.1` and `critical_multiplier: float = 2.0` parameters to `Fighter.__init__()`, store them on the component, and update `melee_attack()` so it calculates `base_damage` first:
 
     ```python
-    base_damage = self.attack - target.fighter.defense
+    base_damage = (self.attack * self.attack) / (self.attack + target.fighter.defense)
 
     if random() < self.critical_chance:
         damage = base_damage * self.critical_multiplier
@@ -871,7 +882,7 @@ game/
         damage = base_damage
     ```
 
-    You will want a small `critical_hit` bool alongside `damage`: once the calculation is done, the number alone no longer tells you whether it was a crit. Import the function with `from random import random`, and print `"critical hit!"` only when the crit triggers and deals damage (a crit fully absorbed by the target's defense does 0 damage and should stay silent).
+    You will want a small `critical_hit` bool alongside `damage`: once the calculation is done, the number alone no longer tells you whether it was a crit. Import the function with `from random import random`, and print `"critical hit!"` whenever the crit triggers. `base_damage` is never `0` with this formula, so unlike a subtraction-based formula there is no absorbed-crit edge case to special-case.
 
 3. **Flee behavior**:
 

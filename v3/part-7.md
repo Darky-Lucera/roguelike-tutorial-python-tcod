@@ -648,18 +648,14 @@ Update `Fighter.melee_attack()` in `game/entities/components/fighter.py`:
 
 ```diff
  def melee_attack(self, target: Actor) -> None:
-     damage = self.attack - target.fighter.defense
+     damage = (self.attack * self.attack) / (self.attack + target.fighter.defense)
      attack_msg = f"{self.entity.name.capitalize()} attacks {target.name}"
 +    attack_color = colors.PLAYER_ATTACK if self.entity.ai is None else colors.ENEMY_ATTACK
-+
-     if damage > 0:
--        print(f"{attack_msg} for {damage:.1f} hit points.")
-+        MessageLog.add_message(f"{attack_msg} for {damage:.1f} hit points.", attack_color)
--        target.fighter.hp -= damage
-+        target.fighter.take_damage(damage)
-     else:
--        print(f"{attack_msg} but does no damage.")
-+        MessageLog.add_message(f"{attack_msg} but does no damage.", attack_color)
+
+-    print(f"{attack_msg} for {damage:.1f} hit points.")
+-    target.fighter.hp -= damage
++    MessageLog.add_message(f"{attack_msg} for {damage:.1f} hit points.", attack_color)
++    target.fighter.take_damage(damage)
 ```
 
 `self.entity.ai is None` identifies the player: the player never has an AI component, enemies always do. Player attacks use a lighter color (`PLAYER_ATTACK`) and enemy attacks a red tint (`ENEMY_ATTACK`), so the player can scan the log quickly. Damage now goes through `target.fighter.take_damage(damage)`, the method you just added, instead of assigning to `target.fighter.hp` directly.
@@ -703,7 +699,7 @@ Run `python main.py`:
 - [ ] Hovering the mouse over a visible entity shows its name on the panel's top row
 - [ ] On death, `"You died!"` appears in the log and the bar shows 0 HP
 - [ ] On death, the screen dims and a framed game-over panel with a drop shadow appears centered
-- [ ] Repeated identical messages stack: `"Orc attacks Player for 2.0 hit points. (x3)"`
+- [ ] Repeated identical messages stack: `"Orc attacks Player for 2.7 hit points. (x3)"`
 
 ---
 

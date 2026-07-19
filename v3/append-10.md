@@ -430,7 +430,6 @@ The classes above are a starting excerpt, enough to see the shape of the pattern
 
         ATTACK_CRITICAL              = "{attacker} attacks {target} for {damage:.1f} hit points. Critical hit!"
         ATTACK_HIT                   = "{attacker} attacks {target} for {damage:.1f} hit points"
-        ATTACK_MISS                  = "{attacker} attacks {target} but does no damage"
 
     class MessagesES(MessagesEN):
         MENU_NEW_GAME                = "Jugar una partida nueva"
@@ -570,7 +569,6 @@ The classes above are a starting excerpt, enough to see the shape of the pattern
 
         ATTACK_CRITICAL              = "{attacker} ataca a {target} causando {damage:.1f} puntos de daño. ¡Golpe crítico!"
         ATTACK_HIT                   = "{attacker} ataca a {target} causando {damage:.1f} puntos de daño"
-        ATTACK_MISS                  = "{attacker} ataca a {target} pero no causa daño"
     ```
 
 Two details are doing useful work here.
@@ -885,44 +883,36 @@ With `Messages.current` in place, most of what is left is repetitive: find a har
 
 `game/entities/components/fighter.py`:
 
-The old code built the message in two pieces: a shared prefix such as `f"{attacker_name} attacks {target.name}"`, plus a suffix that depended on the outcome (a critical hit, a normal hit, or a miss). That trick does not survive translation. Word order changes between languages: Spanish needs `"{attacker} ataca a {target} causando..."`, with the preposition `a` inserted before the target and the verb moved earlier in the sentence. A localized message has to be one whole-sentence template per outcome, never a prefix glued to a suffix:
+The old code built the message in two pieces: a shared prefix such as `f"{attacker_name} attacks {target.name}"`, plus a suffix that depended on the outcome (a critical hit or a normal hit). That trick does not survive translation. Word order changes between languages: Spanish needs `"{attacker} ataca a {target} causando..."`, with the preposition `a` inserted before the target and the verb moved earlier in the sentence. A localized message has to be one whole-sentence template per outcome, never a prefix glued to a suffix:
 
 ```diff
 -attack_msg    = f"{self.entity.name.capitalize()} attacks {target.name}"
 +attacker_name = self.entity.name.capitalize()
  attack_color  = colors.PLAYER_ATTACK if self.entity.ai is None else colors.ENEMY_ATTACK
 
- if damage > 0:
-     if critical_hit:
-         MessageLog.add_message(
--            f"{attack_msg} for {damage:.1f} hit points. Critical hit!",
-+            Messages.current.ATTACK_CRITICAL.format(attacker=attacker_name, target=target.name, damage=damage),
-             attack_color,
-         )
-
-     else:
-         MessageLog.add_message(
--            f"{attack_msg} for {damage:.1f} hit points.",
-+            Messages.current.ATTACK_HIT.format(attacker=attacker_name, target=target.name, damage=damage),
-             attack_color,
-         )
-
-     target.fighter.take_damage(damage, attacker=self.entity)
-
-     # Part-12. Exercise 2: New monster: Ghoul
-     if self.lifesteal > 0:
-         drained_life = damage * self.lifesteal
-         self.heal(drained_life)
+ if critical_hit:
+     MessageLog.add_message(
+-        f"{attack_msg} for {damage:.1f} hit points. Critical hit!",
++        Messages.current.ATTACK_CRITICAL.format(attacker=attacker_name, target=target.name, damage=damage),
+         attack_color,
+     )
 
  else:
      MessageLog.add_message(
--        f"{attack_msg} but does no damage.",
-+        Messages.current.ATTACK_MISS.format(attacker=attacker_name, target=target.name),
-         colors.ATTACK_MISS,
+-        f"{attack_msg} for {damage:.1f} hit points.",
++        Messages.current.ATTACK_HIT.format(attacker=attacker_name, target=target.name, damage=damage),
+         attack_color,
      )
+
+ target.fighter.take_damage(damage, attacker=self.entity)
+
+ # Part-12. Exercise 2: New monster: Ghoul
+ if self.lifesteal > 0:
+     drained_life = damage * self.lifesteal
+     self.heal(drained_life)
 ```
 
-Three templates instead of one prefix: `ATTACK_CRITICAL`, `ATTACK_HIT`, and `ATTACK_MISS` each spell out a complete sentence, because each one needs its own word order once translated.
+Two templates instead of one prefix: `ATTACK_CRITICAL` and `ATTACK_HIT` each spell out a complete sentence, because each one needs its own word order once translated. There is no `ATTACK_MISS`: the tutorial's damage formula (`attack² / (attack + defense)`, see [Appendix 1](append-1.md)) never produces exactly `0`, so a miss message would never print.
 
 The pattern repeats through AI messages, equipment messages, scrolls, potions, targeting prompts, game-over stats, level-up text, inventory headings, and HUD labels. The code that decides *when* something happens stays where it is. Only the words move.
 

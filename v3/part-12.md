@@ -589,14 +589,13 @@ game/
         `Fighter` (`game/entities/components/fighter.py`): add a `lifesteal: float = 0.0` parameter, store it as `self.lifesteal`, and heal the attacker at the end of `melee_attack`:
 
         ```diff
-        if damage > 0:
-            MessageLog.add_message(f"{attack_msg} for {damage:.1f} hit points.", attack_color)
-            target.fighter.take_damage(damage, attacker=self.entity)
+         MessageLog.add_message(f"{attack_msg} for {damage:.1f} hit points.", attack_color)
+         target.fighter.take_damage(damage, attacker=self.entity)
         +
-        +    # Part-12. Exercise 2: New monster: Ghoul
-        +    if self.lifesteal > 0:
-        +        drained_life = damage * self.lifesteal
-        +        self.heal(drained_life)
+        +# Part-12. Exercise 2: New monster: Ghoul
+        +if self.lifesteal > 0:
+        +    drained_life = damage * self.lifesteal
+        +    self.heal(drained_life)
         ```
 
         Add the ghoul's glyph and color first, mirroring the ogre. In `game/data/sprites.py`:

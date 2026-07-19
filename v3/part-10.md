@@ -1292,8 +1292,8 @@ game/
     Then make damage use it (the important part is that combat reads `target.fighter.armor`):
 
     ```diff
-    -base_damage = self.attack - target.fighter.defense
-    +base_damage = self.attack - (target.fighter.defense + target.fighter.armor)
+    -base_damage = (self.attack * self.attack) / (self.attack + target.fighter.defense)
+    +base_damage = (self.attack * self.attack) / (self.attack + target.fighter.defense + target.fighter.armor)
     ```
 
     Load the old save (`C`): the load succeeds, but the first time damage reads armor the game crashes with `AttributeError: 'Fighter' object has no attribute '_armor'`, because the pickled object predates the field. Try to make old saves repair themselves before you peek.

@@ -17,7 +17,7 @@ The most important design question is how combat should feel, and in particular 
 damage = max(0, attack - target.defense)
 ```
 
-This is the formula used in the tutorial because it is easy to read and easy to debug. If the attacker has `5` attack and the defender has `2` defense, the result is `3` damage. There is no hidden curve.
+This is the simplest formula, and the one most tutorials reach for first: easy to read and easy to debug. If the attacker has `5` attack and the defender has `2` defense, the result is `3` damage. There is no hidden curve. This tutorial started here too, but moved to the attacker-scaled formula in section 3 once defense could grow past attack; the worked example and "Choosing a Formula" below explain why.
 
 Many traditional roguelikes favor small, readable mitigation systems over large percentage curves. This formula fits that design style: numbers stay small, outcomes are easy to inspect, and players can reason about armor quickly.
 
@@ -133,7 +133,7 @@ The important point is that `K` is an explicit assumption about stat scale. If y
 damage = (attack * attack) / (attack + target.defense)
 ```
 
-This formula is similar to the previous one, but replaces the fixed constant `K` with the attacker's own `attack` value.
+This is the formula `Fighter.melee_attack()` uses in the tutorial's main path, from Part 6 onward (`target.defense` is `target.fighter.defense` in the actual code). It is similar to the previous one, but replaces the fixed constant `K` with the attacker's own `attack` value.
 
 Starting from:
 
@@ -399,7 +399,9 @@ It helps to see the three formulas side by side at the scale this tutorial actua
 | attack `5` vs Troll (`defense 0`) | `5` | `5.0` | `5.0` |
 | attack `9` vs Orc (`defense 1`) | `8` | `8.2` | `8.1` |
 
-The numbers are almost identical. At this scale the three formulas barely disagree, so the extra machinery of the smoothed versions buys very little. That is exactly why the tutorial uses the linear formula: with small, single-digit stats it is the simplest option that still behaves well. The differences only become decisive once stats grow or defense can approach attack, which is the situation the rest of this appendix is about.
+The numbers are almost identical. At this starting scale the three formulas barely disagree, so if defense could never grow, the extra machinery of the smoothed versions would buy very little.
+
+But this tutorial's equipment system (Part 13) does let defense grow, through `defense_bonus` on armor, and the linear formula's floor is exactly what breaks once `target.defense` catches up to `attack`: a monster the player used to fight becomes permanently unable to hurt them, not because the fight got harder, but because subtraction hit zero. That is why the tutorial uses the attacker-scaled formula (section 3) instead: at floor-1 stats it plays almost identically to the linear formula, and it keeps behaving sensibly once defense grows later. The differences only become visually decisive once stats grow or defense can approach attack, which is the situation the rest of this appendix is about.
 
 ---
 
@@ -433,12 +435,14 @@ For most games, the two smoothed formulas (2 and 3) are the better default:
 - Weak attackers stay at least slightly threatening, and high-defense targets never become fully immune.
 - The attacker-scaled formula goes one step further and keeps defense meaningful relative to each attacker, which helps when enemies span a wide power range.
 
-The linear formula is still a fair choice, and it is the one this tutorial uses, but mostly for what it teaches rather than how it plays:
+This tutorial uses the attacker-scaled formula (section 3), for exactly that last reason: monsters range from a floor-1 troll to a deep-dungeon ogre, and the player's own defense grows through equipment, so a formula where defense can quietly become an absolute wall was not an option.
+
+The linear formula is still a fair choice for many projects, mostly for what it teaches rather than how it plays:
 
 - It is the easiest to read, debug, and explain: each point of defense blocks exactly one point of damage.
 - It keeps numbers small and outcomes fully predictable.
 - It pairs naturally with a [minimum damage](#minimum-damage) rule, which patches its main weakness.
 
-So the honest recommendation is: prefer a smoothed formula when game feel matters most, and keep the linear one when you value transparency and simplicity, as a teaching project does.
+So the honest recommendation is: prefer a smoothed formula whenever defense can grow over the course of the game, which is why this tutorial does, and reach for the linear one only when you can guarantee defense stays comfortably below attack, or you are willing to add a minimum damage rule to cover the gap.
 
 The formula is part of the game's progression model. Revisit it whenever you change how combat is meant to feel, not only when the numbers grow. Balance problems often come not from individual values, but from a formula whose behavior no longer matches the game, most often a zero-damage gap where the design needed a guaranteed hit.

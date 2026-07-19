@@ -202,8 +202,8 @@ Because `take_damage()` now requires an attacker, update every damage call site 
 In `Fighter.melee_attack()`, pass the actor that is making the attack:
 
 ```diff
--            target.fighter.take_damage(damage)
-+            target.fighter.take_damage(damage, attacker=self.entity)
+-        target.fighter.take_damage(damage)
++        target.fighter.take_damage(damage, attacker=self.entity)
 ```
 
 Update the spell damage in `game/entities/components/consumable.py` too. The player is the `consumer`, so they are the attacker for lightning, fireball, and drain:

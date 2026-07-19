@@ -1,6 +1,6 @@
 # Appendix 2: Combat Effects
 
-The base combat system from the tutorial resolves every hit in one step: `damage = max(0, attack - target.defense)`. That is enough to build a playable game. Most games layer more effects on top: some attacks land harder, defenders can dodge or parry, certain weapons cut through armor, fire burns differently than a sword blow.
+The base combat system from the tutorial resolves every hit in one step: `damage = (attack * attack) / (attack + target.defense)`. That is enough to build a playable game. Most games layer more effects on top: some attacks land harder, defenders can dodge or parry, certain weapons cut through armor, fire burns differently than a sword blow.
 
 This appendix explains the most common effects, what they represent, how they are calculated, and what tends to go wrong with them. None of them are required. A good roguelike can be built with the base formula plus one or two additions. Add effects one at a time and test each before moving on.
 
@@ -235,7 +235,7 @@ Armor penetration reduces how much of the defender's defense actually applies. A
     effective_defense = max(0, effective_defense - attacker.armor_penetration)
     ```
 
-In all cases, `effective_defense` replaces `defender.defense` in the damage formula. Whether you use the linear formula from the tutorial or a smoothed one from Appendix 1, the substitution is the same.
+In all cases, `effective_defense` replaces `defender.defense` in the damage formula. The substitution works the same regardless of which formula you use, the tutorial's attacker-scaled default or the linear/fixed-`K` alternatives from Appendix 1.
 
 Armor penetration lets you create meaningful differences between weapons, abilities, and classes. A mage's spell might ignore physical armor entirely. A rogue's dagger might have high penetration while a war hammer has none.
 
@@ -466,7 +466,7 @@ These concepts are often confused, especially across different games and forums.
 
 #### Where to start
 
-The tutorial's combat is functional with just `damage = max(0, attack - target.defense)`. If you want to extend it, a good first step is adding a critical hit: one attribute, one multiplier, one probability check. It adds surprise without touching the defense side of the equation. If you completed [Part 6](part-6.md) Exercise 2, you have already implemented the simplest version of this.
+The tutorial's combat is functional with just `damage = (attack * attack) / (attack + target.defense)`. If you want to extend it, a good first step is adding a critical hit: one attribute, one multiplier, one probability check. It adds surprise without touching the defense side of the equation. If you completed [Part 6](part-6.md) Exercise 2, you have already implemented the simplest version of this.
 
 After that, consider dodge or block before parry. Both are simpler to balance than parry because neither grants offensive options. Save parry for a later addition, once the rest of the system feels stable.
 
