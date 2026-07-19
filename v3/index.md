@@ -60,7 +60,7 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 ---
 
-## Table of contents
+## Table of contents (reviewing)
 
 - [Part 0: Introduction and Setup](part-0.md): Install the tools, create the project, and verify everything runs.
 
@@ -80,10 +80,10 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 - [Part 8: Items and Inventory](part-8-intro.md): Add items to the dungeon and give the player an inventory. Available in two formats (pick one on the chapter's landing page):
 
-  - [Full chapter](part-8.md): the complete Part 8 on a single page.
-  - [Part 8a: The Item System](part-8a.md) + [Part 8b: Inventory](part-8b.md): the same content split into two shorter chapters (easier to tackle in two sittings).
+    - [Full chapter](part-8.md): the complete Part 8 on a single page.
+    - [Part 8a: The Item System](part-8a.md) + [Part 8b: Inventory](part-8b.md): the same content split into two shorter chapters (easier to tackle in two sittings).
 
-  Which format works better for you? Let us know.
+    Which format works better for you? Let us know.
 
 - [Part 9: Spells and Targeting](part-9.md): Implement a targeting cursor and three scroll types with spell effects.
 
