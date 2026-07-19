@@ -551,6 +551,8 @@ class InventoryDropState(InventoryState):
 
     The same structure appears with `on_index_selected` in `SelectIndexState` (Part 9).
 
+    → [Refactoring Guru: Template Method](https://refactoring.guru/design-patterns/template-method) ([Python example](https://refactoring.guru/design-patterns/template-method/python/example))
+
 `on_render()` renders the map first via `super()`, dims it with the same `// 2` trick introduced in Part 7 for the game-over screen, and then draws the box with `_draw_panel()` (shadow, fill, frame). Nothing new there: the overlay reuses the exact machinery the game-over panel taught us.
 
 The panel layout is fixed at the top and grows downward with the item list. Row `y` carries the frame and the centered title; `y+2` prints the `PROMPT` help text; item rows start at `y+4`. The used-slots counter (`(3 / 10 slots)`) sits on the row above the bottom border, like a status line, and doubles as capacity feedback now that the inventory can fill up.

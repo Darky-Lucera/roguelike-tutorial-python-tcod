@@ -514,6 +514,8 @@ class MovementAction(Action):
 
     → [Game Programming Patterns: Command](https://gameprogrammingpatterns.com/command.html)
 
+    → [Refactoring Guru: Command](https://refactoring.guru/design-patterns/command) ([Python example](https://refactoring.guru/design-patterns/command/python/example))
+
 This means two changes to `game/engine.py`. First, drop the now-unused action import:
 
 ```diff

@@ -32,7 +32,7 @@ For now, this tutorial dedicates 44 rows to the map and 6 rows to a UI panel at 
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ HP: ████████░░  14/30    You attack the Orc for 3 hit points.                │
 │                          The Orc attacks you for 2 hit points.               │
-│                          The Troll is dead!                                  │
+│ Turns: 56                The Troll is dead!                                  │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -42,38 +42,41 @@ For now, this tutorial dedicates 44 rows to the map and 6 rows to a UI panel at 
 
 `game/data/colors.py` already holds entity colors (`PLAYER`, `ORC`, `TROLL`, `CORPSE` from Parts 5 and 6). The UI we are about to build needs more constants: combat message colors, the welcome banner, and the health bar's filled and empty states.
 
-Extend `game/data/colors.py`:
+Add these lines to the file. `DEFAULT_FG` and the existing entity and map colors stay exactly where they are; the block below only adds new constants, split into their own sections:
 
 ```python
 # Generic colors
-WHITE         = Color(255, 255, 255)
-BLACK         = Color(  0,   0,   0)
+...
+WHITE               = Color(255, 255, 255)
+BLACK               = Color(  0,   0,   0)
+
+... (at the end)
 
 # Combat message colors
-PLAYER_ATTACK = Color(224, 224, 224)
-ENEMY_ATTACK  = Color(255, 192, 192)
-PLAYER_DEATH  = Color(255,  48,  48)
-ENEMY_DEATH   = Color(255, 160,  48)
+PLAYER_ATTACK       = Color(224, 224, 224)
+ENEMY_ATTACK        = Color(255, 192, 192)
+PLAYER_DEATH        = Color(255,  48,  48)
+ENEMY_DEATH         = Color(255, 160,  48)
 
 # UI colors
-HUD_BG        = Color( 15,  15,  63)
-WELCOME_TEXT  = Color( 32, 160, 255)
-BAR_TEXT      = WHITE
-HP_BAR_FILLED = Color(  0,  96,   0)
-HP_BAR_EMPTY  = Color( 64,  16,  16)
+HUD_BG              = Color( 15,  15,  63)
+WELCOME_TEXT        = Color( 32, 160, 255)
+BAR_TEXT            = WHITE
+HP_BAR_FILLED       = Color(  0,  96,   0)
+HP_BAR_EMPTY        = Color( 64,  16,  16)
 
 # Game over screen colors
-GAME_OVER_FRAME    = Color(255,  72,  72)
-GAME_OVER_PANEL_BG = Color( 38,   5,   8)
-GAME_OVER_TITLE    = Color(255, 192, 160)
-GAME_OVER_TEXT     = Color(255, 232, 224)
-GAME_OVER_DIM      = Color(216, 144, 144)
+GAME_OVER_FRAME     = Color(255,  72,  72)
+GAME_OVER_PANEL_BG  = Color( 38,   5,   8)
+GAME_OVER_TITLE     = Color(255, 192, 160)
+GAME_OVER_TEXT      = Color(255, 232, 224)
+GAME_OVER_DIM       = Color(216, 144, 144)
 ```
 
-We split the new constants into three sections (`Generic colors`, `Combat message colors`, `UI colors`) to make scanning the file easier as it grows. Notice we name the death colors `PLAYER_DEATH` and `ENEMY_DEATH`, not `_die`: full words read better at every call site.
+We split the new constants into different sections (`Generic colors`, `Combat message colors`, `UI colors`, ...) to make scanning the file easier as it grows. Notice we name the death colors `PLAYER_DEATH` and `ENEMY_DEATH`, not `_die`: full words read better at every call site.
 
 !!! note "If you kept earlier exercises"
-    Extra exercise messages can get their own colors here as well. For example, the reference implementation uses optional colors such as `ENEMY_FLEE`, `ATTACK_MISS`, and `BLOCK_MOVEMENT` for Part 5/6 exercise feedback. They are useful, but not required for the base tutorial path.
+    Extra exercise messages can get their own colors here as well. For example, the reference implementation uses `ENEMY_FLEE` and `BLOCKED` for Part 5/6 exercise feedback. They are useful, but not required for the base tutorial path.
 
 !!! question "Why this lives in `data/`, not in `engine.py`"
     `game/data/colors.py` is imported by `hud`, `message_log`, `fighter`, and eventually every UI component. Putting colors in `game/engine.py` would force circular imports, those modules would need to import `engine` just for a tuple.
@@ -98,7 +101,6 @@ from game.data.colors import Color
 
 
 class Message:
-
     def __init__(self, text: str, fg: Color) -> None:
         self.plain_text = text
         self.fg = fg
@@ -172,6 +174,8 @@ class MessageLog:
     The *Game Programming Patterns* chapter on Singleton is worth reading.
 
     → [Game Programming Patterns: Singleton](https://gameprogrammingpatterns.com/singleton.html)
+
+    → [Refactoring Guru: Singleton](https://refactoring.guru/design-patterns/singleton) ([Python example](https://refactoring.guru/design-patterns/singleton/python/example))
 
 ---
 
@@ -281,7 +285,9 @@ Each state:
 
     → [Game Programming Patterns: State](https://gameprogrammingpatterns.com/state.html)
 
-Replace `game/input_handlers.py` with `game/game_states.py`. Note a small bonus of the Part 5 decision to keep key tables in `game/data/keys.py`: there are no key maps to carry along, so the new file contains only states and their rendering helpers:
+    → [Refactoring Guru: State](https://refactoring.guru/design-patterns/state) ([Python example](https://refactoring.guru/design-patterns/state/python/example))
+
+Replace `game/input_handlers.py` with `game/game_states.py`. Note a small bonus of the Part 5 decision to keep key tables in `game/data/keys.py`: there are no key maps to carry along, so the new file contains only states and their rendering helpers. Start with the imports and the panel-drawing helper every state will share:
 
 ```python
 from __future__ import annotations
@@ -290,12 +296,7 @@ from typing import TYPE_CHECKING
 
 import tcod
 
-from game.actions import (
-    Action,
-    BumpAction,
-    EscapeAction,
-    WaitAction,
-)
+from game.actions import Action, BumpAction, EscapeAction, WaitAction
 from game.data import colors, keys
 from game.data.colors import Color
 
@@ -346,8 +347,17 @@ def _draw_panel(
         fg     = frame_color,
         bg     = bg_color,
     )
+```
 
+`_draw_panel()` is the panel workhorse; later parts reuse it for every menu and popup, so it is worth understanding once. It renders in three passes:
 
+1. An optional **drop shadow**: a plain black `draw_rect` offset one cell right and down from the panel origin, which gives the panel a floating look.
+2. A **fill** pass: `draw_rect` covers the panel area with a space character using `bg_blend=tcod.constants.BKGND_SET`, which writes the background color directly over whatever tcod previously rendered. `ch=ord(" ")` clears the character layer too, so the dungeon tiles underneath are fully hidden.
+3. A **frame** pass: `draw_frame` with `clear=False` draws only the border characters, preserving the interior just filled by `draw_rect`.
+
+Next, the base `GameState` every other state inherits from:
+
+```python
 class GameState:
 
     def __init__(self, engine: Engine) -> None:
@@ -371,8 +381,15 @@ class GameState:
 
     def on_render(self, console: tcod.console.Console) -> None:
         self.engine.render(console)
+```
 
+`handle_events()` dispatches on the event type: `Quit` always ends the game no matter which state is active, `KeyDown` delegates to `event_keydown()` so each subclass decides what its own keys do, and `on_render()` just calls `engine.render()` unless a subclass overrides it, which `GameOverState` does below.
 
+The `MouseMotion` case stores the cursor tile position in `engine.mouse_location` so `render_names_at_mouse_location` always has current data. `integer_position` is the tile-space coordinate set by `context.convert_event`; the older `event.tile` attribute is deprecated.
+
+Then `MainGameState`, the state the engine starts in and the one play returns to once any other state closes:
+
+```python
 class MainGameState(GameState):
 
     def event_keydown(self, event: tcod.event.KeyDown) -> Action | None:
@@ -389,8 +406,17 @@ class MainGameState(GameState):
             return EscapeAction()
 
         return None
+```
 
+`event_keydown()` does exactly what `EventHandler.event_keydown` used to do before this rename: movement keys become a `BumpAction`, the wait keys become a `WaitAction`, and the quit key becomes an `EscapeAction`. Any other key falls through to `return None`, so `GameState.handle_events()` reports no action and the turn does not advance.
 
+*Normal play, with the new HUD panel*:
+
+![Screenshot Game](images/part_7_screenshot_game.png)
+
+Finally, `GameOverState`, the screen shown once the player dies:
+
+```python
 class GameOverState(GameState):
     TITLE    = "GAME OVER"
     FG_COLOR = colors.GAME_OVER_FRAME
@@ -450,21 +476,15 @@ class GameOverState(GameState):
 
 *The finished game over screen*:
 
-![Game Over](images/window_gameover.png)
+![Screenshot Game Over](images/part_7_screenshot_gameover.png)
 
 `GameOverState` declares three class variables (`TITLE`, `FG_COLOR`, and `BG_COLOR`) so subclasses can override them independently. The pattern will appear again in Part 8 for the inventory overlays.
 
 `on_render()` starts by dimming everything already on the console: `console.fg[:] = console.fg // 2` halves every foreground color channel in place, and the matching `bg` line halves the backgrounds. The map and HUD stay visible but faded, so the player's attention moves to the panel. This dimming trick reappears in every modal screen from here on (inventory, popups, level-up).
 
-`_draw_panel()` is the panel workhorse; later parts reuse it for every menu and popup, so it is worth understanding once. It renders in three passes:
+The panel width adapts to its longest content line (title, message, or hint, each padded for the borders and a margin). The title is centered on the top border row with a separate `console.print`, overwriting the frame characters there with the padded title string. The message is centered in the interior, and the hint sits on the row just above the bottom border in a dimmer color, so it reads as secondary information.
 
-1. An optional **drop shadow**: a plain black `draw_rect` offset one cell right and down from the panel origin, which gives the panel a floating look.
-2. A **fill** pass: `draw_rect` covers the panel area with a space character using `bg_blend=tcod.constants.BKGND_SET`, which writes the background color directly over whatever tcod previously rendered. `ch=ord(" ")` clears the character layer too, so the dungeon tiles underneath are fully hidden.
-3. A **frame** pass: `draw_frame` with `clear=False` draws only the border characters, preserving the interior just filled by `draw_rect`.
-
-Back in `on_render()`, the panel width adapts to its longest content line (title, message, or hint, each padded for the borders and a margin). The title is centered on the top border row with a separate `console.print`, overwriting the frame characters there with the padded title string. The message is centered in the interior, and the hint sits on the row just above the bottom border in a dimmer color, so it reads as secondary information.
-
-The `MouseMotion` case stores the cursor tile position in `engine.mouse_location` so `render_names_at_mouse_location` always has current data. `integer_position` is the tile-space coordinate set by `context.convert_event`; the older `event.tile` attribute is deprecated.
+`engine.py` still imports `from game.input_handlers import EventHandler, GameOverEventHandler`, the module you just replaced, so do not run the game yet: it would fail with `ModuleNotFoundError: No module named 'game.input_handlers'`. That is expected; the next section rewires `engine.py` to use `game_states.py` instead.
 
 ---
 
@@ -475,23 +495,22 @@ Five changes: new imports, updated `__init__`, updated `handle_events`, updated 
 Add the imports at the top of `game/engine.py`:
 
 ```diff
-+from game.message_log import MessageLog
 +from game import hud
+ from game.entities.entity import Actor
 -from game.input_handlers import EventHandler, GameOverEventHandler
-+from game.game_states import (
-+    GameState,
-+    GameOverState,
-+    MainGameState
-+)
++from game.game_states import GameOverState, GameState, MainGameState
+ from game.map.game_map import GameMap
++from game.message_log import MessageLog
 ```
 
 Update `__init__` to use the new state class and track mouse position:
 
 ```diff
      self.game_map = game_map
-+    self.mouse_location: tuple[int, int] = (0, 0)
      self.player = player
 -    self.event_handler = EventHandler()
++
++    self.mouse_location: tuple[int, int] = (0, 0)
 +    self.game_state: GameState = MainGameState(self)
 ```
 
@@ -515,10 +534,10 @@ Update `handle_events` to call the new `handle_events()` method (replacing the o
 +            if self.player.is_alive:
 +                self.handle_enemy_turns()
 +
++            self.update_fov()  # recompute after every action
++
 +            if not self.player.is_alive:
 +                self.game_state = GameOverState(self)
-+
-+            self.update_fov()  # recompute after every action
 ```
 
 Replace the existing `render()` method. It no longer receives `context` or controls the frame cycle; `run()` owns those steps now.
@@ -555,6 +574,26 @@ Replace the existing `render()` method. It no longer receives `context` or contr
 
 These coordinates map directly onto the panel layout from the start of the chapter. The HP bar fills columns `0-19` of row `45` (`total_width=20`), so the message log and the hover names start one column past it, at `x=21`. Row `44` (the panel's top row) holds the names under the cursor; rows `45-49` hold the five wrapped message lines (`y=45`, `height=5`).
 
+!!! note "If you kept the Part 1 turn counter"
+    Part 1, Exercise 3 added a `turn_count` counter, printed with `console.print(x=0, y=44, text=f"Turn: {self.turn_count}")` right after `Engine.__init__` (Part 2). Row `44` now belongs to the panel: it shows hover names, so the old print would land on top of them.
+
+    Move it into `render()` instead, on the panel's bottom row, which stays free for the rest of this chapter:
+
+    ```diff
+             hud.render_names_at_mouse_location(
+                 console        = console,
+                 x              = 21,
+                 y              = 44,
+                 mouse_location = self.mouse_location,
+                 game_map       = self.game_map,
+             )
+    +
+    +        # Part-1. Exercise 3: Add a wait action
+    +        console.print(x=0, y=49, text=f"Turns: {self.turn_count}")
+    ```
+
+    Row `49` is the panel's last row (`y=44`, `height=6`, so rows `44` through `49`). Later parts add more HUD pieces (Part 11's floor display, gold counter, and XP bar) but they all sit on rows `44`-`46`, so the counter keeps its spot without another move.
+
 Update `run()` to delegate rendering to the active game state and to capture the result of `context.convert_event`:
 
 ```diff
@@ -575,11 +614,14 @@ Update `run()` to delegate rendering to the active game state and to capture the
 !!! info "render() vs game_map.render()"
     `GameMap.render()` draws tiles and entity sprites. `Engine.render()` composes the full frame: map first, then the UI panel on top. Keeping these separate means the map never needs to know about the UI layout.
 
+!!! tip "Run it now"
+    If you run the game now, you can check that the panel itself works: the health bar tracks your HP, and hovering the mouse over a visible entity shows its name on the panel's top row. The message log area stays empty, since nothing has posted a message to it yet, and combat and death still print to the terminal instead of the log, exactly as they did at the end of Part 6. It is a good habit to check the panel on its own like this, before wiring in the message log, so that any layout or coordinate mistake is easy to spot instead of getting mixed up with log output.
+
 ---
 
 ## Update main.py
 
-Three small changes: two new imports, posting the welcome message, and renaming `console` to `root_console` for clarity now that the engine owns the frame loop.
+Two small changes: two new imports and posting the welcome message.
 
 Add the imports:
 
@@ -600,15 +642,6 @@ Post the welcome message after creating the engine:
 +    "Hello and welcome, adventurer, to yet another dungeon!",
 +    colors.WELCOME_TEXT,
 +)
-```
-
-Rename the console variable in the context block:
-
-```diff
--        console = tcod.console.Console(screen_width, screen_height, order="F")
--        engine.run(context, console)
-+        root_console = tcod.console.Console(screen_width, screen_height, order="F")
-+        engine.run(context, root_console)
 ```
 
 ---
@@ -684,6 +717,9 @@ Update `Fighter.die()` in `game/entities/components/fighter.py` to write to the 
 
 !!! note "If you kept Part 5/6 exercise code"
     Convert those messages to `MessageLog.add_message(...)` too. For example, non-combat blockers in `actions.py` should log instead of printing, and optional flee/critical-hit logic in `fighter.py` should keep the same behavior while routing its feedback through the message log.
+
+!!! tip "Run it now"
+    With the message log wired all the way through, running the game now shows the full picture: the welcome message greets you as soon as the game starts, attacking and being attacked post colored lines instead of printing to the terminal, and dying writes `"You died!"` to the log. Comparing this against the earlier checkpoint, where the same panel sat with an empty log area, is a satisfying way to see how much changed in this part.
 
 ---
 
@@ -768,12 +804,12 @@ game/
     Make both the filled and empty portions of the bar change color based on the HP percentage. Define three pairs of constants in `colors.py`:
 
     ```python
-    HP_BAR_HEALTHY_FILLED  = Color(0x20, 0xA0, 0x40)
-    HP_BAR_HEALTHY_EMPTY   = Color(0x10, 0x30, 0x18)
-    HP_BAR_INJURED_FILLED  = Color(0xD8, 0xA8, 0x20)
-    HP_BAR_INJURED_EMPTY   = Color(0x3A, 0x2A, 0x08)
-    HP_BAR_CRITICAL_FILLED = Color(0xC8, 0x30, 0x30)
-    HP_BAR_CRITICAL_EMPTY  = Color(0x3A, 0x10, 0x10)
+    HP_BAR_HEALTHY_FILLED  = Color( 32, 160,  64)
+    HP_BAR_HEALTHY_EMPTY   = Color( 16,  48,  24)
+    HP_BAR_INJURED_FILLED  = Color(216, 168,  32)
+    HP_BAR_INJURED_EMPTY   = Color( 58,  42,   8)
+    HP_BAR_CRITICAL_FILLED = Color(200,  48,  48)
+    HP_BAR_CRITICAL_EMPTY  = Color( 58,  16,  16)
     ```
 
     In `render_bar`, compute the HP ratio and select the pair before calling `draw_rect`:

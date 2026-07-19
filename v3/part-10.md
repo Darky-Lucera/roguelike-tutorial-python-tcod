@@ -928,8 +928,8 @@ def main() -> None:
         vsync            = True,
         sdl_window_flags = tcod.context.SDL_WINDOW_ALLOW_HIGHDPI | tcod.context.SDL_WINDOW_RESIZABLE,
     ) as context:
-        root_console = tcod.console.Console(config.SCREEN_WIDTH, config.SCREEN_HEIGHT, order="F")
-        run(state, context, root_console, on_exit=save_game)
+        console = tcod.console.Console(config.SCREEN_WIDTH, config.SCREEN_HEIGHT, order="F")
+        run(state, context, console, on_exit=save_game)
 
 
 if __name__ == "__main__":

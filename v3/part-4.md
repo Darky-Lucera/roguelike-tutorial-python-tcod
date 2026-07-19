@@ -579,3 +579,6 @@ game/
     If you make the duration configurable in `Engine`, name that setting `memory_duration` so it is not confused with the `game_map.memory` array.
 
     Walk through a corridor, wait or move away, and watch the remembered area fade back into darkness.
+
+    !!! tip "Keep it, or turn it off?"
+        Decide whether you want fading memory for the rest of the tutorial. The following parts assume permanent memory, the default before this exercise. If you prefer that, set `memory_duration` back to a value that never runs out, or comment out the decrement step.

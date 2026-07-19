@@ -183,8 +183,12 @@ Instead of always teleporting the player, a higher-level teleport scroll could a
 
 This demonstrates state chaining: one `SelectIndexState` can hand off to another before the action fires. The pattern generalises to any multi-step targeting flow.
 
-!!! tip "State chaining as a general pattern"
+!!! info "Pattern: State (chaining)"
     Any time a consumable needs more than one piece of input (pick a target, then pick a tile; confirm a spell, then confirm the area), the same chain pattern applies. Each state gathers one input and, instead of returning an action immediately, returns a new state with the partial result. The final state in the chain produces the action. Keeping each state responsible for exactly one decision makes the logic easy to follow and straightforward to test in isolation.
+
+    → [Game Programming Patterns: State](https://gameprogrammingpatterns.com/state.html)
+
+    → [Refactoring Guru: State](https://refactoring.guru/design-patterns/state) ([Python example](https://refactoring.guru/design-patterns/state/python/example))
 
 Implementation hints:
 

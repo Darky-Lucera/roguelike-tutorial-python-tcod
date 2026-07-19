@@ -309,8 +309,10 @@ The trade-off is real: an entity with a literal character no longer gets to opt 
 
 `GameMap.render` is not the only place `.char` reaches the screen, the inventory panel prints `item.char` too. Search the codebase for every `.char` read on an entity or item and replace it with `.glyph`. A type checker turns this from a hunt into a checklist: once `Entity` no longer declares `char` as an attribute, mypy or pyright flags every remaining `.char` access as unknown, so running one after the rename surfaces exactly the call sites still to fix.
 
-!!! info "This is the Strategy pattern"
+!!! info "Pattern: Strategy"
     `Graphic` is a *strategy*: an interchangeable object that captures one decision, here "which character do I draw right now". `render` depends only on the small `Graphic` interface, not on the concrete kind, so new behaviors arrive as new subclasses and the drawing code stays put.
+
+    → [Refactoring Guru: Strategy](https://refactoring.guru/design-patterns/strategy) ([Python example](https://refactoring.guru/design-patterns/strategy/python/example))
 
 ### Swapping a `Graphic` after construction
 

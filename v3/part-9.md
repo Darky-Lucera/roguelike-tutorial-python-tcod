@@ -581,6 +581,8 @@ Note that `callback` uses `ItemAction(item=item, target_pos=pos)`. The `target_p
 
     The consumable chooses which targeting action to return; the targeting action supplies the callback, and the item's `activate()` method still owns the actual effect.
 
+    → [Refactoring Guru: Strategy](https://refactoring.guru/design-patterns/strategy) ([Python example](https://refactoring.guru/design-patterns/strategy/python/example))
+
 ---
 
 ## ConfusedEnemy AI

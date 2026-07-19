@@ -438,8 +438,8 @@ Orcs are harder to kill (more HP, some defense) and hit harder than trolls, yet 
     ```python
     # Part-5. Exercise 2: Weighted monster table
     monster_chances = [
-        (orc,   75),
-        (troll, 25),
+        (orc,   25),
+        (troll, 75),
     ]
 
     # Part-5. Exercise 3: Passive blocking entity
@@ -773,7 +773,7 @@ Now update `Engine` to swap the event handler after each turn if the player is n
                  continue
              action.perform(self, self.player)
              self.handle_enemy_turns()
-             self.update_fov()
+             self.update_fov()  # recompute after every action
 +
 +            if not self.player.is_alive:
 +                self.event_handler = GameOverEventHandler()

@@ -6,7 +6,7 @@ By the end of this part, enemies will appear in the dungeon, block movement, cha
 
 ## Learning goals
 
-- Use entity templates (factory pattern) instead of inline creation
+- Use entity templates (prototype pattern) instead of inline creation
 - Place enemies in dungeon rooms during generation
 - Implement a turn system: player acts, then enemies act
 - Write a basic hostile AI that pursues the player
@@ -369,6 +369,13 @@ troll = Entity(
 ```
 
 These are *prototypes*: for dungeon entities, we call `spawn()` on them to create positioned copies. The player is a small startup special case (covered in the `main.py` section below) because they need to exist before any map does.
+
+!!! info "Pattern: Prototype"
+    Each module-level `Entity` (`orc`, `troll`, `player`) is a fully configured object, not a blueprint read by a separate builder. Creating a new one means cloning an existing instance (`spawn()`'s `copy.deepcopy`) and adjusting position, not calling a function that assembles one from scratch. That is the Prototype idea: the template *is* the object to copy, so adding a monster type is just declaring one more instance in `game/entity_factories.py`.
+
+    → [Game Programming Patterns: Prototype](https://gameprogrammingpatterns.com/prototype.html)
+
+    → [Refactoring Guru: Prototype](https://refactoring.guru/design-patterns/prototype) ([Python example](https://refactoring.guru/design-patterns/prototype/python/example))
 
 !!! question "Why lowercase `orc` when `colors.ORC` is uppercase?"
     The UPPERCASE convention is for constant *values*: passive data you read, like a color tuple. A template is an *object* with identity and behavior: it has `spawn()`, and from the next part it will carry a fighter component with hit points. Python names module-level instances in lowercase; an uppercase `ORC` would promise an immutability that a live object cannot keep.
@@ -1011,11 +1018,11 @@ game/
 
 1. **Minimum monsters per room**:
 
-    Add a `min_monsters` parameter to `place_entities` and use `rng.randint(min_monsters, max_monsters)`. Keep it at `0`, then try `1` and observe how much more crowded and dangerous the dungeon feels.
+    Add a `min_monsters` parameter to `place_entities` and use `rng.randint(min_monsters, max_monsters)`. Thread it all the way up: add `min_monsters_per_room` to `generate_dungeon`'s signature and to its `place_entities` call, then add a `min_monsters_per_room` variable in `main.py`, next to `max_monsters_per_room`, and pass it through. Keep it at `0`, then try `1` and observe how much more crowded and dangerous the dungeon feels.
 
 2. **Weighted monster table**:
 
-    The current 80/20 split (troll common, orc rare) is hardcoded. Replace it with a list of `(entity_template, weight)` tuples and use `rng.choices(population, weights)` to pick. Try flipping the ratio, e.g. `(orc, 75), (troll, 25)`, so the orc stops being a rare sight. This makes adding new monster types a one-line change.
+    The current 80/20 split (troll common, orc rare) is hardcoded. Replace it with a list of `(entity_template, weight)` tuples and use `rng.choices(population, weights)` to pick. Try flipping the ratio, e.g. `(orc, 75), (troll, 25)`, to see how differently the dungeon plays when the orc stops being a rare sight. Then settle back on weights that keep the troll the common spawn, e.g. `(orc, 25), (troll, 75)`, mirroring the original hardcoded split. This makes adding new monster types a one-line change.
 
 3. **Passive blocking entities**:
 

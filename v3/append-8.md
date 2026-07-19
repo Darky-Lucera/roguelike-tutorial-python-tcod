@@ -93,8 +93,12 @@ class Effects:
             effect.render(console)
 ```
 
-!!! info "The `MessageLog` pattern, and why saves do not care"
+!!! info "Pattern: Singleton-like global state, and why saves do not care"
     `Effects` keeps its state at class level and is called from anywhere as `Effects.add(...)`, exactly like `MessageLog.add_message(...)` since Part 7. The pattern has a second payoff here: the manager lives *outside* the `Engine`, and Part 10 pickles the `Engine`. Effects are transient by nature, so keeping them out of the object graph that gets saved means a save file never contains half-played animations, with no `__getstate__` tricks needed.
+
+    → [Game Programming Patterns: Singleton](https://gameprogrammingpatterns.com/singleton.html)
+
+    → [Refactoring Guru: Singleton](https://refactoring.guru/design-patterns/singleton) ([Python example](https://refactoring.guru/design-patterns/singleton/python/example))
 
 ---
 
