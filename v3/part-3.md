@@ -448,7 +448,7 @@ We built a rooms-and-corridors dungeon generator in a dedicated `game/map/map_ge
 
 **Class Diagram**:
 
-![classes](images/part3_classes.png)
+![classes](images/classes/part3_classes.png)
 
 **File structure**:
 

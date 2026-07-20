@@ -1086,11 +1086,11 @@ Key additions:
 
 **Local Class Diagram**:
 
-![classes](images/part10_local_classes.png)
+![classes](images/classes/part10_local_classes.png)
 
 **Full Class Diagram**:
 
-![classes](images/part10_classes.png)
+![classes](images/classes/part10_classes.png)
 
 **File structure**:
 

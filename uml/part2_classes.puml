@@ -9,6 +9,7 @@ hide members
 hide circle
 
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
@@ -24,25 +25,25 @@ set namespaceSeparator none
 ' Classes
 '--------------------------------------
 
-class "Action" as game.actions.Action {
+class "Action" as game.actions.Action #cce9c7 {
 }
 
-class "Engine" as game.engine.Engine #e0e0d0 {
+class "Engine" as game.engine.Engine #ccc9e8 {
 }
 
-class "Entity" as game.entity.Entity #e0e0d0 {
+class "Entity" as game.entity.Entity #ccc9e8 {
 }
 
-class "EscapeAction" as game.actions.EscapeAction {
+class "EscapeAction" as game.actions.EscapeAction #cce9c7 {
 }
 
-class "EventHandler" as game.input_handlers.EventHandler {
+class "EventHandler" as game.input_handlers.EventHandler #cce9c7 {
 }
 
-class "GameMap" as game.game_map.GameMap #e0e0d0 {
+class "GameMap" as game.game_map.GameMap #ccc9e8 {
 }
 
-class "MovementAction" as game.actions.MovementAction {
+class "MovementAction" as game.actions.MovementAction #cce9c7 {
 }
 
 class "WaitAction" as game.actions.WaitAction {
@@ -71,5 +72,9 @@ game.actions.Action -[hidden]down- game.actions.EscapeAction
 game.engine.Engine -[hidden]down-  game.input_handlers.EventHandler
 game.engine.Engine -[hidden]down-  game.entity.Entity
 game.engine.Engine -[hidden]down-  game.game_map.GameMap
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
 
 @enduml

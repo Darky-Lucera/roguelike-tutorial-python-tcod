@@ -721,6 +721,8 @@ Update `Fighter.die()` in `game/entities/components/fighter.py` to write to the 
 !!! tip "Run it now"
     With the message log wired all the way through, running the game now shows the full picture: the welcome message greets you as soon as the game starts, attacking and being attacked post colored lines instead of printing to the terminal, and dying writes `"You died!"` to the log. Comparing this against the earlier checkpoint, where the same panel sat with an empty log area, is a satisfying way to see how much changed in this part.
 
+    ![Screenshot With Panel](images/part_7_screenshot_with_panel.png)
+
 ---
 
 ## Testing your work
@@ -760,7 +762,7 @@ The UI panel is now live. Key additions:
 
 **Class Diagram**:
 
-![classes](images/part7_classes.png)
+![classes](images/classes/part7_classes.png)
 
 **File structure**:
 

@@ -31,6 +31,7 @@ hide circle
 'skinparam classAttributeFontSize 9
 'skinparam shadowing true
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
@@ -53,16 +54,16 @@ class "Engine" as game.engine.Engine {
 class "GameMap" as game.map.game_map.GameMap {
 }
 
-class "GameState" as game.game_states.GameState {
+class "GameState" as game.game_states.GameState #cce9c7 {
 }
 
-class "ActionModalState" as game.game_states.ActionModalState {
+class "ActionModalState" as game.game_states.ActionModalState #ccc9e8 {
 }
 
 class "Action" as game.actions.Action {
 }
 
-class "Entity" as game.entities.entity.Entity {
+class "Entity" as game.entities.entity.Entity #cce9c7 {
 }
 
 class "Actor" as game.entities.entity.Actor {
@@ -95,7 +96,7 @@ class "MainGameState" as game.game_states.MainGameState {
 class "GameOverState" as game.game_states.GameOverState {
 }
 
-class "InventoryState" as game.game_states.InventoryState {
+class "InventoryState" as game.game_states.InventoryState #cce9c7 {
 }
 
 class "InventoryUseState" as game.game_states.InventoryUseState {
@@ -104,13 +105,13 @@ class "InventoryUseState" as game.game_states.InventoryUseState {
 class "InventoryDropState" as game.game_states.InventoryDropState {
 }
 
-class "SelectIndexState" as game.game_states.SelectIndexState #e0e0d0 {
+class "SelectIndexState" as game.game_states.SelectIndexState #ccc9e8 {
 }
 
-class "AreaRangedAttackState" as game.game_states.AreaRangedAttackState #e0e0d0 {
+class "AreaRangedAttackState" as game.game_states.AreaRangedAttackState #ccc9e8 {
 }
 
-class "SingleRangedAttackState" as game.game_states.SingleRangedAttackState #e0e0d0 {
+class "SingleRangedAttackState" as game.game_states.SingleRangedAttackState #ccc9e8 {
 }
 
 class "ActionWithDirection" as game.actions.ActionWithDirection {
@@ -140,13 +141,13 @@ class "ItemAction" as game.actions.ItemAction {
 class "DropItem" as game.actions.DropItem {
 }
 
-class "TargetingAction" as game.actions.TargetingAction #e0e0d0 {
+class "TargetingAction" as game.actions.TargetingAction #ccc9e8 {
 }
 
-class "SingleRangedTargetingAction" as game.actions.SingleRangedTargetingAction #e0e0d0 {
+class "SingleRangedTargetingAction" as game.actions.SingleRangedTargetingAction #ccc9e8 {
 }
 
-class "AreaRangedTargetingAction" as game.actions.AreaRangedTargetingAction #e0e0d0 {
+class "AreaRangedTargetingAction" as game.actions.AreaRangedTargetingAction #ccc9e8 {
 }
 
 class "ActorComponent" as game.entities.components.base_component.ActorComponent {
@@ -164,10 +165,10 @@ class "BaseAI" as game.entities.components.ai.BaseAI {
 class "HostileEnemy" as game.entities.components.ai.HostileEnemy {
 }
 
-class "CowardEnemy" as game.entities.components.ai.CowardEnemy <<Ex. 6.3 >> #e0e0e0 {
+class "CowardEnemy" as game.entities.components.ai.CowardEnemy <<Ex. 6.3 >> #ecdac7 {
 }
 
-class "ConfusedEnemy" as game.entities.components.ai.ConfusedEnemy #e0e0d0 {
+class "ConfusedEnemy" as game.entities.components.ai.ConfusedEnemy #ccc9e8 {
 }
 
 class "ItemComponent" as game.entities.components.base_component.ItemComponent {
@@ -176,28 +177,28 @@ class "ItemComponent" as game.entities.components.base_component.ItemComponent {
 class "Consumable" as game.entities.components.consumable.Consumable {
 }
 
-class "BackpackConsumable" as game.entities.components.consumable.BackpackConsumable <<Ex. 8.2 >> #e0e0e0 {
+class "BackpackConsumable" as game.entities.components.consumable.BackpackConsumable <<Ex. 8.2 >> #ecdac7 {
 }
 
-class "ConfusionConsumable" as game.entities.components.consumable.ConfusionConsumable #e0e0d0 {
+class "ConfusionConsumable" as game.entities.components.consumable.ConfusionConsumable #ccc9e8 {
 }
 
-class "FireballDamageConsumable" as game.entities.components.consumable.FireballDamageConsumable #e0e0d0 {
+class "FireballDamageConsumable" as game.entities.components.consumable.FireballDamageConsumable #ccc9e8 {
 }
 
 class "HealingConsumable" as game.entities.components.consumable.HealingConsumable {
 }
 
-class "LightningDamageConsumable" as game.entities.components.consumable.LightningDamageConsumable #e0e0d0 {
+class "LightningDamageConsumable" as game.entities.components.consumable.LightningDamageConsumable #ccc9e8 {
 }
 
-class "MappingConsumable" as game.entities.components.consumable.MappingConsumable <<Ex. 9.1 >> #e0e0e0 {
+class "MappingConsumable" as game.entities.components.consumable.MappingConsumable <<Ex. 9.1>> #ecdac7 {
 }
 
-class "DrainConsumable" as game.entities.components.consumable.DrainConsumable <<Ex. 9.2 >> #e0e0e0 {
+class "DrainConsumable" as game.entities.components.consumable.DrainConsumable <<Ex. 9.2>> #ecdac7 {
 }
 
-class "TeleportConsumable" as game.entities.components.consumable.TeleportConsumable <<Ex. 9.3 >> #e0e0e0 {
+class "TeleportConsumable" as game.entities.components.consumable.TeleportConsumable <<Ex. 9.3>> #ecdac7 {
 }
 
 class "TreasureConsumable" as game.entities.components.consumable.TreasureConsumable {
@@ -362,4 +363,8 @@ game.game_states.SelectIndexState -[hidden]down- game.game_states.SingleRangedAt
 ' Keep small support classes away from the right edge of the action tree.
 game.message_log.MessageLog -[hidden]down- game.message_log.Message
 game.message_log.Message -[hidden]down- game.exceptions.Impossible
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
+
 @enduml

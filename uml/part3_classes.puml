@@ -9,6 +9,7 @@ hide members
 hide circle
 
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
@@ -39,13 +40,13 @@ class "EscapeAction" as game.actions.EscapeAction {
 class "EventHandler" as game.input_handlers.EventHandler {
 }
 
-class "GameMap" as game.map.game_map.GameMap {
+class "GameMap" as game.map.game_map.GameMap #cce9c7 {
 }
 
 class "MovementAction" as game.actions.MovementAction {
 }
 
-class "RectangularRoom" as game.map.map_generator.RectangularRoom #e0e0d0 {
+class "RectangularRoom" as game.map.map_generator.RectangularRoom #ccc9e8 {
 }
 
 class "WaitAction" as game.actions.WaitAction {
@@ -76,5 +77,9 @@ game.engine.Engine -[hidden]down-  game.entity.Entity
 game.engine.Engine -[hidden]down-  game.map.game_map.GameMap
 
 game.entity.Entity -[hidden]down- game.map.map_generator.RectangularRoom
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
 
 @enduml

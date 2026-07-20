@@ -8,6 +8,7 @@ hide members
 hide circle
 
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
 skinparam noteMargin 2
@@ -21,10 +22,10 @@ set namespaceSeparator none
 ' Classes
 '--------------------------------------
 
-class "Actor" as game.entities.entity.Actor {
+class "Actor" as game.entities.entity.Actor #cce9c7 {
 }
 
-class "Item" as game.entities.entity.Item {
+class "Item" as game.entities.entity.Item #cce9c7 {
 }
 
 class "ActorComponent" as game.entities.components.base_component.ActorComponent {
@@ -33,28 +34,28 @@ class "ActorComponent" as game.entities.components.base_component.ActorComponent
 class "ItemComponent" as game.entities.components.base_component.ItemComponent {
 }
 
-class "Fighter" as game.entities.components.fighter.Fighter {
+class "Fighter" as game.entities.components.fighter.Fighter #cce9c7 {
 }
 
-class "Equipment" as game.entities.components.equipment.Equipment #e0e0d0 {
+class "Equipment" as game.entities.components.equipment.Equipment #ccc9e8 {
 }
 
-class "Equippable" as game.entities.components.equippable.Equippable #e0e0d0 {
+class "Equippable" as game.entities.components.equippable.Equippable #ccc9e8 {
 }
 
-class "EquipmentType" as game.entities.equipment_type.EquipmentType #e0e0d0 {
+class "EquipmentType" as game.entities.equipment_type.EquipmentType #ccc9e8 {
 }
 
-class "ItemAction" as game.actions.ItemAction {
+class "ItemAction" as game.actions.ItemAction #cce9c7 {
 }
 
-class "EquipAction" as game.actions.EquipAction #e0e0d0 {
+class "EquipAction" as game.actions.EquipAction #ccc9e8 {
 }
 
-class "DropItem" as game.actions.DropItem {
+class "DropItem" as game.actions.DropItem #cce9c7 {
 }
 
-class "InventoryUseState" as game.game_states.InventoryUseState {
+class "InventoryUseState" as game.game_states.InventoryUseState #cce9c7 {
 }
 
 '--------------------------------------
@@ -100,5 +101,9 @@ game.actions.DropItem -[hidden]right- game.actions.EquipAction
 game.game_states.InventoryUseState -[hidden]down- game.actions.EquipAction
 
 game.actions.EquipAction -[hidden]down- game.game_states.InventoryUseState
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
 
 @enduml

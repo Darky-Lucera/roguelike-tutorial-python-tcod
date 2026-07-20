@@ -8,6 +8,7 @@ hide members
 hide circle
 
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
 skinparam noteMargin 2
@@ -24,28 +25,28 @@ set namespaceSeparator none
 class "Action" as game.actions.Action {
 }
 
-class "TargetingAction" as game.actions.TargetingAction #e0e0d0 {
+class "TargetingAction" as game.actions.TargetingAction #ccc9e8 {
 }
 
-class "SingleRangedTargetingAction" as game.actions.SingleRangedTargetingAction #e0e0d0 {
+class "SingleRangedTargetingAction" as game.actions.SingleRangedTargetingAction #ccc9e8 {
 }
 
-class "AreaRangedTargetingAction" as game.actions.AreaRangedTargetingAction #e0e0d0 {
+class "AreaRangedTargetingAction" as game.actions.AreaRangedTargetingAction #ccc9e8 {
 }
 
-class "GameState" as game.game_states.GameState {
+class "GameState" as game.game_states.GameState #cce9c7 {
 }
 
-class "ActionModalState" as game.game_states.ActionModalState {
+class "ActionModalState" as game.game_states.ActionModalState #ccc9e8 {
 }
 
-class "SelectIndexState" as game.game_states.SelectIndexState #e0e0d0 {
+class "SelectIndexState" as game.game_states.SelectIndexState #ccc9e8 {
 }
 
-class "SingleRangedAttackState" as game.game_states.SingleRangedAttackState #e0e0d0 {
+class "SingleRangedAttackState" as game.game_states.SingleRangedAttackState #ccc9e8 {
 }
 
-class "AreaRangedAttackState" as game.game_states.AreaRangedAttackState #e0e0d0 {
+class "AreaRangedAttackState" as game.game_states.AreaRangedAttackState #ccc9e8 {
 }
 
 class "BaseAI" as game.entities.components.ai.BaseAI {
@@ -54,7 +55,7 @@ class "BaseAI" as game.entities.components.ai.BaseAI {
 class "HostileEnemy" as game.entities.components.ai.HostileEnemy {
 }
 
-class "ConfusedEnemy" as game.entities.components.ai.ConfusedEnemy #e0e0d0 {
+class "ConfusedEnemy" as game.entities.components.ai.ConfusedEnemy #ccc9e8 {
 }
 
 class "ItemComponent" as game.entities.components.base_component.ItemComponent {
@@ -63,22 +64,22 @@ class "ItemComponent" as game.entities.components.base_component.ItemComponent {
 class "Consumable" as game.entities.components.consumable.Consumable {
 }
 
-class "LightningDamageConsumable" as game.entities.components.consumable.LightningDamageConsumable #e0e0d0 {
+class "LightningDamageConsumable" as game.entities.components.consumable.LightningDamageConsumable #ccc9e8 {
 }
 
-class "ConfusionConsumable" as game.entities.components.consumable.ConfusionConsumable #e0e0d0 {
+class "ConfusionConsumable" as game.entities.components.consumable.ConfusionConsumable #ccc9e8 {
 }
 
-class "FireballDamageConsumable" as game.entities.components.consumable.FireballDamageConsumable #e0e0d0 {
+class "FireballDamageConsumable" as game.entities.components.consumable.FireballDamageConsumable #ccc9e8 {
 }
 
-class "MappingConsumable" as game.entities.components.consumable.MappingConsumable <<Ex. 9.1 >> #e0e0e0 {
+class "MappingConsumable" as game.entities.components.consumable.MappingConsumable <<Ex. 9.1>> #ecdac7 {
 }
 
-class "DrainConsumable" as game.entities.components.consumable.DrainConsumable <<Ex. 9.2 >> #e0e0e0 {
+class "DrainConsumable" as game.entities.components.consumable.DrainConsumable <<Ex. 9.2>> #ecdac7 {
 }
 
-class "TeleportConsumable" as game.entities.components.consumable.TeleportConsumable <<Ex. 9.3 >> #e0e0e0 {
+class "TeleportConsumable" as game.entities.components.consumable.TeleportConsumable <<Ex. 9.3>> #ecdac7 {
 }
 
 '--------------------------------------
@@ -142,5 +143,9 @@ game.entities.components.consumable.ConfusionConsumable -[hidden]right- game.ent
 game.entities.components.consumable.LightningDamageConsumable -[hidden]down- game.entities.components.consumable.MappingConsumable
 game.entities.components.consumable.ConfusionConsumable -[hidden]down- game.entities.components.consumable.DrainConsumable
 game.entities.components.consumable.FireballDamageConsumable -[hidden]down- game.entities.components.consumable.TeleportConsumable
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
 
 @enduml

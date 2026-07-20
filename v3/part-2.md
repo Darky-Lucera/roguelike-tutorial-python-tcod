@@ -592,7 +592,7 @@ The `perform()` pattern on `Action` classes means the engine never needs to know
 
 **Class Diagram**:
 
-![classes](images/part2_classes.png)
+![classes](images/classes/part2_classes.png)
 
 **File structure**:
 

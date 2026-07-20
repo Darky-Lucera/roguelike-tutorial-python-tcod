@@ -825,7 +825,7 @@ Combat is now fully functional. Key additions:
 
 **Class Diagram**:
 
-![classes](images/part6_classes.png)
+![classes](images/classes/part6_classes.png)
 
 **File structure**:
 

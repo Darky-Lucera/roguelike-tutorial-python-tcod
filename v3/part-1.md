@@ -621,7 +621,7 @@ We also adopted the project layout we will use for the rest of the tutorial: `ma
 
 **Class Diagram**:
 
-![classes](images/part1_classes.png)
+![classes](images/classes/part1_classes.png)
 
 **File structure**:
 

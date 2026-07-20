@@ -530,7 +530,7 @@ We also moved entities from `Engine` into `GameMap`, which is where they logical
 
 **Class Diagram**:
 
-![classes](images/part4_classes.png)
+![classes](images/classes/part4_classes.png)
 
 **File structure**:
 

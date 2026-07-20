@@ -8,6 +8,7 @@ hide members
 hide circle
 
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
 skinparam noteMargin 2
@@ -21,64 +22,64 @@ set namespaceSeparator none
 ' Classes
 '--------------------------------------
 
-class "Entity" as game.entities.entity.Entity {
+class "Entity" as game.entities.entity.Entity #cce9c7 {
 }
 
-class "Actor" as game.entities.entity.Actor {
+class "Actor" as game.entities.entity.Actor #cce9c7 {
 }
 
-class "Item" as game.entities.entity.Item #e0e0d0 {
+class "Item" as game.entities.entity.Item #ccc9e8 {
 }
 
-class "BaseComponent" as game.entities.components.base_component.BaseComponent {
+class "BaseComponent" as game.entities.components.base_component.BaseComponent #cce9c7 {
 }
 
-class "ActorComponent" as game.entities.components.base_component.ActorComponent #e0e0d0 {
+class "ActorComponent" as game.entities.components.base_component.ActorComponent #ccc9e8 {
 }
 
-class "ItemComponent" as game.entities.components.base_component.ItemComponent #e0e0d0 {
+class "ItemComponent" as game.entities.components.base_component.ItemComponent #ccc9e8 {
 }
 
-class "Inventory" as game.entities.components.inventory.Inventory #e0e0d0 {
+class "Inventory" as game.entities.components.inventory.Inventory #ccc9e8 {
 }
 
-class "Consumable" as game.entities.components.consumable.Consumable #e0e0d0 {
+class "Consumable" as game.entities.components.consumable.Consumable #ccc9e8 {
 }
 
-class "HealingConsumable" as game.entities.components.consumable.HealingConsumable #e0e0d0 {
+class "HealingConsumable" as game.entities.components.consumable.HealingConsumable #ccc9e8 {
 }
 
-class "TreasureConsumable" as game.entities.components.consumable.TreasureConsumable #e0e0d0 {
+class "TreasureConsumable" as game.entities.components.consumable.TreasureConsumable #ccc9e8 {
 }
 
 class "Action" as game.actions.Action {
 }
 
-class "PickupAction" as game.actions.PickupAction #e0e0d0 {
+class "PickupAction" as game.actions.PickupAction #ccc9e8 {
 }
 
-class "ItemAction" as game.actions.ItemAction #e0e0d0 {
+class "ItemAction" as game.actions.ItemAction #ccc9e8 {
 }
 
-class "DropItem" as game.actions.DropItem #e0e0d0 {
+class "DropItem" as game.actions.DropItem #ccc9e8 {
 }
 
-class "MovementAction" as game.actions.MovementAction {
+class "MovementAction" as game.actions.MovementAction #cce9c7 {
 }
 
-class "GameState" as game.game_states.GameState {
+class "GameState" as game.game_states.GameState #cce9c7 {
 }
 
-class "InventoryState" as game.game_states.InventoryState #e0e0d0 {
+class "InventoryState" as game.game_states.InventoryState #ccc9e8 {
 }
 
-class "InventoryUseState" as game.game_states.InventoryUseState #e0e0d0 {
+class "InventoryUseState" as game.game_states.InventoryUseState #ccc9e8 {
 }
 
-class "InventoryDropState" as game.game_states.InventoryDropState #e0e0d0 {
+class "InventoryDropState" as game.game_states.InventoryDropState #ccc9e8 {
 }
 
-class "<color:#b57674>Impossible</color>" as game.exceptions.Impossible #e0e0d0 {
+class "<color:#b57674>Impossible</color>" as game.exceptions.Impossible #ccc9e8 {
 }
 
 '--------------------------------------
@@ -139,5 +140,9 @@ game.actions.DropItem -[hidden]right- game.actions.MovementAction
 game.game_states.GameState -[hidden]down- game.game_states.InventoryState
 game.game_states.InventoryState -[hidden]down- game.game_states.InventoryUseState
 game.game_states.InventoryUseState -[hidden]right- game.game_states.InventoryDropState
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
 
 @enduml

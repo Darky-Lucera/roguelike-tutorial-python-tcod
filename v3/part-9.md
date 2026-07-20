@@ -997,11 +997,11 @@ The targeting system is now in place. Key additions:
 
 **Local Class Diagram**:
 
-![classes](images/part9_local_classes.png)
+![classes](images/classes/part9_local_classes.png)
 
 **Full Class Diagram**:
 
-![classes](images/part9_classes.png)
+![classes](images/classes/part9_classes.png)
 
 **File structure**:
 

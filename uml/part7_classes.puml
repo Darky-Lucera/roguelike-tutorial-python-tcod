@@ -31,6 +31,7 @@ hide circle
 'skinparam classAttributeFontSize 9
 'skinparam shadowing true
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
@@ -67,7 +68,7 @@ class "BumpAction" as game.actions.BumpAction {
 class "CowardEnemy" as game.entities.components.ai.CowardEnemy {
 }
 
-class "Engine" as game.engine.Engine {
+class "Engine" as game.engine.Engine #cce9c7 {
 }
 
 class "Entity" as game.entities.entity.Entity {
@@ -76,16 +77,16 @@ class "Entity" as game.entities.entity.Entity {
 class "EscapeAction" as game.actions.EscapeAction {
 }
 
-class "GameState" as game.game_states.GameState {
+class "GameState" as game.game_states.GameState #ccc9e8 {
 }
 
-class "Fighter" as game.entities.components.fighter.Fighter {
+class "Fighter" as game.entities.components.fighter.Fighter #cce9c7 {
 }
 
 class "GameMap" as game.map.game_map.GameMap {
 }
 
-class "GameOverState" as game.game_states.GameOverState {
+class "GameOverState" as game.game_states.GameOverState #ccc9e8 {
 }
 
 class "HostileEnemy" as game.entities.components.ai.HostileEnemy {
@@ -95,13 +96,13 @@ class "MeleeAction" as game.actions.MeleeAction {
 }
 
 
-class "MainGameState" as game.game_states.MainGameState #e0e0d0 {
+class "MainGameState" as game.game_states.MainGameState #ccc9e8 {
 }
 
-class "Message" as game.message_log.Message #e0e0d0 {
+class "Message" as game.message_log.Message #ccc9e8 {
 }
 
-class "MessageLog" as game.message_log.MessageLog #e0e0d0 {
+class "MessageLog" as game.message_log.MessageLog #ccc9e8 {
 }
 
 class "MovementAction" as game.actions.MovementAction {
@@ -195,5 +196,9 @@ game.actions.EscapeAction -[hidden]down- game.message_log.MessageLog
 
 ' Keep map-generation classes below
 game.entities.entity.Actor -[hidden]down- game.map.map_generator.RectangularRoom
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
 
 @enduml

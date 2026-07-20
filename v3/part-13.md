@@ -934,11 +934,11 @@ Equipment is complete, and with it the main tutorial game. Key additions:
 
 **Local Class Diagram**:
 
-![classes](images/part13_local_classes.png)
+![classes](images/classes/part13_local_classes.png)
 
 **Full Class Diagram**:
 
-![classes](images/part13_classes.png)
+![classes](images/classes/part13_classes.png)
 
 **File structure**:
 

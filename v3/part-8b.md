@@ -715,11 +715,11 @@ Items are now a first-class part of the game. Key additions:
 
 **Local Class Diagram**:
 
-![classes](images/part8_local_classes.png)
+![classes](images/classes/part8_local_classes.png)
 
 **Full Class Diagram**:
 
-![classes](images/part8_classes.png)
+![classes](images/classes/part8_classes.png)
 
 **File structure**:
 

@@ -9,6 +9,7 @@ hide members
 hide circle
 
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
@@ -23,24 +24,24 @@ set namespaceSeparator none
 '--------------------------------------
 ' Classes
 '--------------------------------------
-class "Action" as game.actions.Action {
+class "Action" as game.actions.Action #cce9c7 {
   {abstract}perform(engine: Engine, entity: Entity) -> None
 }
 
-class "ActionWithDirection" as game.actions.ActionWithDirection #e0e0d0 {
+class "ActionWithDirection" as game.actions.ActionWithDirection #ccc9e8 {
   dx : int
   dy : int
 }
 
-class "BaseAI" as game.components.ai.BaseAI #e0e0d0 {
+class "BaseAI" as game.components.ai.BaseAI #ccc9e8 {
   {abstract}perform(engine: Engine, entity: Entity) -> None
 }
 
-class "BumpAction" as game.actions.BumpAction #e0e0d0 {
+class "BumpAction" as game.actions.BumpAction #ccc9e8 {
   perform(engine: Engine, entity: Entity) -> None
 }
 
-class "Engine" as game.engine.Engine {
+class "Engine" as game.engine.Engine #cce9c7 {
   event_handler
   fading_memory : bool
   game_map
@@ -53,7 +54,7 @@ class "Engine" as game.engine.Engine {
   update_fov(radius: int) -> None
 }
 
-class "Entity" as game.entity.Entity {
+class "Entity" as game.entity.Entity #cce9c7 {
   ai : BaseAI | None
   blocks_movement : bool
   char : str
@@ -71,13 +72,13 @@ class "EscapeAction" as game.actions.EscapeAction {
   perform(engine: Engine, entity: Entity) -> None
 }
 
-class "EventHandler" as game.input_handlers.EventHandler {
+class "EventHandler" as game.input_handlers.EventHandler #cce9c7 {
   dispatch(event: tcod.event.Event) -> Action | None
   event_keydown(event: tcod.event.KeyDown) -> Action | None
   event_quit(event: tcod.event.Quit) -> Action | None
 }
 
-class "GameMap" as game.map.game_map.GameMap {
+class "GameMap" as game.map.game_map.GameMap #cce9c7 {
   entities : set[Entity]
   explored : ndarray
   height : int
@@ -90,15 +91,15 @@ class "GameMap" as game.map.game_map.GameMap {
   render(console: Console) -> None
 }
 
-class "HostileEnemy" as game.components.ai.HostileEnemy #e0e0d0 {
+class "HostileEnemy" as game.components.ai.HostileEnemy #ccc9e8 {
   perform(engine: Engine, entity: Entity) -> None
 }
 
-class "MeleeAction" as game.actions.MeleeAction #e0e0d0 {
+class "MeleeAction" as game.actions.MeleeAction #ccc9e8 {
   perform(engine: Engine, entity: Entity) -> None
 }
 
-class "MovementAction" as game.actions.MovementAction {
+class "MovementAction" as game.actions.MovementAction #cce9c7 {
   perform(engine: Engine, entity: Entity) -> None
 }
 
@@ -152,5 +153,9 @@ game.engine.Engine -[hidden]down-  game.map.game_map.GameMap
 game.map.game_map.GameMap -[hidden]down- game.entity.Entity
 
 game.map.game_map.GameMap -[hidden]down- game.map.map_generator.RectangularRoom
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
 
 @enduml

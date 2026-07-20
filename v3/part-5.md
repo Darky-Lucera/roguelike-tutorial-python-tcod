@@ -984,7 +984,7 @@ Enemies are now in the dungeon and the turn system is running. Key patterns intr
 
 **Class Diagram**:
 
-![classes](images/part5_classes.png)
+![classes](images/classes/part5_classes.png)
 
 **File structure**:
 

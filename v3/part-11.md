@@ -1128,11 +1128,11 @@ Character progression and dungeon depth are now linked. Key additions:
 
 **Local Class Diagram**:
 
-![classes](images/part11_local_classes.png)
+![classes](images/classes/part11_local_classes.png)
 
 **Full Class Diagram**:
 
-![classes](images/part11_classes.png)
+![classes](images/classes/part11_classes.png)
 
 **File structure**:
 

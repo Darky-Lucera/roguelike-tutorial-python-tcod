@@ -31,6 +31,7 @@ hide circle
 'skinparam classAttributeFontSize 9
 'skinparam shadowing true
 skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
 
 skinparam noteFontSize 10
 skinparam noteBorderThickness 1
@@ -47,19 +48,19 @@ set namespaceSeparator none
 '--------------------------------------
 
 
-class "Engine" as game.engine.Engine {
+class "Engine" as game.engine.Engine #cce9c7 {
 }
 
-class "GameWorld" as game.game_world.GameWorld #e0e0d0 {
+class "GameWorld" as game.game_world.GameWorld #ccc9e8 {
 }
 
-class "GameMap" as game.map.game_map.GameMap {
+class "GameMap" as game.map.game_map.GameMap #cce9c7 {
 }
 
 class "BaseGameState" as game.game_states.BaseGameState {
 }
 
-class "GameState" as game.game_states.GameState {
+class "GameState" as game.game_states.GameState #cce9c7 {
 }
 
 class "ActionModalState" as game.game_states.ActionModalState {
@@ -71,16 +72,16 @@ class "Action" as game.actions.Action {
 class "Entity" as game.entities.entity.Entity {
 }
 
-class "Actor" as game.entities.entity.Actor {
+class "Actor" as game.entities.entity.Actor #cce9c7 {
 }
 
 class "Item" as game.entities.entity.Item {
 }
 
-class "Stairs" as game.entities.entity.Stairs #e0e0d0 {
+class "Stairs" as game.entities.entity.Stairs #ccc9e8 {
 }
 
-class "StairsDirection" as game.entities.entity.StairsDirection #e0e0d0 {
+class "StairsDirection" as game.entities.entity.StairsDirection #ccc9e8 {
 }
 
 class "BaseComponent" as game.entities.components.base_component.BaseComponent {
@@ -107,7 +108,7 @@ class "MainGameState" as game.game_states.MainGameState {
 class "GameOverState" as game.game_states.GameOverState {
 }
 
-class "LevelUpState" as game.game_states.LevelUpState #e0e0d0 {
+class "LevelUpState" as game.game_states.LevelUpState #ccc9e8 {
 }
 
 class "MainMenuState" as game.game_states.MainMenuState {
@@ -155,7 +156,7 @@ class "WaitAction" as game.actions.WaitAction {
 class "PickupAction" as game.actions.PickupAction {
 }
 
-class "TakeStairsAction" as game.actions.TakeStairsAction #e0e0d0 {
+class "TakeStairsAction" as game.actions.TakeStairsAction #ccc9e8 {
 }
 
 class "ItemAction" as game.actions.ItemAction {
@@ -176,13 +177,13 @@ class "AreaRangedTargetingAction" as game.actions.AreaRangedTargetingAction {
 class "ActorComponent" as game.entities.components.base_component.ActorComponent {
 }
 
-class "Fighter" as game.entities.components.fighter.Fighter {
+class "Fighter" as game.entities.components.fighter.Fighter #cce9c7 {
 }
 
 class "Inventory" as game.entities.components.inventory.Inventory {
 }
 
-class "Level" as game.entities.components.level.Level #e0e0d0 {
+class "Level" as game.entities.components.level.Level #ccc9e8 {
 }
 
 class "BaseAI" as game.entities.components.ai.BaseAI {
@@ -191,7 +192,7 @@ class "BaseAI" as game.entities.components.ai.BaseAI {
 class "HostileEnemy" as game.entities.components.ai.HostileEnemy {
 }
 
-class "CowardEnemy" as game.entities.components.ai.CowardEnemy <<Ex. 6.3 >> #e0e0e0 {
+class "CowardEnemy" as game.entities.components.ai.CowardEnemy <<Ex. 6.3 >> #ecdac7 {
 }
 
 class "ConfusedEnemy" as game.entities.components.ai.ConfusedEnemy {
@@ -203,7 +204,7 @@ class "ItemComponent" as game.entities.components.base_component.ItemComponent {
 class "Consumable" as game.entities.components.consumable.Consumable {
 }
 
-class "BackpackConsumable" as game.entities.components.consumable.BackpackConsumable <<Ex. 8.2 >> #e0e0e0 {
+class "BackpackConsumable" as game.entities.components.consumable.BackpackConsumable <<Ex. 8.2 >> #ecdac7 {
 }
 
 class "ConfusionConsumable" as game.entities.components.consumable.ConfusionConsumable {
@@ -218,13 +219,13 @@ class "HealingConsumable" as game.entities.components.consumable.HealingConsumab
 class "LightningDamageConsumable" as game.entities.components.consumable.LightningDamageConsumable {
 }
 
-class "MappingConsumable" as game.entities.components.consumable.MappingConsumable <<Ex. 9.1 >> #e0e0e0 {
+class "MappingConsumable" as game.entities.components.consumable.MappingConsumable <<Ex. 9.1 >> #ecdac7 {
 }
 
-class "DrainConsumable" as game.entities.components.consumable.DrainConsumable <<Ex. 9.2 >> #e0e0e0 {
+class "DrainConsumable" as game.entities.components.consumable.DrainConsumable <<Ex. 9.2 >> #ecdac7 {
 }
 
-class "TeleportConsumable" as game.entities.components.consumable.TeleportConsumable <<Ex. 9.3 >> #e0e0e0 {
+class "TeleportConsumable" as game.entities.components.consumable.TeleportConsumable <<Ex. 9.3 >> #ecdac7 {
 }
 
 class "TreasureConsumable" as game.entities.components.consumable.TreasureConsumable {
@@ -413,4 +414,8 @@ game.entities.render_order.RenderOrder -[hidden]left- game.message_log.MessageLo
 
 game.message_log.MessageLog -[hidden]down- game.message_log.Message
 game.message_log.Message -[hidden]down- game.exceptions.Impossible
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
+
 @enduml
