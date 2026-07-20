@@ -62,6 +62,11 @@ extra_css:
 
 copyright: 'By caragones &nbsp;|&nbsp; Tutorial text <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> &nbsp;·&nbsp; Code <a href="https://opensource.org/licenses/MIT">MIT</a>'
 
+extra_javascript:
+  - javascripts/goatcounter-config.js
+  - path: https://gc.zgo.at/count.js
+    async: true
+
 extra:
   analytics:
     provider: google
