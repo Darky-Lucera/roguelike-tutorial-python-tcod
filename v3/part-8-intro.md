@@ -15,12 +15,12 @@ Key concepts: the `Item` entity class, an ownership model for floor vs. inventor
 
 Part 8 is the longest chapter in the tutorial. It is available in two formats:
 
-**[One chapter: read everything at once](part-8.md)**
+- **[Two chapters: Part 8a and Part 8b](part-8a.md)**
 
-All content in sequence. Longer, but you only navigate once.
+    Same content, split at the halfway point. [Part 8a](part-8a.md) builds the item data model; [Part 8b](part-8b.md) adds the player-facing inventory actions.
 
-**[Two chapters: Part 8a and Part 8b](part-8a.md)**
+- **[One chapter: read everything at once](part-8.md)**
 
-Same content, split at the halfway point. [Part 8a](part-8a.md) builds the item data model; [Part 8b](part-8b.md) adds the player-facing inventory actions.
+    All content in sequence. Longer, but you only navigate once.
 
 *Which format works better for you? Let us know.*
