@@ -284,8 +284,53 @@ Key points:
 !!! question "Why `radius=8`?"
     The radius controls how far the player can see. Eight tiles is a common default: large enough to see across a room, small enough that corridors stay mysterious. Change it to taste, or make it a character stat later.
 
-!!! example "FOV algorithms"
-    tcod ships several FOV algorithms: `FOV_BASIC`, `FOV_DIAMOND`, `FOV_SHADOW`, `FOV_PERMISSIVE_*` (nine variants, levels 0-8), `FOV_RESTRICTIVE`, and `FOV_SYMMETRIC_SHADOWCAST`. They differ in how they handle corners, walls, and symmetry (whether A seeing B implies B seeing A). We pick `FOV_SHADOW` (recursive shadowcasting) because it produces clean sight lines with few artifacts and is the traditional roguelike choice. It is not fully symmetric; `FOV_SYMMETRIC_SHADOWCAST` exists specifically to fix that, for games where mutual sight matters. Try the others to see how they change the feel of corridors and walls.
+### Choosing an FOV algorithm
+
+tcod ships several FOV algorithms: `FOV_BASIC`, `FOV_DIAMOND`, `FOV_SHADOW`, `FOV_PERMISSIVE_*` (nine variants, levels 0-8), `FOV_RESTRICTIVE`, and `FOV_SYMMETRIC_SHADOWCAST`. They differ in how they handle corners, walls, and symmetry: whether the fact that A can see B implies B can see A.
+
+| Algorithm | Notes |
+| --- | --- |
+| `FOV_BASIC` | Simple raycasting; fast, but may show artifacts on walls |
+| `FOV_DIAMOND` | Diamond-shaped raycasting variant |
+| `FOV_SHADOW` | Recursive shadowcasting; good general-purpose choice |
+| `FOV_RESTRICTIVE` | A tile must be fully unoccluded to count as visible |
+| `FOV_PERMISSIVE_0` to `FOV_PERMISSIVE_8` | Permissive FOV (PFOV) family, levels `0`-`8`; `FOV_PERMISSIVE_8` is the most permissive |
+| `FOV_SYMMETRIC_SHADOWCAST` | Guarantees symmetric results: if A sees B, B sees A |
+
+We pick `FOV_SHADOW` (recursive shadowcasting) because it produces clean sight lines with few artifacts and is the traditional roguelike choice. It is not fully symmetric; `FOV_SYMMETRIC_SHADOWCAST` exists specifically to fix that, for games where mutual sight matters. Try the others to see how they change the feel of corridors and walls.
+
+RogueBasin's [Field of Vision](https://www.roguebasin.com/index.php/Field_of_Vision) article goes deeper into how each algorithm works internally.
+
+---
+
+**Example of FOV algorithms in an open space**:
+
+![FOV in open space](images/fov_openspace.png)
+
+1. BASIC, DIAMOND, RESTRICTIVE, SHADOW
+2. PERMISSIVE_X
+3. SYMMETRIC_SHADOWCAST
+
+---
+
+**Example of FOV algorithms entering a room**:
+
+![FOV entering room 1](images/fov_entry_room1.png)
+
+1. BASIC
+2. DIAMOND
+3. PERMISSIVE_0
+4. PERMISSIVE_2
+5. PERMISSIVE_4
+
+---
+
+![FOV entering room 2](images/fov_entry_room2.png)
+
+1. PERMISSIVE_6, PERMISSIVE_8
+2. RESTRICTIVE
+3. SHADOW
+4. SYMMETRIC_SHADOWCAST
 
 ---
 
