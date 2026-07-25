@@ -17,7 +17,7 @@ Part 8 is the longest chapter in the tutorial. It is available in two formats:
 
 - **[Two chapters: Part 8a and Part 8b](part-8a.md)**
 
-    Same content, split at the halfway point. [Part 8a](part-8a.md) builds the item data model; [Part 8b](part-8b.md) adds the player-facing inventory actions.
+    Same final implementation, told in two shorter stages. [Part 8a](part-8a.md) builds the item data model; [Part 8b](part-8b.md) adds the player-facing inventory actions.
 
 - **[One chapter: read everything at once](part-8.md)**
 

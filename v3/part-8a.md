@@ -1,18 +1,21 @@
 # Part 8a: The Item System
 
-Part 8 is the longest and densest chapter in this tutorial. It introduces more moving parts at once than any earlier chapter: a new ownership model, a structured rejection pattern, two new entity subclasses, two consumable components, and a new entity type.
+**Part 8** is the longest and densest chapter in this tutorial. It introduces more moving parts at once than any earlier chapter: a new entity subclass (`Item`), two specialized component bases (`ActorComponent` and `ItemComponent`), and two consumable components (`HealingConsumable` and `TreasureConsumable`). It also adds an ownership model that lets an item move between the map and an inventory, and a structured rejection pattern for actions that cannot succeed.
 
-Part 8a builds the data model: items exist in the dungeon, can be seen, but cannot yet be touched. Part 8b adds the player-facing side: actions, keyboard bindings, and the inventory overlay.
+**Part 8a** builds the data model: items appear in the dungeon and can be inspected, but cannot yet be picked up, used, dropped, or auto-collected.
+
+**Part 8b** adds the player-facing side: actions, keyboard bindings, and the inventory overlay.
 
 ---
 
 ## What You Will Build
 
-By the end of Part 8a, health potions and chests appear in the dungeon. Hovering the mouse over either shows its name. Walking over a chest does nothing yet: the auto-collect mechanic will be added in Part 8b. There are no other keyboard interactions with items yet either.
+By the end of Part 8a, health potions and chests appear in the dungeon as instances of the new `Item` entity, spawned from a weighted table. Hovering the mouse over either already shows its name: that is the generic lookup Part 7 built, working here with no changes. Walking over a chest does nothing yet, like any other non-blocking entity; the auto-collect mechanic will be added in Part 8b. There are no other keyboard interactions with items yet either.
 
 ## Learning goals
 
-- Add `Item` as a new entity subclass with an `owner` field
+- Add an `owner` back-reference to `Entity`
+- Add `Item` as an entity subclass with a required `Consumable`
 - Introduce `Impossible` as a structured rejection pattern
 - Implement `Inventory`, `HealingConsumable`, and `TreasureConsumable` as components
 - Narrow base component types so annotations match the actual runtime type
@@ -24,93 +27,86 @@ By the end of Part 8a, health potions and chests appear in the dungeon. Hovering
 
 Before writing any code, consider the central design question: a health potion needs to exist in two places.
 
-When it is on the dungeon floor, the map owns it. When the player picks it up, the inventory owns it. It is the same Python object in both cases; only its *owner* changes. How does the game track which owner currently holds it?
+When it is on the dungeon floor, the map owns it. When the player picks it up, the inventory owns it. It is the same Python object in both cases; only its *owner* changes. How does the game track which owner currently holds it, and which collection to search for it?
 
-The answer is an `owner` field on `Entity`. Every entity stores a reference to its current owner:
+The answer is two related pieces of state: the entity lives inside a collection (the map's or the inventory's), and it also carries an `owner` field on `Entity` that points back to whichever one currently holds it:
 
 ```text
 On the dungeon floor:
   Item
+  ├── tracked in GameMap.entities
   └── owner = GameMap
 
 In the player's inventory:
   Item
+  ├── tracked in Inventory.items
   └── owner = Inventory
 ```
 
-In both cases the item is the same Python object, only `owner` changes. The field is the single source of truth for where an entity is: on the floor or in an inventory.
-
-This chapter also introduces a second architectural change: **important action rejections should say why**. The old approach was to return silently (or return `None`). The new approach raises an `Impossible` exception for cases where the player needs feedback, with the reason as its message.
-
----
-
-## `game/exceptions.py`
-
-Create a new file:
-
-```python
-from __future__ import annotations
-
-
-class Impossible(Exception):
-    """Exception raised when an action is impossible. The reason is the exception message."""
-```
-
-!!! info "Exceptions as control flow"
-    Python uses exceptions for unexpected bugs, but also for *expected* failures: requesting an impossible action, reading past the end of a file, looking up a missing key. Raising `Impossible` is not a bug, it is a structured way to carry a rejection reason out of any call depth without threading a return value through every intermediate function.
-
-Compare the alternatives. Returning `None` is silent: the caller has to check for it and decide what to tell the player. Returning a `bool` is only marginally better: the caller knows the action failed, but not why. Raising `Impossible("Your inventory is full.")` gives the reason for free.
+In both cases the item is the same Python object. `owner` is a back-reference to the current container, not the only place this information lives: whenever an item changes hands, both the collection membership and `owner` must be updated together, or the two would disagree about where the item is.
 
 ---
 
 ## New constants
 
-Part 8a introduces the visual constants for both item types: the health potion, the chest, and the gold color. The colors used for action rejections and the inventory overlay will be introduced in Part 8b, at the point where they are first used.
+Part 8a adds the sprites and colors needed for health potions and chests. It also adds the message colors used when the player recovers health or finds gold. The action-rejection color and the inventory overlay palette will be introduced in Part 8b, where they are first used.
 
-In `game/data/sprites.py`, add both item sprites. `CHEST` belongs in the entity section (before `CORPSE`); `HEALTH_POTION` opens a new items section below:
+In `game/data/sprites.py`, make sure the chest sprite exists, then create an items section for `HEALTH_POTION`:
 
 ```diff
-+CHEST   = "$"
- CORPSE  = "%"
-+
+ CHEST   = "$"
+
 +# Items
 +HEALTH_POTION = "!"
 ```
 
-In `game/data/colors.py`, add `CHEST` in the entity colors section (between `TROLL` and `CORPSE`) and `HEALTH_POTION` in a new item colors section right below:
+In `game/data/colors.py`, add the corresponding entity and item colors. The item section goes near the end of the file, after the existing UI colors:
 
 ```diff
- TROLL            = Color(  0, 127,   0)
-+CHEST            = Color(255, 240,   0)
+ # Entity colors
+ ...
  CORPSE           = Color(191,   0,   0)
+
+ DEBUG_MARKER        = Color(255, 255,   0)  # Part-4. Exercise 2: Add a debug marker entity
+PERSISTENT_MARKER   = Color(255,   0, 255)  # Part-4. Exercise 3: Remember a discovered marker
+
++CHEST            = Color(180, 128,  40)
 +
 +# Item colors
-+HEALTH_POTION    = Color(127, 0, 255)
++HEALTH_POTION    = Color(127,   0, 255)
 ```
 
-Then add `HEALTH_RECOVERED` and `GOLD` alongside the other message colors:
+Add `HEALTH_RECOVERED` near the combat message colors:
 
 ```diff
- ENEMY_DEATH      = Color(0xFF, 0xA0, 0x30)
-+HEALTH_RECOVERED = Color(0x00, 0xFF, 0x00)
-+GOLD             = Color(0xFF, 0xD7, 0x00)
+ # Combat message colors
+ ...
++HEALTH_RECOVERED = Color(  0, 255,   0)
 ```
 
-`HEALTH_RECOVERED` is bright green for HP-restore messages. `GOLD` is used by `TreasureConsumable.activate()` and later by the gold counter in the HUD.
+Add `GOLD` to the UI colors, since the same color will later be used by the gold counter:
+
+```diff
+ # UI colors
+ ...
++GOLD = Color(255, 215,   0)
+```
+
+`HEALTH_RECOVERED` is a bright green used for HP-recovery messages. `GOLD` is used when `TreasureConsumable.activate()` reports that the player has found treasure, and later by the gold counter in the HUD.
 
 !!! note "If you completed the Part 5 chest exercise"
-    `sprites.CHEST` and `colors.CHEST` may already be defined. Keep the existing definitions.
+    `sprites.CHEST` and `colors.CHEST` may already be defined. Keep the existing definitions instead of adding duplicates.
 
 ---
 
 ## Narrowing component types
 
-Every component in `game/entities/components/base_component.py` declares `entity: Entity`. That annotation is incorrect. A `Fighter` component's entity is always an `Actor`, it will never be a plain `Entity` or an `Item`. Once this chapter moves `ai` off `Entity`, `entity: Entity` no longer describes the design accurately: `self.entity.ai` and `self.entity.is_alive` are `Actor` attributes, and `Entity` does not declare them.
+Every component in `game/entities/components/base_component.py` declares `entity: Entity`. That annotation is incorrect. A `Fighter` component's entity is always an `Actor`, it will never be a plain `Entity` or an `Item`. Once this chapter moves `ai` off `Entity`, `entity: Entity` no longer describes the design accurately: `self.entity.ai` is an `Actor` attribute, and `Entity` does not declare it.
 
-!!! question "What do we gain by narrowing?"
-    After `ai` moves to `Actor`, the annotation `entity: Entity` is incomplete: `Entity` does not have `ai`, but `Fighter` accesses `self.entity.ai`. The attribute exists at runtime because `Fighter` is always attached to an `Actor`, but the declared type does not capture that invariant. Narrowing to `entity: Actor` makes the annotation accurate, and a type checker can verify the access correctly as a result.
+!!! question "Why not just annotate `entity: Actor` directly in `Fighter`?"
+    `Fighter` could declare `entity: Actor` itself, with no class in between. But `Fighter` is not the only actor component: `BaseAI` and `Inventory` need the exact same annotation. `ActorComponent` declares it once, and every actor component inherits it by subclassing `ActorComponent` instead of `BaseComponent`. `ItemComponent` does the same for `entity: Item`.
 
-By introducing `ActorComponent` (where `entity: Actor`) and `ItemComponent` (where `entity: Item`), we make the annotations correct: certain components are *always* actor components, others are *always* item components. The annotation narrows from `Entity` to the actual runtime type, so the declared type finally matches the design.
+`ActorComponent` declares `entity: Actor`; `ItemComponent` declares `entity: Item`. `Fighter` and `BaseAI` will subclass `ActorComponent`; components that belong to an item will subclass `ItemComponent`.
 
 Update `game/entities/components/base_component.py`:
 
@@ -138,7 +134,14 @@ Update `game/entities/components/base_component.py`:
 ```
 
 !!! info "Why keep `BaseComponent` at all?"
-    `BaseComponent` has no `entity` annotation because the type of `entity` depends on whether the component belongs to an `Actor` or an `Item`: it is not meaningful at this level. `ActorComponent` and `ItemComponent` carry the correct declarations. `BaseComponent` is kept as their common ancestor in case future code needs to refer to "any component" generically (a debug inspector, a serialization layer, or a plugin system). If your project never needs that, you can remove `BaseComponent` entirely and make `ActorComponent` and `ItemComponent` independent classes.
+    `BaseComponent` carries no `entity` annotation because that type depends on whether the component belongs to an `Actor` or an `Item`, which `BaseComponent` cannot know. `ActorComponent` and `ItemComponent` carry the correct declarations; `BaseComponent` remains only as their shared ancestor.
+
+`ItemComponent` declares `entity: Item`, but `Item` does not exist yet in `entity.py`. Add a one-line stub now, at the end of the file, so the annotation refers to a real class from the start:
+
+```python
+class Item(Entity):
+    pass
+```
 
 Now update each existing component to use the correct base class. In `game/entities/components/fighter.py`:
 
@@ -164,16 +167,172 @@ In `game/entities/components/ai.py`:
 +class BaseAI(ActorComponent):
 ```
 
-`ItemComponent` declares `entity: Item`, but `Item` does not exist yet in `entity.py`. Add a one-line stub now so the annotation refers to a real class from the start:
-
-```diff
-+class Item(Entity):
-+    pass
-```
-
-**Note**: Step 6 in the next section will replace this stub with the full implementation.
+**Note**: The `entity.py` section below replaces this stub with the full `Item` implementation.
 
 The two new components introduced in this chapter (`Inventory` and `Consumable`) will use the correct bases from the start.
+
+!!! tip "Run it now"
+    If you run the game now, you can check that `Fighter` and `BaseAI` still work exactly as before: combat, death messages, and enemy turns are unaffected by the base-class change. It is a good habit to confirm a refactor like this one before building new, unconnected pieces on top of it.
+
+---
+
+## Create `game/entities/components/inventory.py`
+
+`Inventory` and `Consumable` (next section) both reference `Entity`/`Actor` additions that the `entity.py` section below adds: `owner`, `place()`, and `Actor.inventory`. Seeing the components first shows what those additions need to support, before you write them.
+
+```python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from game.entities.components.base_component import ActorComponent
+
+if TYPE_CHECKING:
+    from game.entities.entity import Item
+    from game.map.game_map import GameMap
+
+
+class Inventory(ActorComponent):
+
+    def __init__(self, capacity: int) -> None:
+        self.capacity: int     = capacity
+        self.items: list[Item] = []
+        self.gold: int         = 0
+
+    def add_item(self, item: Item, game_map: GameMap | None) -> bool:
+        if len(self.items) >= self.capacity:
+            return False
+
+        if game_map is not None:
+            game_map.entities.discard(item)
+
+        item.owner = self
+        self.items.append(item)
+
+        return True
+
+    def drop_item(self, item: Item, game_map: GameMap) -> bool:
+        if item not in self.items:
+            return False
+
+        self.items.remove(item)
+        item.place(self.entity.x, self.entity.y, game_map)
+
+        return True
+```
+
+`self.gold: int = 0` stores the player's accumulated treasure. Gold is something the player carries, so it lives here alongside the item list rather than as a bare attribute on `Actor`.
+
+`add_item()` checks capacity, transfers ownership to the inventory, and appends the item to `items`. When the item comes from the dungeon floor, the caller passes the current `game_map`, and `add_item()` removes it from the map's entity set via `game_map.entities.discard()`. When the item was never placed on a map, for example a starting item, the caller can pass `None`.
+
+`game_map` accepts `None`, but it does not have a default value. This makes each call state its intent explicitly: `inventory.add_item(item, engine.game_map)` means "take this item from the map", while `inventory.add_item(item, None)` means "add an item that is not on any map". That explicit argument helps avoid accidentally leaving a floor item both in the map and in the inventory. The method returns `False` rather than raising: capacity is a data-layer concern, and whether a full inventory deserves a player-facing rejection message is a decision for the caller, not for `Inventory` itself. The next section adds `Impossible`, the exception that caller will raise.
+
+`drop_item()` checks that the item is actually in `items` before touching anything, the same invariant `Consumable.consume()` checks later in this chapter, then removes it and calls `item.place()` to move it back to the dungeon floor at the actor's current position. It returns `False` if the item was never there, mirroring `add_item()`. The caller passes `game_map` explicitly. In Part 8b, `DropItem.perform` will already have `engine` and can supply `engine.game_map` directly, so `Inventory` does not need to navigate the ownership chain itself.
+
+---
+
+## Create `game/exceptions.py`
+
+This chapter also introduces a second architectural change: **important action rejections should say why**. The old approach was to return silently (or return `None`). The new approach raises an `Impossible` exception for cases where the player needs feedback, with the reason as its message.
+
+```python
+from __future__ import annotations
+
+
+class Impossible(Exception):
+    """Exception raised when an action is impossible. The reason is the exception message."""
+```
+
+!!! info "Exceptions as control flow"
+    Python uses exceptions for unexpected bugs, but also for *expected* failures: a missing dictionary key, an invalid value conversion, an impossible action. Raising `Impossible` is not a bug, it is a structured way to carry a rejection reason out of any call depth without threading a return value through every intermediate function.
+
+Compare the alternatives. Returning `None` is silent: the caller has to check for it and decide what to tell the player. Returning a `bool` is only marginally better: the caller knows the action failed, but not why. Raising `Impossible("Your inventory is full.")` gives the reason for free. Part 8b adds the one handler that catches it and writes that reason to the message log.
+
+---
+
+## Create `game/entities/components/consumable.py`
+
+Create the file with `Consumable` as the base class, plus its two concrete subclasses, `HealingConsumable` and `TreasureConsumable`:
+
+```python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from game.data import colors
+from game.entities.components.base_component import ItemComponent
+from game.entities.components.inventory import Inventory
+from game.exceptions import Impossible
+from game.message_log import MessageLog
+
+if TYPE_CHECKING:
+    from game.actions import Action
+    from game.engine import Engine
+    from game.entities.entity import Actor
+
+
+class Consumable(ItemComponent):
+    auto_activate: bool = False
+
+    def activate(self, _action: Action, _engine: Engine, _consumer: Actor) -> None:
+        """Apply this consumable's effect. Must be overridden."""
+        raise NotImplementedError()
+
+    def consume(self) -> None:
+        """Remove the item from the holder's inventory."""
+        entity = self.entity
+        inventory = entity.owner
+        if isinstance(inventory, Inventory) and entity in inventory.items:
+            inventory.items.remove(entity)
+            entity.owner = None
+
+
+class HealingConsumable(Consumable):
+
+    def __init__(self, amount: int) -> None:
+        self.amount = amount
+
+    def activate(self, _action: Action, _engine: Engine, consumer: Actor) -> None:
+        amount_recovered = consumer.fighter.heal(self.amount)
+
+        if amount_recovered > 0:
+            MessageLog.add_message(
+                f"You consume the {self.entity.name}, and recover {amount_recovered:.1f} HP!",
+                colors.HEALTH_RECOVERED,
+            )
+            self.consume()
+
+        else:
+            raise Impossible("Your health is already full.")
+
+
+class TreasureConsumable(Consumable):
+    auto_activate = True
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def activate(self, _action: Action, engine: Engine, consumer: Actor) -> None:
+        consumer.inventory.gold += self.value
+        MessageLog.add_message(
+            f"You found {self.value} gold!",
+            colors.GOLD,
+        )
+        engine.game_map.entities.discard(self.entity)
+        self.entity.owner = None
+```
+
+The file defines three classes: `Consumable` as the base for all item effects, `HealingConsumable` for HP recovery, and `TreasureConsumable` for treasure that will be collected automatically on contact, once Part 8b adds the collection logic.
+
+`activate()` is declared with `_action: Action` rather than the more specific `ItemAction`, because `ItemAction` does not exist until Part 8b, so Part 8a temporarily accepts the broader `Action` type.
+
+`auto_activate: bool = False` is a class-level flag. `TreasureConsumable` overrides it to `True`. The flag exists but nothing reads it yet: chests spawn on the floor and stay there until Part 8b adds the collection logic.
+
+`Inventory` is a regular, non-`TYPE_CHECKING` import here, unlike `Action`, `Engine`, and `Actor` above. It is safe because `inventory.py` only reaches for `Item` inside its own `TYPE_CHECKING` block, the same Part 2 pattern, so there is no cycle to close. The `isinstance` check serves double duty: it guards against consuming an unowned item and narrows the declared type from `GameMap | Inventory | None` to `Inventory`, making the subsequent `inventory.items` access well-typed. After removing the item, `entity.owner = None` clears the stale reference so the consumed item no longer points at the inventory it came from.
+
+`HealingConsumable.activate()` calls `fighter.heal()`, which you wrote in Part 7. If the player is already at full health, `heal()` returns `0` and `activate()` raises `Impossible`.
+
+`TreasureConsumable.activate()` adds `value` to `consumer.inventory.gold`, logs the find, and removes the chest from the map in the same call. There is no `self.consume()` here because `consume()` removes an item from an inventory; the chest was never in one.
 
 ---
 
@@ -191,6 +350,7 @@ At the same time, add the imports that the new classes and annotations in this c
  if TYPE_CHECKING:
      from game.entities.components.ai import BaseAI
 +    from game.entities.components.consumable import Consumable
+     from game.entities.components.fighter import Fighter
 +    from game.entities.components.inventory import Inventory
      from game.map.game_map import GameMap
 
@@ -301,12 +461,12 @@ Update `Actor.__init__`:
      def __init__(
          self,
          *,
-         x: int              = 0,
-         y: int              = 0,
-         char: str           = sprites.UNKNOWN,
-         color: Color        = colors.DEFAULT_FG,
-         name: str           = "<unnamed>",
-         ai: BaseAI | None   = None,
+         x: int            = 0,
+         y: int            = 0,
+         char: str         = sprites.UNKNOWN,
+         color: Color      = colors.DEFAULT_FG,
+         name: str         = "<unnamed>",
+         ai: BaseAI | None = None,
          fighter: Fighter,
 +        inventory: Inventory,
      ) -> None:
@@ -347,11 +507,11 @@ Update `Actor.__init__`:
 +    def __init__(
 +        self,
 +        *,
-+        x: int      = 0,
-+        y: int      = 0,
-+        char: str   = sprites.UNKNOWN,
++        x: int       = 0,
++        y: int       = 0,
++        char: str    = sprites.UNKNOWN,
 +        color: Color = colors.DEFAULT_FG,
-+        name: str   = "<unnamed>",
++        name: str    = "<unnamed>",
 +        consumable: Consumable,
 +    ) -> None:
 +        super().__init__(
@@ -371,163 +531,6 @@ Items do not usually block movement (you can stand on top of a potion) and rende
 
 ---
 
-## Add `items` to `GameMap`
-
-Items on the map need a way to be found. Add a filtered property to `game/map/game_map.py` that yields only `Item` instances:
-
-```diff
- if TYPE_CHECKING:
--    from game.entities.entity import Actor, Entity
-+    from game.entities.entity import Actor, Entity, Item
-
- ...
-
-     @property
-     def actors(self) -> Iterator[Actor]:
-         ...
-
-+    @property
-+    def items(self) -> Iterator[Item]:
-+        from game.entities.entity import Item
-+
-+        yield from (e for e in self.entities if isinstance(e, Item))
-```
-
----
-
-## Create `game/entities/components/inventory.py`
-
-```python
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-from game.entities.components.base_component import ActorComponent
-
-if TYPE_CHECKING:
-    from game.entities.entity import Item
-    from game.map.game_map import GameMap
-
-
-class Inventory(ActorComponent):
-
-    def __init__(self, capacity: int) -> None:
-        self.capacity = capacity
-        self.items: list[Item] = []
-        self.gold: int = 0
-
-    def add_item(self, item: Item, game_map: GameMap | None) -> bool:
-        if len(self.items) >= self.capacity:
-            return False
-
-        if game_map is not None:
-            game_map.entities.discard(item)
-
-        item.owner = self
-        self.items.append(item)
-
-        return True
-
-    def drop_item(self, item: Item, game_map: GameMap) -> None:
-        self.items.remove(item)
-        item.place(self.entity.x, self.entity.y, game_map)
-```
-
-`self.gold: int = 0` stores the player's accumulated treasure. Gold is something the player carries, so it lives here alongside the item list rather than as a bare attribute on `Actor`.
-
-`add_item()` checks capacity, transfers ownership to the inventory, and appends the item to `items`. When the item comes from the dungeon floor, the caller passes the current `game_map`, and `add_item()` removes it from the map's entity set via `game_map.entities.discard()`. When the item was never placed on a map, for example a starting item, the caller can pass `None`.
-
-`game_map` accepts `None`, but it does not have a default value. This makes each call state its intent explicitly: `inventory.add_item(item, engine.game_map)` means "take this item from the map", while `inventory.add_item(item, None)` means "add an item that is not on any map". That explicit argument helps avoid accidentally leaving a floor item both in the map and in the inventory. The method returns `False` if the inventory is full so that the caller can raise `Impossible` with a reason.
-
-`drop_item()` removes the item from `items`, then calls `item.place()` to move it back to the dungeon floor at the actor's current position. The caller passes `game_map` explicitly. In Part 8b, `DropItem.perform` will already have `engine` and can supply `engine.game_map` directly, so `Inventory` does not need to navigate the ownership chain itself.
-
----
-
-## Create `game/entities/components/consumable.py`
-
-```python
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-from game.data import colors
-from game.entities.components.base_component import ItemComponent
-from game.exceptions import Impossible
-from game.message_log import MessageLog
-
-if TYPE_CHECKING:
-    from game.actions import Action
-    from game.engine import Engine
-    from game.entities.entity import Actor
-
-
-class Consumable(ItemComponent):
-    auto_activate: bool = False
-
-    def activate(self, _action: Action, _engine: Engine, _consumer: Actor) -> None:
-        """Apply this consumable's effect. Must be overridden."""
-        raise NotImplementedError()
-
-    def consume(self) -> None:
-        """Remove the item from the holder's inventory."""
-        from game.entities.components.inventory import Inventory
-
-        entity = self.entity
-        inventory = entity.owner
-        if isinstance(inventory, Inventory) and entity in inventory.items:
-            inventory.items.remove(entity)
-            entity.owner = None
-
-
-class HealingConsumable(Consumable):
-
-    def __init__(self, amount: int) -> None:
-        self.amount = amount
-
-    def activate(self, _action: Action, _engine: Engine, consumer: Actor) -> None:
-        amount_recovered = consumer.fighter.heal(self.amount)
-
-        if amount_recovered > 0:
-            MessageLog.add_message(
-                f"You consume the {self.entity.name}, and recover {amount_recovered:.1f} HP!",
-                colors.HEALTH_RECOVERED,
-            )
-            self.consume()
-
-        else:
-            raise Impossible("Your health is already full.")
-
-
-class TreasureConsumable(Consumable):
-    auto_activate = True
-
-    def __init__(self, value: int) -> None:
-        self.value = value
-
-    def activate(self, _action: Action, engine: Engine, consumer: Actor) -> None:
-        consumer.inventory.gold += self.value
-        MessageLog.add_message(
-            f"You found {self.value} gold!",
-            colors.GOLD,
-        )
-        engine.game_map.entities.discard(self.entity)
-        self.entity.owner = None
-```
-
-The file defines three classes: `Consumable` as the base for all item effects, `HealingConsumable` for HP recovery, and `TreasureConsumable` for treasure collected automatically on contact.
-
-`activate()` is declared with `_action: Action` rather than the more specific `ItemAction`, because `ItemAction` does not exist yet. Using the base type keeps this file free of forward references.
-
-`auto_activate: bool = False` is a class-level flag. `TreasureConsumable` overrides it to `True`. The flag exists but nothing reads it yet: chests spawn on the floor and stay there until Part 8b adds the collection logic.
-
-`consume()` imports `Inventory` locally to avoid a circular import: `consumable.py` and `inventory.py` would otherwise form a cycle at module level. The `isinstance` check serves double duty: it guards against consuming an unowned item and narrows the declared type from `GameMap | Inventory | None` to `Inventory`, making the subsequent `inventory.items` access well-typed. After removing the item, `entity.owner = None` clears the stale reference so the consumed item no longer points at the inventory it came from.
-
-`HealingConsumable.activate()` calls `fighter.heal()`, which you wrote in Part 7. If the player is already at full health, `heal()` returns `0` and `activate()` raises `Impossible`.
-
-`TreasureConsumable.activate()` adds `value` to `consumer.inventory.gold`, logs the find, and removes the chest from the map in the same call. There is no `self.consume()` here because `consume()` removes an item from an inventory; the chest was never in one.
-
----
-
 ## Update `game/entities/factories.py`
 
 Every `Actor` now requires an `Inventory`. Add the component to the existing templates, and also import both consumable classes and `Item`:
@@ -535,7 +538,10 @@ Every `Actor` now requires an `Inventory`. Add the component to the existing tem
 ```diff
  from game.data import colors, sprites
  from game.entities.components.ai import HostileEnemy
-+from game.entities.components.consumable import HealingConsumable, TreasureConsumable
++from game.entities.components.consumable import (
++    HealingConsumable,
++    TreasureConsumable,
++)
  from game.entities.components.fighter import Fighter
 +from game.entities.components.inventory import Inventory
 -from game.entities.entity import Actor, Entity
@@ -547,7 +553,7 @@ Every `Actor` now requires an `Inventory`. Add the component to the existing tem
      char      = sprites.PLAYER,
      color     = colors.PLAYER,
      name      = "Player",
-     ai        = None,
+     ai        = None,   # player is controlled by the keyboard
      fighter   = Fighter(hp=30, defense=2, attack=5),
 +    inventory = Inventory(capacity=10),
  )
@@ -566,12 +572,15 @@ Every `Actor` now requires an `Inventory`. Add the component to the existing tem
      color     = colors.TROLL,
      name      = "Troll",
      ai        = HostileEnemy(),
-     fighter   = Fighter(hp=12, defense=0, attack=3),
+     # Part-6. Exercise 3: Flee behavior
+     fighter   = Fighter(hp=12, defense=0, attack=3, flee_threshold=0.3),
 +    inventory = Inventory(capacity=0),
  )
 ```
 
-The player starts with `capacity=10`. 10 makes a full inventory a real constraint worth managing. Enemies get `capacity=0`: their inventory exists (so the type is satisfied) but they cannot hold any items. An orc that walks over a potion will not pick it up.
+The player starts with `capacity=10`. 10 makes a full inventory a real constraint worth managing. Enemies receive an inventory too, so every `Actor` has the same shape: `capacity=0` means they could never carry anything, even if something tried to add an item. Their current AI never attempts pickup, though, so an orc walking over a potion leaves it untouched for a simpler reason: nothing in its behavior looks for items at all.
+
+If you skipped Part 6 Exercise 3, keep your existing `troll` fighter line. Only the new `inventory` argument matters here.
 
 Then add both item templates and the spawn table at the bottom of the file:
 
@@ -604,6 +613,35 @@ item_chances = [
 
 ---
 
+## Add `items` to `GameMap`
+
+Items on the map need a way to be found. `isinstance(entity, Item)` needs `Item` at runtime, so add it to the existing module-level import in `game/map/game_map.py`, then add a filtered property:
+
+```diff
+-from game.entities.entity import Actor
++from game.entities.entity import Actor, Item
+
+ ...
+
+     @property
+     def actors(self) -> Iterator[Actor]:
+         ...
+
++    @property
++    def items(self) -> Iterator[Item]:
++        yield from (
++            entity for entity in self.entities
++            if isinstance(entity, Item)
++        )
+```
+
+This does not create a circular import: `entity.py`'s only references to `GameMap` are the `TYPE_CHECKING` import and the deferred import inside `place()` from Step 4, neither of which runs at module load time.
+
+!!! tip "Run it now"
+    If you run the game now, you can check that this refactor changed nothing visible: the game should start and play exactly as before, with no items on the floor yet. It is a good habit to confirm a structural change like this one before building the next piece on top of it.
+
+---
+
 ## Update `game/map/map_generator.py`
 
 In Part 5, `place_entities` accepted a single monster limit. Part 8 adds **item** spawning, so the function receives both monster and item limits.
@@ -612,7 +650,26 @@ In Part 5, `place_entities` accepted a single monster limit. Part 8 adds **item*
     That exercise added `min_monsters` to `place_entities`. The diffs below assume it is already there. If you skipped it, add `min_monsters: int` alongside `max_monsters` and replace `max_monsters` with `rng.randint(min_monsters, max_monsters)` while you are here.
 
 !!! tip "If you skipped Exercise 2 from Part 5"
-    The monster loop below assumes the weighted table from that exercise: `factories.monster_chances`, split into `monster_templates` and `monster_weights`, then selected with `rng.choices`. If your code still has a hardcoded orc/troll `if/else`, replace it with the `rng.choices` version here. It is the version future spawn tables build on.
+    If your code still has a hardcoded orc/troll `if/else`, replace it with the weighted version below: `factories.monster_chances` split into `monster_templates` and `monster_weights`, then selected with `rng.choices`. It is the version future spawn tables build on.
+
+    ```python
+    # Part-5. Exercise 2: Weighted monster table
+    monster_templates, monster_weights = zip(*factories.monster_chances)
+
+    for _ in range(number_of_monsters):
+        x = rng.randint(room.x1 + 1, room.x2 - 1)
+        y = rng.randint(room.y1 + 1, room.y2 - 1)
+
+        if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
+            monsters = rng.choices(
+                monster_templates,
+                weights = monster_weights,
+                k       = 1,
+            )
+            monsters[0].spawn(dungeon, x, y)
+    ```
+
+    `rng` is the local `random.Random(seed)` instance introduced in Part 4. Using it here, instead of the module-level `random`, keeps monster selection reproducible for a given seed, exactly like room generation.
 
 Expand the function signature:
 
@@ -628,37 +685,32 @@ Expand the function signature:
  ) -> None:
      number_of_monsters = rng.randint(min_monsters, max_monsters)
 +    number_of_items    = rng.randint(min_items, max_items)
+
+     # Part-5. Exercise 2: Weighted monster table
+     monster_templates, monster_weights = zip(*factories.monster_chances)
++    item_templates, item_weights       = zip(*factories.item_chances)
 ```
 
-Then add the item spawning loop at the end of the function body. The diff also renames the `monster` variable to `monsters` and moves the `[0]` index onto its own line so the comment reads on its own line:
+Then add the item spawning loop at the end of the function body:
 
 ```diff
-        if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
--            monster = rng.choices(
-+            monsters = rng.choices(
-                 monster_templates,
-                 weights = monster_weights,
--                k       = 1,
--            )[0]
--            monster.spawn(dungeon, x, y)
-+                k       = 1,
-+            )
-+            # First element (because rng.choices returns a list)
-+            monsters[0].spawn(dungeon, x, y)
 +
-+    item_templates, item_weights = zip(*factories.item_chances)
 +    for _ in range(number_of_items):
 +        x = rng.randint(room.x1 + 1, room.x2 - 1)
 +        y = rng.randint(room.y1 + 1, room.y2 - 1)
 +        if not any(entity.x == x and entity.y == y for entity in dungeon.entities):
 +            items = rng.choices(
 +                item_templates,
-+                weights=item_weights,
++                weights = item_weights,
 +                k       = 1,
 +            )
-+            # First element (because rng.choices returns a list)
 +            items[0].spawn(dungeon, x, y)
 ```
+
+!!! tip "`zip(*x)` unzips a list of pairs"
+    `*factories.item_chances` unpacks the list of `(template, weight)` pairs into separate arguments. `zip` then regroups them by position: all the templates together, all the weights together. The result, `item_templates` and `item_weights`, is two parallel sequences ready for `random.Random.choices()`.
+
+`random.Random.choices()` returns a list even when `k=1`, so `[0]` takes its only element.
 
 Also expand the signature of `generate_dungeon` itself to accept the item parameters:
 
@@ -740,6 +792,19 @@ Run the game and verify the following:
 - Walking over a chest does nothing yet. Auto-collect will be added in Part 8b.
 - No keyboard interactions with items exist yet. The `G`, `I`, and `D` keys will be added in Part 8b.
 
+As with monsters in Part 5, occupied positions are skipped rather than retried, so `max_items_per_room` is an upper bound, not a guarantee. If your first few rooms only show one item type, that is normal variance, not a bug. To check both types reliably while testing, you can temporarily raise the floor with `min_items_per_room = max_items_per_room = 2`, then restore the tutorial values once you have confirmed both appear.
+
 If both item types appear and hover names work, Part 8a is complete.
+
+---
+
+## Summary
+
+- `Entity.owner` is a back-reference to whichever collection currently holds an entity, `GameMap.entities` or `Inventory.items`, not the sole record of its location.
+- `Item` is a new entity subclass with a required `Consumable`. `ActorComponent` and `ItemComponent` narrow `entity` to the correct runtime type on every component.
+- `Inventory`, `HealingConsumable`, and `TreasureConsumable` exist and hold real data, but nothing calls them yet: no key picks up an item, and no contact check collects a chest.
+- Health potions and chests spawn on the floor from a weighted table, and their names already show on hover, reusing the lookup Part 7 built.
+
+Continue to [Part 8b: Inventory](part-8b.md) to pick up, use, drop, and auto-collect these items.
 
 ---

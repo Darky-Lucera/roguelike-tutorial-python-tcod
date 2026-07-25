@@ -58,13 +58,14 @@ class DropItem(ItemAction):
 
     def perform(self, engine: Engine, entity: Entity) -> None:
         assert isinstance(entity, Actor)
-        entity.inventory.drop_item(self.item, engine.game_map)
+        if not entity.inventory.drop_item(self.item, engine.game_map):
+            raise Impossible("You don't have that.")
         MessageLog.add_message(f"You dropped the {self.item.name}.")
 ```
 
 `PickupAction` iterates `engine.game_map.items` (the new property) looking for an item at the player's position. If found, it delegates to `inventory.add_item()`, which removes the item from the map's entity set, transfers ownership to the inventory, and appends it to `inventory.items`. Both trailing `raise Impossible` statements ensure the player always gets feedback.
 
-`ItemAction` delegates to `consumable.activate()`. `DropItem` extends `ItemAction` because dropping also needs the item reference, but calls `inventory.drop_item()` instead.
+`ItemAction` delegates to `consumable.activate()`. `DropItem` extends `ItemAction` because dropping also needs the item reference, but calls `inventory.drop_item()` instead, raising `Impossible` on the `False` case the same way `PickupAction` does for a full inventory.
 
 The `assert isinstance(entity, Actor)` calls enforce a design contract: `Action.perform` is declared with `entity: Entity`, but these three actions require an `Actor` (only actors have `inventory`). The asserts make that constraint explicit at runtime and narrow the declared type, so a type checker can verify the subsequent attribute accesses without casts.
 
@@ -94,12 +95,13 @@ Also add `PickupAction` to the import list at the top of `game/game_states.py`:
 +)
 ```
 
-Now that `ItemAction` exists, add `get_action()` to `Consumable` in `game/entities/components/consumable.py` and tighten the `_action` annotations to `ItemAction`:
+Now that `ItemAction` exists, import it at module level, add `get_action()` to `Consumable` in `game/entities/components/consumable.py`, and tighten the `_action` annotations to `ItemAction`:
 
 ```diff
++from game.actions import ItemAction
++
  if TYPE_CHECKING:
--    from game.actions import Action
-+    from game.actions import Action, ItemAction
+     from game.actions import Action
 ```
 
 ```diff
@@ -107,8 +109,6 @@ Now that `ItemAction` exists, add `get_action()` to `Consumable` in `game/entiti
 +
 +    def get_action(self, _consumer: Actor, _engine: Engine) -> Action | None:
 +        """Return the action this consumable produces when used."""
-+        from game.actions import ItemAction
-+
 +        return ItemAction(item=self.entity)
 +
 -    def activate(self, _action: Action, _engine: Engine, _consumer: Actor) -> None:
@@ -125,7 +125,7 @@ Now that `ItemAction` exists, add `get_action()` to `Consumable` in `game/entiti
 +    def activate(self, _action: ItemAction, engine: Engine, consumer: Actor) -> None:
 ```
 
-`get_action()` returns the action produced by using this item. The base implementation returns a plain `ItemAction`, but future consumable types can override it to request additional input before acting, for example a targeting scroll that needs a destination tile. The local import inside `get_action()` avoids a module-level circular import between `consumable.py` and `actions.py`.
+`get_action()` returns the action produced by using this item. The base implementation returns a plain `ItemAction`, but future consumable types can override it to request additional input before acting, for example a targeting scroll that needs a destination tile. This is safe for the same reason as the `TYPE_CHECKING` imports in Part 8a: `entity.py` only refers to `Consumable` under `TYPE_CHECKING`, so nothing on the `actions.py` → `entity.py` path imports `consumable.py` back.
 
 ---
 
@@ -170,9 +170,9 @@ Then simplify `handle_events()` to a one-line dispatch:
 Also add `INVALID` to `game/data/colors.py`, since the rewritten `handle_events` uses it for rejection messages:
 
 ```diff
- WELCOME_TEXT = Color(0x20, 0xA0, 0xFF)
+ WELCOME_TEXT        = Color( 32, 160, 255)
  ...
-+INVALID      = Color(0xFF, 0xFF, 0x00)
++INVALID             = Color(255, 255,   0)
 ```
 
 `INVALID` is yellow: it is used for every rejection the player should read, from a full inventory to an already-healed condition.
@@ -223,6 +223,50 @@ Key differences from the old engine code:
 - `except Impossible as ex:` catches any rejection, logs it with `colors.INVALID`, and returns early so enemies do not take their turn on a failed action.
 - After a successful action, if the current state is an inventory state, it switches back to `MainGameState`. Opening the inventory does not advance time; using or dropping an item does.
 
+!!! info "Why an exception instead of a result-object?"
+    Part 8a picked `raise Impossible(...)` over the other mainstream alternative: a result-object, for example `ActionResult(success, message)`. A result-object avoids exceptions entirely and composes well, a caller can inspect a result and decide what to do next, but every intermediate function has to check it and relay it onward: that repetitive relay code is what the comment below calls plumbing.
+
+    Here is the same `activate()` → `perform()` chain you just built, shown with the result-object mechanism instead:
+
+    ```python
+    def activate(self) -> ActionResult:
+        if not target:
+            return ActionResult(success=False, message="No valid target.")
+        ...
+        return ActionResult(True)
+
+    def perform(self) -> ActionResult:
+        result = self.item.activate()
+        if not result.success:
+            return result  # <-- plumbing: result needs to be resent
+        ...
+        return ActionResult(True)
+
+    ...
+
+    result = action.perform()
+    if result.success:
+        foo()
+    else:
+        bar()
+    ```
+
+    Compare that with what you just wrote: `raise Impossible(...)` exits directly to the single `except Impossible` above, with no intermediate function touched. The [2019 tutorial](https://www.rogueliketutorials.com/tutorials/tcod/2019/part-8/) used the result-object shape, but as a plain dict: `results.append({"consumed": False, "message": Message("You are already at full health", ...)})`. Every caller up the chain had to inspect `consumed` and decide whether to keep going.
+
+!!! note "If you kept the Part 1 turn counter"
+    Moving `action.perform(...)` out of `Engine.handle_events` also moves the only place `self.turn_count += 1` used to live. Add it back where the old code called it, right before the action executes:
+
+    ```diff
+        if action is not None:
+    +        # Part-1. Exercise 3: Add a wait action
+    +        self.engine.turn_count += 1
+    +
+            try:
+                action.perform(self.engine, self.engine.player)
+    ```
+
+    Part 10's graveyard exercise later moves this same increment into the successful-action path, so impossible actions stop counting. Blocked moves, like bumping a wall, never raised `Impossible` in the first place, so they still count either way.
+
 !!! note "What Impossible is for"
     `Impossible` is reserved for rejections that are worth telling the player about: a full inventory, an already-healed condition, nothing to pick up. Low-level movement failures (bumping into a wall, trying to walk off the map) are not raised as `Impossible`. Those actions still cost a turn (the player pressed a key and something was attempted), but generating a log message for every wall collision would be noise. The convention is: if the player needs to read why an action failed, raise `Impossible`; if the failure is self-evident from the game state, return silently.
 
@@ -232,7 +276,7 @@ The return type of `handle_events` changes from `Action | None` to `None`. Updat
 
 ## Trim movement keys
 
-Vi keys (`b`, `h`, `j`, `k`, `l`, `n`, `u`, `y`) have been part of roguelikes since the original *Rogue* (1980), which ran on VT100 terminals with no arrow keys. On a modern keyboard, arrow keys and the numpad cover the same directions with less ambiguity, and freeing those letters matters here: this chapter adds `G`, `I`, and `D` as action keys, and Exercise 3 assigns the remaining letters to items for direct use from the map.
+Vi keys (`b`, `h`, `j`, `k`, `l`, `n`, `u`, `y`) have been part of roguelikes since the original *Rogue* (1980), which reused vi's hjkl keys (Part 1 already told you their ADM-3A origin). On a modern keyboard, arrow keys and the numpad cover the same directions with less ambiguity, and freeing those letters matters here: this chapter adds `G`, `I`, and `D` as action keys, and Exercise 3 assigns the remaining letters to items for direct use from the map.
 
 Remove the vi keys block from `MOVE_KEYS` in `game/data/keys.py`:
 
@@ -250,6 +294,9 @@ Remove the vi keys block from `MOVE_KEYS` in `game/data/keys.py`:
 
 !!! info "Numpad vs. regular number keys"
     `tcod.event.KeySym.KP_1`–`KP_9` are distinct key codes from `tcod.event.KeySym.N1`–`N9`. Numpad keys continue to work for movement. Regular number keys (`1`–`9`, `0`) remain free for future use, such as equipment slots in Part 13.
+
+!!! warning "No numpad, no default diagonals"
+    Some laptop keyboards have no numpad. On those keyboards, removing the vi keys leaves no diagonal movement: the arrow keys only cover the four cardinal directions. This tutorial does not add a replacement binding for that case; add your own keys to `MOVE_KEYS` in `game/data/keys.py` if you need diagonals without a numpad.
 
 ---
 
@@ -293,7 +340,7 @@ Three new state classes go at the bottom of `game/game_states.py`.
 Add the inventory overlay colors to `game/data/colors.py`:
 
 ```diff
- INVALID = Color(0xFF, 0xFF, 0x00)
+ INVALID             = Color(255, 255,   0)
 +
 +# Inventory overlay colors
 +INVENTORY_MENU_TITLE = Color(255, 245, 160)
@@ -342,7 +389,7 @@ One more binding before the states themselves: the overlay closes with `Escape`,
 
     Today they happen to share a physical key. If you later decide overlays should close with `Q` or `Backspace` instead, that is a one-line remap in `keys.py`; with a single shared constant, the two meanings would be tangled together and the change would need a code hunt.
 
-Now the three state classes:
+Now the three state classes. `InventoryState.on_render()` is the longest method in this chapter; it draws the overlay in five steps, in order: dim the map behind it, size the panel to fit the content, draw the frame with its title and prompt, list the items (or an empty message), and print the slot counter along the bottom. The prose after the listing walks through each step.
 
 ```python
 class InventoryState(GameState):
@@ -587,12 +634,14 @@ Part 8a defined both consumable types and spawned chests on the floor. The chest
 
 `PickupAction` is triggered by the `G` key. Treasure should also be collected automatically when the player steps on it. This requires three additions.
 
-First, add a `GameMap.items_at(x, y)` helper that returns all items at a given position:
+First, add a `GameMap.items_at(x, y)` helper that returns all items at a given position. Reuse the module-level `Item` import added in Part 8a:
 
 ```python
 def items_at(self, x: int, y: int) -> list[Item]:
-    from game.entities.entity import Item
-    return [e for e in self.entities if isinstance(e, Item) and e.x == x and e.y == y]
+    return [
+        entity for entity in self.entities
+        if isinstance(entity, Item) and entity.x == x and entity.y == y
+    ]
 ```
 
 Second, add an `on_contact` method to `Consumable`. It activates the item if `auto_activate` is set, using the standard `ItemAction` path:
@@ -602,8 +651,6 @@ Second, add an `on_contact` method to `Consumable`. It activates the item if `au
      auto_activate: bool = False
 
 +    def on_contact(self, engine: Engine, consumer: Actor) -> None:
-+        from game.actions import ItemAction
-+
 +        if self.auto_activate:
 +            ItemAction(item=self.entity).perform(engine, consumer)
 ```
@@ -695,12 +742,12 @@ Items are now a first-class part of the game. Key additions:
 
 - **`game/exceptions.py`**: `Impossible` exception carries a rejection reason; one `except` in `handle_events` covers every case
 - **`ActorComponent` / `ItemComponent`**: narrowed base classes so type annotations match the actual runtime type
-- **`Entity.owner`**: single source of truth for whether an entity is on the floor or in an inventory
+- **`Entity.owner`**: back-reference to whichever collection currently holds an entity, `GameMap.entities` or `Inventory.items`
 - **`Item` / `Inventory`**: new entity subclass and actor component; pickup, use, and drop are modelled as actions
 - **`HealingConsumable`**: first consumable component; knows how to apply its effect independently of the action layer
 - **`TreasureConsumable`**: second consumable; collected on contact rather than through the inventory; `auto_activate = True` triggers pickup on walk
 - **`InventoryState`**: modal overlay base class; subclasses override `TITLE`, `PROMPT`, the four color class variables, and `on_item_selected()`
-- **`Inventory.gold`**: running treasure total stored in the `Inventory` component; read as `player.inventory.gold`; keeping all player-held state in one place simplifies future serialization
+- **`Inventory.gold`**: running treasure total stored in the `Inventory` component; read as `player.inventory.gold`; gold is carried state, so it belongs next to the item list rather than as a bare `Actor` attribute
 
 **Current architecture**:
 

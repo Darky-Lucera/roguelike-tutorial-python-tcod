@@ -1189,7 +1189,7 @@ game/
     - `turn_count` only after an action that actually consumes a turn. Opening the inventory, cancelling targeting, scrolling the message log, or an impossible action should not count.
     - `kill_count` on the actor that *caused* a death, threaded through the damage code so melee attacks and damaging scrolls both attribute correctly. Self-inflicted deaths (caught in your own fireball) must not count.
 
-    If you carried the Part 1 turn counter forward, `turn_count` already exists on `Engine`. Your exercise is to *refine* it: move the increment to the successful-action path shown below, so blocked moves and impossible actions stop counting, and retire the old increment (and the debug `Turn:` print, if you still have it). The counter born in Part 1 to prove that time only passes when you act ends its journey here, feeding your run history.
+    If you carried the Part 1 turn counter forward, `turn_count` already exists on `Engine`. Your exercise is to *refine* it: move the increment to the successful-action path shown below, so impossible actions stop counting (blocked moves, like bumping a wall, never raised `Impossible`, so they still count), and retire the old increment (and the debug `Turn:` print, if you still have it). The counter born in Part 1 to prove that time only passes when you act ends its journey here, feeding your run history.
 
     Show the tally on the game-over screen, then on death append one record to a `graveyard.json`. Use JSON, not pickle: it is a small, stable record that should stay readable even if the game's classes change later.
 
