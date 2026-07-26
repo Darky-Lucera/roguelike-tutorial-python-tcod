@@ -1186,25 +1186,15 @@ game/
 
     Add a small run history, written when the player dies. Two counters feed it: `turn_count` on `Engine` and `kill_count` on `Fighter`. The thinking is in *when* each one increments:
 
-    - `turn_count` only after an action that actually consumes a turn. Opening the inventory, cancelling targeting, scrolling the message log, or an impossible action should not count.
+    - `turn_count` only after an action that actually consumes a turn: opening the inventory, cancelling targeting, scrolling the message log, and impossible actions do not count. This has been true since Part 8b.
     - `kill_count` on the actor that *caused* a death, threaded through the damage code so melee attacks and damaging scrolls both attribute correctly. Self-inflicted deaths (caught in your own fireball) must not count.
 
-    If you carried the Part 1 turn counter forward, `turn_count` already exists on `Engine`. Your exercise is to *refine* it: move the increment to the successful-action path shown below, so impossible actions stop counting (blocked moves, like bumping a wall, never raised `Impossible`, so they still count), and retire the old increment (and the debug `Turn:` print, if you still have it). The counter born in Part 1 to prove that time only passes when you act ends its journey here, feeding your run history.
+    If you carried the Part 1 turn counter forward, `turn_count` already exists and already counts correctly. Retire the debug `Turn:` print from `Engine.render()`, if you still have it, now that the graveyard shows the tally on the game-over screen. The counter born in Part 1 to prove that time only passes when you act ends its journey here, feeding your run history.
 
     Show the tally on the game-over screen, then on death append one record to a `graveyard.json`. Use JSON, not pickle: it is a small, stable record that should stay readable even if the game's classes change later.
 
     ??? note "Reference implementation"
-        Add both counters as `int = 0`: `turn_count` in `Engine.__init__` (`game/engine.py`) and `kill_count` in `Fighter.__init__` (`game/entities/components/fighter.py`).
-
-        Increment `turn_count` only on the successful-action path, right before enemy turns (`game/game_states.py`):
-
-        ```diff
-        +# Part-10. Exercise 2: Record a graveyard file
-        +self.engine.turn_count += 1
-        +
-        if self.engine.player.is_alive:
-            self.engine.handle_enemy_turns()
-        ```
+        Add `kill_count` as `int = 0` to `Fighter.__init__` (`game/entities/components/fighter.py`). `turn_count` already exists on `Engine` since Part 1.
 
         Attribute the kill in `Fighter.take_damage` (`game/entities/components/fighter.py`); the `attacker` is threaded in from `melee_attack` and the damaging consumables:
 

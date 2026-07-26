@@ -203,6 +203,7 @@ game.game_states.GameState -up-> game.engine.Engine : engine
 
 game.map.game_map.GameMap "  *  " *-- game.entities.entity.Entity : entities
 game.entities.entity.Entity -up-> game.map.game_map.GameMap : owner
+game.entities.entity.Entity -right-> game.entities.components.inventory.Inventory : owner
 game.entities.entity.Entity --> game.entities.render_order.RenderOrder : render_order
 
 game.entities.components.base_component.ActorComponent -up-> game.entities.entity.Actor : entity

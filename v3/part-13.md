@@ -302,7 +302,7 @@ Since Part 8, `MovementAction` lets items react when an actor steps on them; tha
 
 ```diff
          if isinstance(entity, Actor):
-             for item in engine.game_map.items_at(entity.x, entity.y):
+             for item in engine.game_map.get_items_at(entity.x, entity.y):
 -                item.consumable.on_contact(engine=engine, consumer=entity)
 +                if item.consumable is not None:
 +                    item.consumable.on_contact(engine=engine, consumer=entity)

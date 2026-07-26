@@ -113,7 +113,7 @@ game.actions.ItemAction -up-> game.entities.entity.Item : item
 
 ' Existing classes touched by the chapter.
 game.actions.PickupAction --> game.entities.components.inventory.Inventory : adds item
-game.actions.MovementAction --> game.entities.components.consumable.TreasureConsumable : on_contact
+game.actions.MovementAction --> game.entities.components.consumable.Consumable : on_contact
 game.game_states.InventoryUseState --> game.actions.ItemAction : creates
 game.game_states.InventoryDropState --> game.actions.DropItem : creates
 game.actions.Action --> game.exceptions.Impossible : raises

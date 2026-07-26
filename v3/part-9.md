@@ -1127,7 +1127,7 @@ game/
 
     ```diff
          consumer.place(x, y, game_map)
-    +    for item in engine.game_map.items_at(consumer.x, consumer.y):
+    +    for item in engine.game_map.get_items_at(consumer.x, consumer.y):
     +        item.consumable.on_contact(engine=engine, consumer=consumer)
          MessageLog.add_message("You teleport!", ...)
     ```
