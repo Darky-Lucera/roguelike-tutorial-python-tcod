@@ -69,7 +69,34 @@ The exploration-reward constants (`EXPLORATION_MILESTONES`, `EXPLORATION_XP_BASE
 
 ## The Level component
 
-Create `game/entities/components/level.py`:
+`Level` needs to increase the actor's stored attack and defense values. Before creating
+the component, we rename those values to `base_attack` and `base_defense`, while
+keeping `attack` and `defense` as properties. Level-ups can then modify the base values
+directly, while the existing combat code continues to use the same public attributes.
+
+!!! info "base_attack and base_defense"
+    The new names also make room for equipment bonuses in Part 13. Both values are
+    stored as `float` so equipment can apply multipliers (for example,
+    `base_defense *= 1.1`) without losing precision. Keeping `attack` and `defense` as
+    properties means later changes will not require edits at every combat call site.
+
+Update `Fighter.__init__` in `game/entities/components/fighter.py` and add the two
+properties:
+
+```python
+self.base_defense = float(defense)
+self.base_attack  = float(attack)
+
+@property
+def defense(self) -> float:
+    return self.base_defense
+
+@property
+def attack(self) -> float:
+    return self.base_attack
+```
+
+With those base stats ready, create `game/entities/components/level.py`:
 
 ```python
 from __future__ import annotations
@@ -135,24 +162,6 @@ class Level(ActorComponent):
 The two early-return guards cover two distinct cases. `if xp == 0` handles enemies (or any entity) with `xp_given=0`: they give no XP when killed and the call returns immediately. `if self.level_up_base == 0` is a defensive opt-out for any entity explicitly constructed with `level_up_base=0`; nothing in the current code triggers it, but it makes it easy to add a deliberately non-leveling entity in the future without modifying `add_xp`.
 
 `increase_level` heals the player to full HP on every level-up. In a difficult roguelike, this makes level-up a meaningful survival tool: a player on low health has a reason to push through one more fight rather than retreat. `increase_max_hp` no longer needs to heal separately because `increase_level` already does it.
-
-!!! info "base_attack and base_defense"
-    We renamed the stored values to `base_attack` and `base_defense` to make room for equipment bonuses in Part 13. Both are stored as `float` so that equipment can apply multipliers (e.g. `base_defense *= 1.1`) without losing precision. Keep `attack` and `defense` as properties for now, so existing combat code can keep using `fighter.attack` and `fighter.defense`.
-
-Update `Fighter.__init__` and add the two properties:
-
-```python
-self.base_defense = float(defense)
-self.base_attack  = float(attack)
-
-@property
-def defense(self) -> float:
-    return self.base_defense
-
-@property
-def attack(self) -> float:
-    return self.base_attack
-```
 
 ---
 

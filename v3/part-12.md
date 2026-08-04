@@ -341,7 +341,13 @@ This is the architectural payoff of the chapter: adding new floor-scaled content
 
 ## GameWorld and setup_game slim down
 
-`GameWorld` stored the four limits only to forward them. Remove them from `game/game_world.py`:
+`GameWorld` stores four per-room limits only so it can pass them to
+`generate_dungeon`. Now that the generator derives those limits from the current
+floor, `GameWorld` no longer needs to own or forward them. Removing them keeps the
+difficulty rules in the module that uses them and shortens the path from `new_game()`
+to dungeon generation.
+
+Remove the four limits from `game/game_world.py`:
 
 ```diff
      def __init__(

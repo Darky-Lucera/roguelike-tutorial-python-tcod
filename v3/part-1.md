@@ -389,7 +389,14 @@ Notice the `|` between patterns. Inside a `case` it means "match any of these". 
 
 ### Wiring it together
 
-Update `main.py` to use the new modules. We also extract the `while True` block into its own function, `game_loop`, so `main` is left as a focused setup orchestrator. Most of the listing below is code you already have, just rearranged; the new parts are the two imports, the `game_loop` function itself, and the `match action` block that replaces the old inline movement:
+`main.py` now has two different jobs: setting up the window and running the loop that
+repeats throughout the game. We separate them so `main()` handles setup once, while a
+new `game_loop()` function owns input, updates, and rendering.
+
+Update `main.py` to use the new modules and this split. Most of the listing below is
+code you already have, just rearranged; the new parts are the two imports, the
+`game_loop` function itself, and the `match action` block that replaces the old inline
+movement:
 
 ```python
 from __future__ import annotations

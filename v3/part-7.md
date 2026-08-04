@@ -268,9 +268,15 @@ def render_names_at_mouse_location(
 
 ## Refactor game_states.py
 
-Rename `game/input_handlers.py` to `game/game_states.py`. The classes in this file have always implemented the *State* pattern, but the name hid that fact. Each subclass is a distinct state the game can be in: normal play, game over, and in later parts inventory management and spell targeting. The file name and class names now reflect that.
+The classes in `game/input_handlers.py` are about to do more than translate input:
+each one will also render the screen for a distinct situation, such as normal play or
+game over. Keeping both responsibilities in the state prevents `Engine` from growing a
+separate rendering branch for every future menu and mode.
 
-Game states need a bigger change too. Currently they return `Action` objects. In Part 10 we will need states that can return *other states* (for menus and targeting screens). We prepare for this now.
+Rename the file to `game/game_states.py` so its name reflects that broader role. We
+will also update the classes to take an engine, handle events, and render themselves.
+This structure will later support inventory screens, spell targeting, and states that
+return other states.
 
 Each state:
 

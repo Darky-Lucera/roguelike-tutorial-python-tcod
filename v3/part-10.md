@@ -854,6 +854,13 @@ Part 9 already wired this correctly: `ConfusionConsumable` and `FireballDamageCo
 
 ## main.py: save on quit, main menu start
 
+`Engine.run()` no longer fits the whole application: the main menu starts before any
+`Engine` exists. We therefore move the loop back to a free `run()` function in
+`main.py`, similar to `game_loop()` from Part 1. This time the loop owns the current
+state and replaces it whenever `handle_events()` returns another one.
+
+Replace `main.py` with:
+
 ```python
 from __future__ import annotations
 
@@ -935,8 +942,6 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
-
-`Engine.run()` from earlier chapters no longer fits: the main menu runs *before* any engine exists, so the loop has to belong somewhere outside `Engine`. We move it back to a free `run()` function in `main.py`, similar in shape to the `game_loop()` from Part 1 but driving a game state machine instead of a single update.
 
 `main.py` no longer generates a seed or adds the welcome message. Both belong in `new_game()`: the seed decides the map layout, and the welcome message is part of the initial game state, not app setup.
 
