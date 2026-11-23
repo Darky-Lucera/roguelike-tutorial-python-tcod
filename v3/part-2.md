@@ -6,15 +6,21 @@ By the end of this part, the game still looks simple, but the code is reorganize
 
 ## Learning goals
 
+In this part we will:
+
 - Represent game objects with a generic `Entity` class
 - Build a tile-based map using numpy structured arrays
-- Understand why the game state and the main loop move into an `Engine` class
+- Move the game state and the main loop into an `Engine` class, and see why it helps
 - Move each action's logic into its own `perform()` method (the Command pattern)
 - Prevent the player from walking through walls
 
 ---
 
-## From variables to objects
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [The Entity class](#the-entity-class). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### Game objects as entities
 
 Right now the player is just `player_x` and `player_y`. This works for one character, but the dungeon will have enemies, items, corpses, and stairs, each needing the same core data: position and appearance, and soon a name.
 
@@ -23,9 +29,41 @@ Instead of managing separate variables for each, we create a single class that a
 !!! info "Design decision: Generic Entity"
     We could create separate `Player`, `Orc`, `Potion` classes with their own position fields. The problem is that these classes share most of their data and you end up duplicating code. A single `Entity` class holds the common fields; specialized behavior comes later through *components* (covered in Part 5 and beyond).
 
+### What a tile knows
+
+Maps in roguelikes are grids of tiles. Each tile needs several properties:
+
+- **walkable**: can the player step here?
+- **transparent**: can the player see through it? This matters for the field of view (FOV): the part of the map the player can see.
+- **appearance**: what character and colors to draw
+
+`walkable` and `transparent` are separate ideas. Many tiles use the obvious
+combinations, but all four combinations can be useful:
+
+| walkable | transparent | Example |
+| --- | --- | --- |
+| `False` | `False` | A wall, closed stone door, or pillar. You cannot walk through it, and it blocks vision. |
+| `False` | `True` | Water, a low fence, a window, or iron bars. You cannot walk through it, but you can see past it. |
+| `True` | `False` | Smoke, fog, magical darkness, or tall grass. You can enter the tile, but it blocks or limits vision. |
+| `True` | `True` | A floor, open door, or normal corridor. You can walk through it, and it does not block vision. |
+
+This separation is useful later. Movement checks will look at `walkable`, while
+field-of-view checks will look at `transparent`. A tile can affect one system
+without affecting the other.
+
+### Storing the map in numpy
+
+We could store the map as a Python list of tile objects. Instead, we use a numpy structured array: an array where each element is a small record with named fields, like a row in a table.
+
+A structured array stores thousands of tiles in one continuous block of memory. This is faster to access and render than a Python list of objects.
+
+It also lets us draw the whole map with a single array copy into the console, instead of a Python loop that draws each tile one by one. We write that copy in `GameMap.render`.
+
 ---
 
 ## The Entity class
+
+Instead of separate variables for the player's position, we create one class that any game object can use: the player, enemies, items, and later stairs.
 
 Create `game/entity.py`:
 
@@ -59,34 +97,16 @@ class Entity:
 
 - `char`: the single character drawn on screen (`"@"`, `"o"`, `"T"`, etc.)
 - `color`: an RGB tuple, e.g. `(255, 255, 255)` for white
-- `set_position`: jumps to an absolute position; used when the dungeon generator places the player in the first room (Part 3), until Part 8 replaces it with a `place()` method that also registers the entity on the map
+- `set_position`: moves the entity to an exact position. In Part 3, the dungeon generator uses it to put the player in the first room. Part 8 replaces it with a `place()` method that also registers the entity on the map
 - `move`: shifts position by a delta; used by the player and enemies for stepping
 
 ---
 
 ## The tile system
 
-Maps in roguelikes are grids of tiles. Each tile needs several properties:
+The map is a grid of tiles. Each tile stores whether it is walkable, whether it is transparent (whether the player can see through it), and how to draw it.
 
-- **walkable**: can the player step here?
-- **transparent**: does this tile block the field of view?
-- **appearance**: what character and colors to draw
-
-`walkable` and `transparent` are separate ideas. Many tiles use the obvious
-combinations, but all four combinations can be useful:
-
-| walkable | transparent | Example |
-| --- | --- | --- |
-| `False` | `False` | A wall, closed stone door, or pillar. You cannot walk through it, and it blocks vision. |
-| `False` | `True` | Water, a low fence, a window, or iron bars. You cannot walk through it, but you can see past it. |
-| `True` | `False` | Smoke, fog, magical darkness, or tall grass. You can enter the tile, but it blocks or limits vision. |
-| `True` | `True` | A floor, open door, or normal corridor. You can walk through it, and it does not block vision. |
-
-This separation pays off later. Movement checks will look at `walkable`, while
-field-of-view checks will look at `transparent`. A tile can affect one system
-without affecting the other.
-
-We use **numpy structured arrays** to hold all of this efficiently. This might look unusual at first, take it step by step.
+We hold all of this in **numpy structured arrays**: arrays where each element is a small record with named fields. They may look unusual at first, so we go step by step.
 
 Create `game/tile_types.py`:
 
@@ -143,10 +163,7 @@ wall = new_tile(
 
     That is also why the palette looks dark: these values are tuned for the "explored, but currently out of sight" role they will keep from Part 4 onward. The dungeon lights up when Field of View arrives.
 
-!!! question "Why numpy dtypes?"
-    A numpy structured array stores thousands of tile structs as a single contiguous block of memory. This is faster to access and render than a Python list of objects. We can also write the entire map to the screen in one call (`console.rgb[...] = tiles["out_of_fov"]`), which is much faster than looping over each tile individually.
-
-The `*` in `new_tile(*, ...)` forces callers to use keyword arguments. Without it, you could accidentally write `new_tile(True, False, ...)` and mistake the argument order. With keyword arguments, the intent is always explicit.
+The `*` in `new_tile(*, ...)` forces callers to use keyword arguments. Without it, you could write `new_tile(True, False, ...)` and get the argument order wrong. With keyword arguments, the intent is always explicit.
 
 ---
 
@@ -188,17 +205,19 @@ class GameMap:
         console.rgb[0 : self.width, 0 : self.height] = self.tiles["out_of_fov"]
 ```
 
-`np.full((width, height), fill_value=..., order="F")` creates a 2D array filled with the same tile. The `(width, height)` shape is what gives us natural `[x, y]` indexing. `order="F"` decides the memory layout: it keeps columns contiguous, matching the `order="F"` we set on the console, so copying tiles into the console never needs to reorder memory.
+`np.full((width, height), fill_value=..., order="F")` creates a 2D array filled with the same tile. The `(width, height)` shape is what gives us natural `[x, y]` indexing. `order="F"` decides the memory layout: with `[x, y]` indexing, it stores the cells of one screen row next to each other. The console uses the same order (we also created it with `order="F"`), so copying tiles into the console walks both arrays in the same order.
 
-`render` is one line, but it does a lot. `console.rgb` is the console's cell grid exposed as a numpy array: one element per screen cell, each holding a codepoint (`ch`) and two colors (`fg`, `bg`). That is exactly the layout we gave `graphic_dtype`, and that is not a coincidence: matching layouts is what lets numpy copy tiles straight into the console. `self.tiles["out_of_fov"]` selects the `out_of_fov` field of every tile at once, an 80×44 array of graphics, and the slice assignment copies it into the top-left region of the console in one vectorized operation, no Python loop needed.
+`render` is one line, but it does a lot. `console.rgb` is the console's cell grid as a numpy array: one element per screen cell, each holding a codepoint (`ch`) and two colors (`fg`, `bg`). These are the same three fields, in the same order and with the same types, that we gave `graphic_dtype`. That is not a coincidence: numpy copies one structured array into another field by field, so matching fields is what lets it copy tiles into the console directly.
+
+`self.tiles["out_of_fov"]` selects the `out_of_fov` field of every tile at once, an 80×44 array of graphics. The slice assignment copies it into the top-left part of the console in one vectorized operation (a single operation on the whole array), with no Python loop.
 
 ---
 
 ## The Engine class
 
-`main.py` is already doing too much: it creates entities, handles events, and renders. As we add features, this file will become unmanageable.
+`main.py` is already doing too much: it creates entities, handles events, and renders. As we add features, this file will become hard to manage.
 
-We extract the *game loop logic* into an `Engine` class. Think of it as the conductor: it holds the game state and orchestrates everything.
+We move the *game loop logic* into an `Engine` class. It holds the game state and coordinates the other parts: input, the map, and rendering.
 
 Create `game/engine.py`:
 
@@ -264,7 +283,7 @@ class Engine:
             self.handle_events(tcod.event.wait())
 ```
 
-`run()` is the loop we extracted as `game_loop` in Part 1, now living on `Engine` as a method. This is the idea previewed in Part 1: the player's position is now part of the `Engine` state instead of a pair of local loop variables, so the loop modifies state that the caller already owns.
+`run()` is the loop we extracted as `game_loop` in Part 1, now living on `Engine` as a method. This is the idea previewed in Part 1: the player's position is now part of the `Engine` state, not a pair of local loop variables, so the loop changes state that the engine owns.
 
 The collision check in `handle_events` computes the destination, then looks it up in the tile array:
 
@@ -274,6 +293,10 @@ if self.game_map.tiles["walkable"][dest_x, dest_y]:
 ```
 
 This reads the `walkable` field at the destination tile. If it is `False` (a wall), the move is rejected.
+
+This is the change Part 1, Exercise 2 asked for. We no longer check whether the destination is inside a rectangle; we look at what is at the destination. That works for any shape of map, which is what the dungeons of Part 3 need.
+
+`in_bounds` runs before the `walkable` check for a reason. numpy reads a negative index from the other end of the array, so without the check, a step off the left edge would read a tile on the right edge. An index past the end is worse: numpy raises an `IndexError` and the game stops.
 
 !!! note "If you completed the turn-counter exercise"
     Part 1, Exercise 3 made waiting visible by adding a `turn_count` counter
@@ -309,7 +332,8 @@ This reads the `walkable` field at the destination tile. If it is `False` (a wal
     +            self.turn_count += 1
     ```
 
-    Finally, draw it in one of the unused bottom rows:
+    Finally, draw it. The map now covers the top row, so use one of the unused
+    bottom rows:
 
     ```diff
          def render(self, console: Console, context: Context) -> None:
@@ -320,7 +344,7 @@ This reads the `walkable` field at the destination tile. If it is `False` (a wal
                  console.print(entity.x, entity.y, entity.char, fg=entity.color)
     +
     +        # Part-1. Exercise 3: Add a wait action
-    +        console.print(x=0, y=44, text=f"Turn: {self.turn_count}")
+    +        console.print(x=0, y=44, text=f"Turns: {self.turn_count}")
 
              context.present(console)
     ```
@@ -329,15 +353,15 @@ This reads the `walkable` field at the destination tile. If it is `False` (a wal
     or numpad 5 still leaves the player in place while the turn number advances.
 
 !!! info "Design decision: Engine holds the game state"
-    `main.py` will become a thin launcher: create objects, create the window, hand off to `engine.handle_events` and `engine.render`. The real logic lives inside the `game` package, coordinated by `Engine`. This makes it easier to add save/load later (Part 10), because we can serialize and deserialize the `Engine` state.
+    `main.py` will become a small launcher: it creates the objects and the window, then passes control to the engine. The real logic lives inside the `game` package, coordinated by `Engine`. This makes save and load easier later (Part 10): saving the game means saving the `Engine` state.
 
-    Right now `game_map.render` also decides what appears on screen. Part 7 splits that further, separating frame composition (the UI, the message log) from map rendering, once there is enough on screen to make that split worth it.
+    Right now `Engine.render` does the whole frame: it clears the console, draws the map and the entities, and shows the result. Part 7 splits this: the loop clears and presents the console, and `render` only decides what to draw (the map, the health bar, the message log). By then there is enough on screen to make that split worth it.
 
 ---
 
 ## Updating main.py
 
-Replace `main.py` with this cleaner version, which also adds a second entity (yellow `N`) just to verify that the entity set and renderer work with more than one object; it has no AI and will be removed in Part 3.
+Replace `main.py` with this cleaner version. It also adds a second entity, a yellow `N`, only to check that the entity set and the renderer work with more than one object. It has no AI, and we remove it in Part 3.
 
 ```python
 from __future__ import annotations
@@ -424,6 +448,13 @@ if __name__ == "__main__":
 
 Notice that the map is 44 rows tall while the screen is 50: we reserve the bottom six rows for the UI (health bar, message log) which we will add in Part 7.
 
+!!! note "If you tried the sprite bonus in Part 1"
+    This listing loads the plain 8-row sheet again and draws the player as `"@"`, so the hero sprite goes away. That is on purpose: the rest of the tutorial uses characters.
+
+    If you want to keep the sprite, keep three things from your Part 1 `main.py`: the `PUA` constant, the extended sheet with 13 rows, and the `tileset.remap` line. Then create the player with `char = chr(PUA)` and `color = (255, 255, 255)`. White matters here: `fg` multiplies the tile colors, and white leaves the art unchanged.
+
+    [Appendix 7](append-7.md) shows the full setup for sprites.
+
 !!! tip "Run it now"
     This is a good moment to run the game. You should see a white `@` (the
     player), a yellow `N` (an NPC with no AI), and a short test wall drawn as a
@@ -502,9 +533,9 @@ class MovementAction(Action):
     If you skipped that exercise, you can ignore this for now. Exercise 2 at the end of this chapter adds it.
 
 !!! question "What is `TYPE_CHECKING`?"
-    `from game.engine import Engine` inside the file would create a circular import: `game/engine.py` imports from `game/actions.py`, and `game/actions.py` would import from `game/engine.py`. `TYPE_CHECKING` is `False` at runtime, so the import only happens when a type checker (like mypy or Pyright) analyzes the code. This breaks the cycle.
+    A plain `from game.engine import Engine` here would create a circular import: `game/engine.py` imports `game/input_handlers.py`, which imports `game/actions.py`, and `game/actions.py` would import `game/engine.py` again. Python would stop with an `ImportError`. `TYPE_CHECKING` is `False` at runtime, so the import only happens when a type checker (like mypy or Pyright) analyzes the code. This breaks the cycle.
 
-    Two modules that need to import each other is usually a sign that their responsibilities are tangled, and worth noticing as such. We accept this one because `Action` and `Engine` genuinely collaborate: an action cannot perform itself without the engine's state, and the engine cannot act without a concrete action to call.
+    When two modules need to import each other, it usually means their responsibilities are mixed up, and it is worth noticing. We accept this one because `Action` and `Engine` really work together: an action cannot perform itself without the engine's state, and the engine cannot act without a concrete action to call.
 
 !!! tip "Action is meant to be subclassed"
     `Action` is never intended to be instantiated directly: it is a contract that subclasses fulfill. Right now that intent lives only in the docstring. In Part 5, we will make it a formal, enforceable contract using Python's `abc` module.
@@ -555,13 +586,13 @@ If you did not add the Part 1 turn counter, omit the `self.turn_count += 1` line
 The important refactor is that the old `match` block becomes
 `action.perform(self, self.player)`.
 
-`Engine` no longer imports `MovementAction` or `EscapeAction`: it does not need to know which action type it is dispatching, only that the action knows how to perform itself. When we add new action types (attack, pick up item, descend stairs), we add a new `Action` subclass and leave the engine alone. The method itself will still change for other reasons (recomputing the field of view in Part 4, running enemy turns in Part 5), but never to teach it about a new action type.
+`Engine` no longer imports `MovementAction` or `EscapeAction`: it does not need to know which action type it is dispatching, only that the action knows how to perform itself. When we add new action types (attack, pick up item, descend stairs), we add a new `Action` subclass and do not touch the engine. The method itself will still change for other reasons (recomputing the field of view in Part 4, running enemy turns in Part 5), but never to teach it about a new action type.
 
 ---
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] The map fills the top 44 rows
 - [ ] A white `@` (player) and a yellow `N` (NPC) appear on the map
@@ -619,7 +650,7 @@ game/
 2. **Promote `WaitAction` to the `perform()` pattern**:
 
     Add a `WaitAction(Action)` class to `game/actions.py` with a `perform()` that just `pass`es.
-    If you already carried this forward from Part 1, you are done. If you skipped Part 1's exercise, also wire `.` (and `KP_5`) to it in `game/input_handlers.py`. Notice that `Engine.handle_events` does not need any changes; that is the point of the polymorphic pattern.
+    If you already carried this forward from Part 1, you are done. If you skipped Part 1's exercise, also wire `.` (and `KP_5`) to it in `game/input_handlers.py`. Notice that `Engine.handle_events` does not need any changes; that is the point of the `perform()` pattern.
 
 3. **Add a new tile type**:
 

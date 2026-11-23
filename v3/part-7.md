@@ -6,6 +6,8 @@ By the end of this part, your game will have a health bar, a message log, and a 
 
 ## Learning goals
 
+In this part we will:
+
 - Divide the screen into a map area and a UI panel
 - Add a health bar that updates in real time
 - Introduce a message log that replaces `print()` calls
@@ -93,6 +95,7 @@ Create `game/message_log.py`:
 from __future__ import annotations
 
 import textwrap
+from typing import ClassVar
 
 import tcod
 
@@ -115,7 +118,7 @@ class Message:
 
 
 class MessageLog:
-    messages: list[Message] = []
+    messages: ClassVar[list[Message]] = []
 
     @classmethod
     def add_message(
@@ -160,10 +163,27 @@ class MessageLog:
             )
 ```
 
-`MessageLog` has no `__init__`: `messages` is a class variable shared by everyone, and the methods operate on it without needing an instance. `render` first flattens all messages into a list of `(line, color)` pairs, then takes a slice of `height` lines from the end (the most recent ones) and renders them top to bottom. `clear()` empties the list; it is called in Part 10 when starting a new game.
+`MessageLog` has no `__init__`: `messages` is a class variable shared by everyone, and the methods operate on it without needing an instance. The `ClassVar` annotation marks this sharing as intentional. `render` first flattens all messages into a list of `(line, color)` pairs, then takes a slice of `height` lines from the end (the most recent ones) and renders them top to bottom. `clear()` empties the list; it is called in Part 10 when starting a new game.
 
 !!! info "@classmethod vs @staticmethod"
     A **`@classmethod`** receives the class itself as its first argument (`cls`). That is what `add_message` needs: it reads and writes `cls.messages`, the shared list. A **`@staticmethod`** receives nothing implicit (no `self`, no `cls`). `render` qualifies because it only reads `MessageLog.messages` by name; it does not need to be overridden in a subclass, and it does not modify class state.
+
+!!! info "ClassVar and shared class state"
+    `ClassVar` comes from the `typing` module. It marks an attribute as belonging to the class itself, not to each instance. It changes nothing at runtime: it is a note for type checkers and linters.
+
+    It matters most with mutable values. A list written in a class body is created once, when Python defines the class, and every instance shares it:
+
+    ```python
+    class Bag:
+        items: list[str] = []
+
+    first  = Bag()
+    second = Bag()
+    first.items.append("sword")
+    print(second.items)  # ['sword']
+    ```
+
+    This is a common bug when each instance should have its own list; the fix is to create the list in `__init__` with `self.items = []`. Linters warn about any mutable value in a class body for this reason. `MessageLog` never creates instances, so sharing is exactly what we want. `ClassVar` says so, and the warning goes away.
 
 !!! question "Why a static class instead of an instance on Engine (as in the 2019 and v2 tutorials)"
     The 2019 and v2 tutorials store a `MessageLog` instance on `Engine`. That works, but it means every component that wants to log (a `Fighter`, an AI, a consumable) must receive `engine` as a parameter just to reach `engine.message_log`. With a static `MessageLog`, any module can call `MessageLog.add_message(...)` after a one-line import, with no extra dependency on `Engine`.
@@ -581,7 +601,7 @@ Replace the existing `render()` method. It no longer receives `context` or contr
 These coordinates map directly onto the panel layout from the start of the chapter. The HP bar fills columns `0-19` of row `45` (`total_width=20`), so the message log and the hover names start one column past it, at `x=21`. Row `44` (the panel's top row) holds the names under the cursor; rows `45-49` hold the five wrapped message lines (`y=45`, `height=5`).
 
 !!! note "If you kept the Part 1 turn counter"
-    Part 1, Exercise 3 added a `turn_count` counter, printed with `console.print(x=0, y=44, text=f"Turn: {self.turn_count}")` right after `Engine.__init__` (Part 2). Row `44` now belongs to the panel: it shows hover names, so the old print would land on top of them.
+    Part 1, Exercise 3 added a `turn_count` counter, printed with `console.print(x=0, y=44, text=f"Turns: {self.turn_count}")` right after `Engine.__init__` (Part 2). Row `44` now belongs to the panel: it shows hover names, so the old print would land on top of them.
 
     Move it into `render()` instead, on the panel's bottom row, which stays free for the rest of this chapter:
 
@@ -733,7 +753,7 @@ Update `Fighter.die()` in `game/entities/components/fighter.py` to write to the 
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] The bottom panel has a dark background, visually distinct from the map area above it
 - [ ] A health bar appears in the bottom-left corner showing `HP: 30/30`
@@ -828,7 +848,7 @@ game/
 
 2. **Scroll the message panel**:
 
-    The message log shows only the five most recent wrapped lines. Add `Page Up` / `Page Down` bindings that shift which portion of the log is visible. Define them in `game/data/keys.py` like every other binding (`SCROLL_UP = tcod.event.KeySym.PAGEUP`, `SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN`). Store the current scroll value in `MessageLog`. When rendering, wrap all messages first, clamp `scroll` between `0` and `max(0, total - height)`, then use it to offset the visible slice: `start = max(0, total - height - scroll)` and `end = start + height`. Reset `scroll` to `0` when a new message is added.
+    The message log shows only the five most recent wrapped lines. Add `Page Up` / `Page Down` bindings that shift which portion of the log is visible. Define them in `game/data/keys.py` like every other binding (`LOG_SCROLL_UP = tcod.event.KeySym.PAGEUP`, `LOG_SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN`). Store the current scroll value in `MessageLog` as another `ClassVar`. When rendering, wrap all messages first, clamp `scroll` between `0` and `max(0, total - height)`, then use it to offset the visible slice: `start = max(0, total - height - scroll)` and `end = start + height`. Reset `scroll` to `0` when a new message is added.
 
 3. **Entity details**:
 

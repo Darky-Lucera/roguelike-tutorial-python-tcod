@@ -11,6 +11,8 @@ By the end of this part, the dungeon will contain items the player can pick up, 
 
 ## Learning goals
 
+In this part we will:
+
 - Add `Item` as a new entity class and `HealingConsumable` as its first component
 - Give every entity an `owner` field so items know whether they are on the floor or in an inventory
 - Add an `Inventory` component to actors and implement pickup, use, and drop actions
@@ -322,9 +324,8 @@ The constructor parameter is `GameMap | None`: entities start on the map or unow
 +        self.x = x
 +        self.y = y
 +        if game_map is not None:
-+            if self.owner is not None:
-+                if isinstance(self.owner, GameMap):
-+                    self.owner.entities.discard(self)
++            if isinstance(self.owner, GameMap):
++                self.owner.entities.discard(self)
 +
 +            self.owner = game_map
 +            game_map.entities.add(self)
@@ -332,7 +333,7 @@ The constructor parameter is `GameMap | None`: entities start on the map or unow
      def set_position(self, x: int, y: int) -> None:
 ```
 
-The local import makes `GameMap` available at runtime without introducing a module-level circular import. `self.owner is not None` guards against placing a fresh template entity for the first time. Once that check passes, `isinstance(self.owner, GameMap)` determines whether the entity is registered directly with the map and needs to be removed from it: items being dropped from inventory have `owner = Inventory`, so the isinstance check is `False` and the discard is skipped correctly.
+The local import makes `GameMap` available at runtime without introducing a module-level circular import. `isinstance(self.owner, GameMap)` checks whether the entity is registered directly with the map and must be removed from it. It is `False` in the other two cases, so the discard is skipped: a fresh template entity placed for the first time has `owner = None`, and an item dropped from the inventory has `owner = Inventory`.
 
 ### Step 5: Add `inventory` to `Actor` and fix the `ai` annotation
 
@@ -899,7 +900,7 @@ Key differences from the old engine code:
     ```
 
 !!! note "If you kept the Part 7 Page Up/Down scroll exercise"
-    Moving key handling into `GameState.handle_events` also moves the spot where your `keys.SCROLL_UP` / `keys.SCROLL_DOWN` check used to live. Add it back at the start of the `case tcod.event.KeyDown():` branch, before `action = self.event_keydown(event)`, and `return` immediately after adjusting the scroll value, the same way the `except Impossible` branch returns early: scrolling should never reach `event_keydown` or cost a turn.
+    Moving key handling into `GameState.handle_events` also moves the spot where your `keys.LOG_SCROLL_UP` / `keys.LOG_SCROLL_DOWN` check used to live. Add it back at the start of the `case tcod.event.KeyDown():` branch, before `action = self.event_keydown(event)`, and `return` immediately after adjusting the scroll value, the same way the `except Impossible` branch returns early: scrolling should never reach `event_keydown` or cost a turn.
 
 !!! note "What Impossible is for"
     `Impossible` is reserved for rejections that are worth telling the player about: a full inventory, an already-healed condition, nothing to pick up. Low-level movement failures (bumping into a wall, trying to walk off the map) are not raised as `Impossible`. Those actions still cost a turn (the player pressed a key and something was attempted), but generating a log message for every wall collision would be noise. The convention is: if the player needs to read why an action failed, raise `Impossible`; if the failure is self-evident from the game state, return silently.
@@ -936,13 +937,12 @@ Remove the vi keys block from `MOVE_KEYS` in `game/data/keys.py`:
 
 ## Update `MainGameState`
 
-The three new actions get named bindings in `game/data/keys.py` first, like every key since Part 5. Add them just above `KEY_QUIT_GAME`:
+The three new actions get named bindings in `game/data/keys.py` first, like every key since Part 5. Add them at the end of the file:
 
-```diff
-+KEY_PICKUP    = tcod.event.KeySym.G
-+KEY_INVENTORY = tcod.event.KeySym.I
-+KEY_DROP      = tcod.event.KeySym.D
- KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
+```python
+KEY_PICKUP      = tcod.event.KeySym.G
+KEY_INVENTORY   = tcod.event.KeySym.I
+KEY_DROP        = tcod.event.KeySym.D
 ```
 
 Then add the three checks at the end of `event_keydown`:
@@ -1016,8 +1016,8 @@ def _trim_text(text: str, max_width: int) -> str:
 One more binding before the states themselves: the overlay closes with `Escape`, and that gets its own name in `game/data/keys.py`, right after `KEY_QUIT_GAME`:
 
 ```diff
- KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
-+KEY_EXIT      = tcod.event.KeySym.ESCAPE
+ KEY_QUIT_GAME   = tcod.event.KeySym.ESCAPE
++KEY_EXIT        = tcod.event.KeySym.ESCAPE
 ```
 
 !!! question "Two names for the same key?"
@@ -1062,7 +1062,7 @@ class InventoryState(GameState):
         height       = min(max(8, number_of_items_in_inventory + 7), max_height)
         visible_rows = min(number_of_items_in_inventory, max(0, height - 7))
 
-        item_width = max((len(item.name) for item in inventory.items), default=0) + 18
+        item_width = max((len(item.name) for item in inventory.items), default=0) + 14
         width = min(
             console.width - 4,
             max(
@@ -1714,7 +1714,7 @@ game/
         Three rules, in order: an entry in `_SPECIAL_KEY_NAMES` wins first (`ESCAPE` becomes `Esc`); otherwise, a printable ASCII code (32 to 126) becomes `chr(v).upper()`, so the period key reads `.` instead of the verbose `"PERIOD"`; everything else falls back to `sym.name` (`"F1"`, `"KP_8"`, `"UP"`).
 
     ??? note "Reference implementation"
-        Additions to `game/data/keys.py`. The helper goes near the top of the file, after the `tcod.event` import; the hotkey constants go at the end. The `SCROLL_*` block appears as context: it comes from Part 7 Exercise 2, not from this one:
+        Additions to `game/data/keys.py`. The helper goes near the top of the file, after the `tcod.event` import; the hotkey constants go at the end. The `LOG_SCROLL_*` block appears as context: it comes from Part 7 Exercise 2, not from this one:
 
         ```python
         # Part-8. Exercise 4: Item hotkey constants and key_label
@@ -1730,8 +1730,8 @@ game/
 
         ```python
         # Part-7. Exercise 2: Scroll the message panel
-        SCROLL_UP   = tcod.event.KeySym.PAGEUP
-        SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN
+        LOG_SCROLL_UP   = tcod.event.KeySym.PAGEUP
+        LOG_SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN
 
         # Part-8. Exercise 4: Item hotkey constants and key_label
         HEALTH_POTION   = tcod.event.KeySym.H

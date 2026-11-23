@@ -6,16 +6,22 @@ By the end of this part, your roguelike will generate a new dungeon layout made 
 
 ## Learning goals
 
-- Understand what procedural generation means and why it matters
+In this part we will:
+
+- See what procedural generation is and why roguelikes use it
 - Implement the rooms-and-corridors dungeon algorithm
 - Place the player in the first room
 - Use Bresenham lines to dig L-shaped tunnels
 
 ---
 
-## Procedural generation
+## Background
 
-A hand-crafted dungeon is fixed: every player sees the same thing. A procedurally generated dungeon is created algorithmically at runtime: different on every run, with more variety than you could ever exhaust.
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [The map package](#the-map-package). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### Procedural generation
+
+A dungeon designed by hand is fixed: every player sees the same map. A procedurally generated dungeon is built by code while the game runs, so it is different on every run. This is one of the roguelike traits from Part 0: players cannot learn the map by heart, so every run is a new exploration.
 
 The classic roguelike dungeon uses the **rooms-and-corridors** approach:
 
@@ -32,11 +38,22 @@ This gives dungeons that feel hand-designed (recognizable rooms connected by cor
     | Algorithm | Feel | Complexity |
     | --- | --- | --- |
     | Rooms-and-corridors | Classic dungeon | Low |
-    | BSP (Binary Space Partitioning) | Structured, no wasted space | Medium |
+    | BSP (Binary Space Partitioning) | Structured, rooms spread evenly | Medium |
     | Cellular automata | Organic caves | Medium |
     | Wave Function Collapse | Highly varied, tile-pattern aware | High |
 
-    We use rooms-and-corridors because it is the most intuitive to understand and produces instantly recognizable roguelike dungeons. The architecture we build here can be swapped for another generator later without touching the rest of the game.
+    We use rooms-and-corridors because it is the easiest to understand, and it produces dungeons that anyone recognizes as a roguelike at first sight.
+
+    The structure we build here lets you replace it with another generator later, with no changes to the rest of the game.
+
+### Keeping the generator apart from the map
+
+The 2019 edition of Yet Another Roguelike Tutorial put dungeon generation inside the `GameMap` class (`GameMap.make_map`). That works for simple cases, but it ties the map *data structure* to one specific *algorithm*. If you later want a second generator (for example, a cave level that uses cellular automata), `GameMap` fills up with code that has nothing to do with storing the map.
+
+We use a separate module instead: `game/map/map_generator.py` takes configuration parameters and returns a `GameMap`.
+
+!!! info "Design decision: Separate map generator module"
+    `GameMap` is responsible for *storing* and *rendering* the tile grid. `game/map/map_generator.py` is responsible for *filling* it. This is the Single Responsibility Principle: each module does one thing. Swapping algorithms later means changing only the call in `main.py`.
 
 ---
 
@@ -78,20 +95,9 @@ Update the `GameMap` import in `game/engine.py`. It moves below the other `game`
 
 ---
 
-## The dungeon generator module
-
-The original libtcod tutorial put dungeon generation inside the `GameMap` class. That works for simple cases, but it couples the map *data structure* to one specific *algorithm*. If you ever want a second generator (say, a cave level that uses cellular automata), you end up with a cluttered `GameMap`.
-
-The better approach: a separate `game/map/map_generator.py` module that takes configuration parameters and returns a `GameMap`.
-
-!!! info "Design decision: Separate map generator module"
-    `GameMap` is responsible for *storing* and *rendering* the tile grid. `game/map/map_generator.py` is responsible for *filling* it. This is the Single Responsibility Principle: each module does one thing. Swapping algorithms later means changing only the call in `main.py`.
-
----
-
 ## The RectangularRoom class
 
-Create `game/map/map_generator.py` with our first class:
+All the generation code goes in a new module, `game/map/map_generator.py`, outside `GameMap` (the Background explains why). Create it with our first class:
 
 ```python
 from __future__ import annotations
@@ -149,26 +155,34 @@ Two rectangles overlap if and only if their projections overlap on **both** the 
 
 ### Why `inner` adds 1
 
-Consider a room placed at `(1, 1)` to `(6, 6)`. If we dig out exactly that rectangle, and then place a room at `(6, 1)` to `(11, 6)`, the two rooms share the column at `x=6`; they merge with no wall between them.
+Consider room A with `x1 = 1`, `y1 = 1`, `x2 = 6`, `y2 = 6`, and room B right next to it, with `x1 = 6` and `x2 = 11`. `intersects` accepts B, because the two rooms only share column 6.
 
-By starting the interior at `x1 + 1` and `y1 + 1`, we always leave at least one tile of wall around each room:
+Without the `+1`, a room's interior would be `slice(x1, x2)`. A slice stops *before* its end value, so for room A this digs columns and rows 1 to 5:
+
+- Column 6 and row 6 (the right and bottom walls) stay wall, because the slice ends there.
+- Column 1 and row 1 (the left and top walls) are dug away.
+
+Room B then digs from column 6, which is room A's right wall, and the two rooms merge into one (right drawing).
+
+The `+1` fixes the other side. The end of the slice already keeps the right and bottom walls; starting the interior at `x1 + 1` and `y1 + 1` also keeps the left and top walls. Every room keeps one tile of wall all around it, and two rooms next to each other share a wall (left drawing):
 
 ```text
-Without +1:                  With +1 (what we do):
+With +1 (what we do):           Without +1:
 
-  0 1 2 3 4 5 6 7            0 1 2 3 4 5 6 7
-0 # # # # # # # #          0 # # # # # # # #
-1 # . . . . . . #          1 # + + + + + + #
-2 # . . . . . . #    ->    2 # + . . . . + #
-3 # . . . . . . #          3 # + . . . . + #
-4 # . . . . . . #          4 # + . . . . + #
-5 # . . . . . . #          5 # + . . . . + #
-6 # . . . . . . #          6 # + + + + + + #
-7 # # # # # # # #          7 # # # # # # # #
+0 # # # # # # # # # # # # #     0 # # # # # # # # # # # # #
+1 # + + + + + + + + + + + #     1 # . . . . . . . . . . + #
+2 # + . . . . + . . . . + #     2 # . . . . . . . . . . + #
+3 # + . . . . + . . . . + #     3 # . . . . . . . . . . + #
+4 # + . . . . + . . . . + #     4 # . . . . . . . . . . + #
+5 # + . . . . + . . . . + #     5 # . . . . . . . . . . + #
+6 # + + + + + + + + + + + #     6 # + + + + + + + + + + + #
+7 # # # # # # # # # # # # #     7 # # # # # # # # # # # # #
+    ^         ^         ^           ^         ^         ^
+    x=1       x=6       x=11        x=1       x=6       x=11
+
+Room A: x1=1, x2=6    Room B: x1=6, x2=11
++ = wall on a room's border (a normal wall in the game)
 ```
-
-!!! info "About `+` and `#`"
-    Here `+` is only used to highlight the wall tiles preserved by the `+1` offset. In the actual game, these are still normal wall tiles.
 
 Two rooms next to each other will always have a wall between them when they are dug. Only tunnels break through these walls, and that is deliberate: it is exactly how rooms get connected in the next section.
 
@@ -219,9 +233,9 @@ Option A (right then down):      Option B (down then right):
 
 The 50/50 random choice means the dungeon gets a mix of both shapes, which looks more natural than always turning the same way.
 
-`tcod.los.bresenham` returns the coordinates of a straight line between two points using [Bresenham's line algorithm](https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm). We use it from tcod's line-of-sight module: it happens to be exactly what we need for drawing grid lines.
+`tcod.los.bresenham` returns the coordinates of a straight line between two points, using [Bresenham's line algorithm](https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm). It lives in tcod's line-of-sight module (`los`), but the algorithm works for any straight line on a grid, which is exactly what a tunnel is.
 
-The `yield` keyword makes `tunnel_between` a *generator*: it produces coordinates one at a time instead of building a full list. The caller (`for x, y in tunnel_between(...)`) receives them as it iterates.
+The `yield` keyword makes `tunnel_between` a *generator function*: it produces coordinates one at a time instead of building a full list. The caller (`for x, y in tunnel_between(...)`) receives them as it loops. This "generator" is a Python term; it has nothing to do with our dungeon generator.
 
 ---
 
@@ -287,7 +301,9 @@ The algorithm in plain language:
 `max_rooms` is the maximum number of rooms we want to keep, not the number of placement attempts. Since many attempts are rejected because they overlap existing rooms, we give the generator extra chances with `max_room_attempts`. The loop stops early once enough rooms have been placed.
 
 !!! tip "Tweaking the dungeon"
-    The three parameters `max_rooms`, `room_min_size`, and `room_max_size` control the dungeon character. More rooms = denser dungeon. Smaller rooms = more corridor-heavy, maze-like floors. Experiment after Part 3 is working.
+    The three parameters `max_rooms`, `room_min_size`, and `room_max_size` control how the dungeon looks. More rooms give a denser dungeon. Smaller rooms give more corridors and a more maze-like floor. Try different values once Part 3 works.
+
+    With the values in `main.py`, the map fills up before `max_rooms` is reached: most dungeons end with 12 to 18 rooms. Try smaller rooms (4 to 6) and you will see `max_rooms` start to limit the count.
 
 ---
 
@@ -304,7 +320,9 @@ The generator digs floors out of a solid wall map. Update `game/map/game_map.py`
 -        half_height = height // 2
 -
 -        # A small wall for testing: we will remove it in Part 3
--        self.tiles[half_width-10:half_width+10+1, half_height] = tile_types.wall
+-        self.tiles[half_width-10:half_width+10+1, half_height] = (
+-            tile_types.wall
+-        )
 +        self.tiles = np.full((width, height), fill_value=tile_types.wall, order="F")
 ```
 
@@ -407,13 +425,18 @@ if __name__ == "__main__":
 
 Notice that the player starts at `(0, 0)`, a wall. `generate_dungeon` will move the player to the center of the first room before the game begins. We also removed the `npc` entity since it was just for demonstration.
 
+!!! note "The `name` argument comes from Part 2's first exercise"
+    If you did that exercise, `Entity` already accepts `name` and you have nothing to add.
+
+    If you skipped it, add it now: later parts show entity names in messages such as "Player attacks Orc!". In `game/entity.py`, add a `name: str` parameter to `Entity.__init__` and store it as `self.name`.
+
 ![Screenshot 1](images/part_3_screenshot_1.png)
 
 ---
 
 ## Testing your work
 
-Run `python main.py` a few times:
+Run the game a few times with `uv run main.py` (or `python main.py`):
 
 - [ ] A different dungeon layout appears every run
 - [ ] The player starts inside a room, not inside a wall
@@ -423,7 +446,11 @@ Run `python main.py` a few times:
 - [ ] There is no exit yet; descending stairs come in Part 11
 
 !!! bug "What if some rooms are unreachable?"
-    Our algorithm connects each room to the *previous* room in the list with a dug tunnel, and digging only ever turns wall into floor: a later room can never wall off an earlier corridor. That is what guarantees every room is reachable, not the overlap check (overlapping rooms would just merge into one, which is ugly but still reachable). If you see a floating room with no connection, the tunnel code did not run for it; check the `else` branch and `intersects`.
+    Our algorithm connects each room to the *previous* room in the list with a tunnel. Digging only turns wall into floor, so a later room can never block an earlier corridor. That is what makes every room reachable.
+
+    The overlap check does not matter here: two overlapping rooms would just merge into one, which looks bad but is still reachable.
+
+    If you see a room with no connection, the tunnel code did not run for it. Check the `else` branch, and check that `rooms.append(new_room)` runs for every room you dig: if it does not, `rooms` stays empty and every room takes the "first room" branch, with no tunnel.
 
 ---
 
@@ -475,11 +502,11 @@ game/
 
     Add a `seed` parameter to `generate_dungeon` and call `random.seed(seed)` at the top of the function. With a fixed seed, the dungeon is always the same. This is useful for debugging: if you find a problematic layout, record its seed to reproduce it.
 
-    `random.seed(seed)` reseeds Python's shared, global random generator, so it also affects every other part of the program that calls `random` after this point, not just dungeon generation. Part 4 introduces the more robust pattern: a `random.Random(seed)` instance owned by the generator itself, so seeding the dungeon does not silently make unrelated systems deterministic too.
+    `random.seed(seed)` reseeds Python's shared, global random generator. It affects every other part of the program that calls `random` after this point, not just dungeon generation. Part 4 introduces a safer pattern: a `random.Random(seed)` instance owned by the generator itself, so seeding the dungeon does not also make unrelated systems repeat the same results.
 
 2. **Connect to the *nearest* room instead of the *previous* one**:
 
-    Our current algorithm connects each room to the one placed before it. This sometimes creates long diagonal tunnels. Instead, find the already-placed room that is closest to the new room and connect to that. The dungeon will look more compact.
+    Our current algorithm connects each room to the one placed before it. This sometimes creates long tunnels that cross half the map. Instead, find the already-placed room that is closest to the new room and connect to that. The dungeon will look more compact.
 
     Add distance helpers to `RectangularRoom`:
 

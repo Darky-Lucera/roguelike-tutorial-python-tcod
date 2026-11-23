@@ -5,7 +5,7 @@ A step-by-step guide to building a classic roguelike game in Python, using the [
 This tutorial is designed around a different goal than most: instead of just showing you *what* to type, it explains *why* each decision was made and *what* each concept means. Every chapter opens with the theory before the code.
 
 !!! info "Coming from another tutorial?"
-    - **vs. RogueBasin's classic Python+libtcod tutorial**: we use modern `tcod` (the Pythonic successor to `libtcod`), Python 3.12+, and a more layered architecture (events → actions → engine).
+    - **vs. RogueBasin's classic Python+libtcod tutorial**: we use modern `tcod` (the current Python version of `libtcod`, which replaces the old `libtcodpy` bindings), Python 3.12+, and a more layered architecture (events → actions → engine).
     - **vs. Yet Another Roguelike Tutorial**: the structure is similar, but each chapter leads with the design rationale before the code, with more attention to *why* a pattern exists (components, separation of concerns, event flow) and not just *what* to type.
 
 ---

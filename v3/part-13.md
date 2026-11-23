@@ -6,6 +6,8 @@ By the end of this part, the player can find, equip, and swap weapons and armor,
 
 ## Learning goals
 
+In this part we will:
+
 - Add `Equippable` and `Equipment` components
 - Define equipment slots (weapon, armor) as an enum
 - Layer equipment bonuses on top of `Fighter` base stats through the existing properties
@@ -908,7 +910,7 @@ The behavioral weapons above are not in this chapter, and the reason is the line
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] A Dagger lies somewhere in your starting room. Pick it up with `g` and equip it from the inventory: `"You equip the Dagger."`
 - [ ] The equipped Dagger appears under an *Equipped* header with a number key; pressing that number again unequips it: `"You remove the Dagger."`
@@ -1039,7 +1041,7 @@ You have built a complete roguelike. Here are directions to take it further:
 
 **Sharing it**:
 
-- Push the game to a public repository with a README, a screenshot, and the run command; a project that starts with `uv run python main.py` is easy for anyone to try
+- Push the game to a public repository with a README, a screenshot, and the run command; a project that starts with `uv run main.py` is easy for anyone to try
 
 The architecture you built (entities and components, actions, game states as a state machine, pickle serialization, data-driven spawn tables) scales to a much larger game. [Yet Another Roguelike Tutorial](https://www.rogueliketutorials.com/), the tutorial this one descends from, makes a good comparison point: same genre, same library, different decisions in the places where this tutorial deliberately diverged (game states instead of event handlers, a static message log, the data and factories packages, guaranteed equipment). Reading code that solves the same problems differently is one of the fastest ways to grow.
 

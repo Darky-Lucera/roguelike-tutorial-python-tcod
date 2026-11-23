@@ -6,6 +6,8 @@ By the end of this part, your roguelike will have a main menu and a save system,
 
 ## Learning goals
 
+In this part we will:
+
 - Serialize the entire game state to disk with `pickle` + `lzma`
 - Add a main menu with New Game / Continue options
 - Refactor game states to return states (not just actions)
@@ -1047,7 +1049,7 @@ This also breaks the potential circular import introduced when `game_states.py` 
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] The main menu appears with the background image, three framed options, and the author text in the lower-right corner
 - [ ] `Continue last game` is dimmed when no save file exists
@@ -1055,10 +1057,10 @@ Run `python main.py`:
 - [ ] `N` starts a new game
 - [ ] Play for a few turns (pick up items, fight enemies)
 - [ ] Press `Esc` or close the window, the terminal prints where the game was saved
-- [ ] Run `python main.py` again, `C` loads the game with the same map, entities, and message log
+- [ ] Run the game again, `C` loads the game with the same map, entities, and message log
 - [ ] Die in combat, the game-over screen appears
 - [ ] Press `Esc` to quit, no new save is written
-- [ ] Run `python main.py` again, `C` shows `"No saved game to load."` because death deleted it
+- [ ] Run the game again, `C` shows `"No saved game to load."` because death deleted it
 
 ---
 

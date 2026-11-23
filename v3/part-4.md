@@ -6,7 +6,9 @@ By the end of this part, the player will only see the parts of the dungeon that 
 
 ## Learning goals
 
-- Understand what FOV means in a roguelike and why it matters
+In this part we will:
+
+- See what FOV (field of view) is and why roguelikes use it
 - Track three tile visibility states: visible, explored, unseen
 - Render tiles differently depending on visibility
 - Recompute FOV after every player move
@@ -273,7 +275,7 @@ Key points:
 - `explored |= visible`: the bitwise OR accumulates explored tiles over time: once seen, always remembered
 
 !!! note "If you kept the Part 1 turn counter"
-    This listing replaces `engine.py` wholesale, so carry your three `# Part-1. Exercise 3` lines over: `self.turn_count    = 0` at the end of `__init__`, `self.turn_count += 1` after the `if action is None:` block in `handle_events`, and the `console.print(x=0, y=44, text=f"Turn: {self.turn_count}")` in `render()`, before `context.present(console)`. Part 10 will build on this counter.
+    This listing replaces `engine.py` wholesale, so carry your three `# Part-1. Exercise 3` lines over: `self.turn_count    = 0` at the end of `__init__`, `self.turn_count += 1` after the `if action is None:` block in `handle_events`, and the `console.print(x=0, y=44, text=f"Turns: {self.turn_count}")` in `render()`, before `context.present(console)`. Part 10 will build on this counter.
 
 !!! note "What does `[:]` mean?"
     `visible[:] = ...` updates the contents of the existing array in-place. Without `[:]`, the assignment would replace the array with a new one, and any other code holding a reference to the original would still see the old data.
@@ -533,11 +535,11 @@ if __name__ == "__main__":
 `main.py` decides the seed before anything else:
 
 - `random.getrandbits(64)` produces a fresh 64-bit number, so each run builds a different dungeon. It draws from Python's shared random generator, which is already seeded from OS entropy at startup; that freshness is all we need here, so there is no reason to reach for the `secrets` module's cryptographic-strength randomness.
-- `os.environ.get("GAME_SEED", ...)` lets you override that: set the `GAME_SEED` environment variable and the game uses it instead, so `GAME_SEED=12345 python main.py` always builds the same dungeon.
+- `os.environ.get("GAME_SEED", ...)` lets you override that: set the `GAME_SEED` environment variable and the game uses it instead, so `GAME_SEED=12345 uv run main.py` (or `GAME_SEED=12345 python main.py`) always builds the same dungeon.
 - `print(f"Game seed: {seed}")` reports the chosen seed, so when you find an interesting (or broken) layout you can reproduce it later.
 
 !!! tip "Run it now"
-    Run `python main.py` a few times. Each run should generate a different dungeon
+    Run the game a few times with `uv run main.py` (or `python main.py`). Each run should generate a different dungeon
     layout, with a bright starting room, dimmed tiles behind you as you move away, and
     solid black for anything you have not explored yet. Then set `GAME_SEED=12345`
     (or any number) before running it again, twice in a row: both runs should produce
@@ -549,7 +551,7 @@ if __name__ == "__main__":
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] The starting room is immediately lit (light yellow/gold colors)
 - [ ] Tiles you have already seen become dark blue when they leave your current FOV

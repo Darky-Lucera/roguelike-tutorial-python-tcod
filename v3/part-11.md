@@ -6,6 +6,8 @@ By the end of this part, the player will gain experience from defeating enemies,
 
 ## Learning goals
 
+In this part we will:
+
 - Track experience points and character level on a `Level` component
 - Show a level-up modal when the player gains enough XP
 - Add descending stairs that generate a new dungeon floor
@@ -1102,7 +1104,7 @@ Floor: 1             $ 0
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] Killing enemies with melee, lightning, fireball, or drain counts toward level-up XP
 - [ ] After enough XP, a level-up screen appears with three stat choices

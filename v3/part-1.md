@@ -2,22 +2,30 @@
 
 ## What You Will Build
 
-By the end of this part, you will have the first playable version of your roguelike: a player character, `@`, moving with the arrow keys inside a small room bounded by walls, `#`.
+By the end of this part, you will have the first playable version of your roguelike: a player character, `@`, moving with the arrow keys inside a room bounded by walls, `#`.
 
 One thing before we start: this tutorial counts on you doing the exercises at the end of each part. They are not optional extras; the following parts assume you completed them before moving on. Part 1 is the first example: the walls promised above are yours to build, in exercise 2.
 
 ## Learning goals
 
-- Understand the game loop and why roguelikes structure it the way they do
+In this part we will:
+
+- Build a game loop, and see why a turn-based roguelike waits for the player's input
 - Open a tcod window using three key objects: tileset, console, and context
 - Draw a character on screen
-- Read keyboard input and move the character
+- Read keyboard input and move the character with the arrow keys, the numpad, and the vi keys
+- Start the `game/` package, keeping actions apart from the input handlers that create them
+- Optionally, swap the `@` for a small sprite
 
 ---
 
-## The game loop
+## Background
 
-Every game, from Pong to Elden Ring, runs a loop. The loop repeats until the player quits, doing the same three things each iteration:
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [Opening a window](#opening-a-window). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### The game loop
+
+Every game, from *Spacewar!* (1962) to Elden Ring, runs a loop. The loop repeats until the player quits, doing the same three things each iteration:
 
 ```text
 ┌──────────┐     ┌──────────┐     ┌──────────┐
@@ -41,11 +49,9 @@ Render ──▶ Wait for input ──▶ Process action ──▶ (back to Rend
 
 We render first so the player sees the current state, then block until they act.
 
----
+### Three tcod objects
 
-## Three tcod objects
-
-Before writing code, understand what tcod gives us:
+tcod gives us three objects that work together:
 
 **Tileset**: the font sheet. A grid image where each cell is one character tile. tcod uses it to draw characters on screen. We load it once at startup.
 
@@ -123,12 +129,12 @@ if __name__ == "__main__":
 ```
 
 !!! tip "Run it now"
-    Run it with `python main.py`. You should see a window with an `@` in the top-left corner. Close it by clicking the X.
+    Run it with `uv run main.py` (or `python main.py`). You should see a window with an `@` near the top-left corner. Close it by clicking the X.
 
 ![Screenshot 1](images/part_1_screenshot_1.png)
 
 !!! info "Why 80 × 50?"
-    The 80-column width is the classic terminal convention: the [VT100](https://en.wikipedia.org/wiki/VT100) (1978) displayed 80 columns because it inherited the width of IBM punched cards, which held 80 characters each. The 50 rows leave comfortable space for the map plus a UI strip we will add in Part 7.
+    The 80-column width is the classic terminal convention. Terminals such as the [VT100](https://en.wikipedia.org/wiki/VT100) (1978) showed 80 columns by default, the same width as an IBM punched card, which held 80 characters. The 50 rows leave comfortable space for the map plus a UI strip we will add in Part 7.
 
 Let's go through each part.
 
@@ -143,7 +149,7 @@ tileset = tcod.tileset.load_tilesheet(
 )
 ```
 
-`Path(__file__).parent` is the folder where `main.py` lives, so `Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png"` resolves the image path relative to `main.py` itself, not the terminal's current directory. For example, if `main.py` lives in `/home/user/my-game/`, the path evaluates to `/home/user/my-game/res/dejavu12x12_gs_tc.png`, regardless of which folder you launched Python from. This means `python main.py` works the same way from anywhere.
+`Path(__file__).parent` is the folder where `main.py` lives, so `Path(__file__).parent / "res" / "dejavu12x12_gs_tc.png"` resolves the image path relative to `main.py` itself, not the terminal's current directory. For example, if `main.py` lives in `/home/user/my-game/`, the path evaluates to `/home/user/my-game/res/dejavu12x12_gs_tc.png`, regardless of which folder you launched Python from.
 
 The sheet has 32 columns and 8 rows = 256 tiles. The TCOD character map only claims the first 160 of them (five rows); the last three rows sit empty, something the end of this part takes advantage of.
 
@@ -206,7 +212,7 @@ with tcod.context.new(
 console = tcod.console.Console(screen_width, screen_height, order="F")
 ```
 
-`order="F"` changes the array layout so we can index the console as `console[x, y]` instead of the row-first order many grid libraries use. This is more natural for a 2D game.
+`order="F"` changes the layout of the console's arrays (such as `console.rgb`, which we use from Part 2) so we index them as `[x, y]` instead of `[y, x]`, the row-first order numpy uses by default. This is more natural for a 2D game.
 
 ### The event loop
 
@@ -217,7 +223,7 @@ for event in tcod.event.wait():
             raise SystemExit()
 ```
 
-`tcod.event.wait()` blocks until at least one event arrives, then returns all pending events. The `match` statement (Python 3.10+) is the cleanest way to handle tcod's typed events.
+`tcod.event.wait()` blocks until at least one event arrives, then returns all pending events. The `match` statement (Python 3.10+) is a clear way to handle tcod's typed events.
 
 !!! question "About `match` / `case`"
     `match` is Python's pattern matching, introduced in 3.10. Each `case` matches against the *type* (and optionally the contents) of the value. Here it lets us branch on event types like `tcod.event.Quit` and `tcod.event.KeyDown` without writing a chain of `isinstance` calls. If you have not used `match` before, treat it for now as a more readable `if/elif` over types.
@@ -249,6 +255,9 @@ Update the drawing call to use the new variables:
 -        console.print(x=1, y=1, text="@")
 +        console.print(x=player_x, y=player_y, text="@")
 ```
+
+!!! tip "Run it now"
+    Run the game again. The `@` now starts in the center of the window. It does not move yet: reading the keys comes next.
 
 ![Screenshot 2](images/part_1_screenshot_2.png)
 
@@ -357,7 +366,7 @@ class EventHandler:
 
 ### Vi keys and the numpad
 
-Arrow keys are not the only tradition. *Rogue* was written before arrow keys were something you could count on, so it used the letters `h`, `j`, `k`, `l` to move, a convention borrowed from the vi text editor. Other classics leaned on the numpad instead. Longtime roguelike players expect all three schemes, and supporting them costs us almost nothing, because a single `case` can match several keys at once.
+Arrow keys are not the only tradition. *Rogue* was written before arrow keys were something you could count on, so it used the letters `h`, `j`, `k`, `l` to move, a convention borrowed from the vi text editor. Other classics used the numpad instead. Longtime roguelike players expect all three schemes, and supporting them costs us almost nothing, because a single `case` can match several keys at once.
 
 Update the four movement cases in `event_keydown`:
 
@@ -383,7 +392,7 @@ Update the four movement cases in `event_keydown`:
 Notice the `|` between patterns. Inside a `case` it means "match any of these". It looks like the `|` we used to combine the SDL window flags, but this one is pattern syntax, not a bitwise operation. `KP_8` is the numpad 8, and tcod names letter keys with capitals: `KeySym.K` is the `k` key.
 
 !!! info "Why `hjkl`, of all keys?"
-    Because of one keyboard. vi was written on an [ADM-3A](https://en.wikipedia.org/wiki/ADM-3A) (1976) terminal, which had no dedicated arrow keys: the arrows were printed directly on the `h`, `j`, `k`, `l` keycaps, so those keys became the cursor keys. *Rogue* was developed on the same terminals and kept the convention.
+    Because of one keyboard. vi was written on an [ADM-3A](https://en.wikipedia.org/wiki/ADM-3A) (1976) terminal, which had no dedicated arrow keys: the arrows were printed directly on the `h`, `j`, `k`, `l` keycaps, so those keys became the cursor keys. *Rogue* drew its screen with curses, a library Ken Arnold built from vi's screen code, and it took vi's movement keys too.
 
     The ADM-3A also printed "Home" on the `~` key. That is why `~` still means the home directory on Unix systems today.
 
@@ -481,13 +490,13 @@ if __name__ == "__main__":
     main()
 ```
 
-Splitting `main` and `game_loop` is the standard pattern: setup goes in one place, the per-frame work goes in another. You will see this everywhere in game code.
+Splitting `main` and `game_loop` is the standard pattern: setup goes in one place, the per-frame work goes in another. You will see this in most game code.
 
 !!! abstract "A quick preview of Part 2"
     For now, the player's position lives in local variables inside the loop, which keeps Part 1 small and easy to follow. In Part 2, we will group this kind of game state into an `Engine` object so the loop can manage it more cleanly.
 
 !!! tip "Run it now"
-    Run the game and press each arrow key a few times, in any order. The `@` should follow every direction you press. Try holding one down, too. You will notice it leaves a trail behind it: that is expected, and the next section fixes it.
+    Run the game and press each arrow key a few times, in any order. Then try the numpad (`8`, `2`, `4`, `6`) and the `h`, `j`, `k`, `l` keys. The `@` should follow every direction you press. Try holding one down, too. You will notice it leaves a trail behind it: that is expected, and the next section fixes it.
 
 ### Clearing the console
 
@@ -503,6 +512,9 @@ The trail appears because we never erase the old position. Add `console.clear()`
 ```
 
 The order is now `clear → draw → present → wait`, the standard game-loop pattern: every iteration starts with a blank buffer, draws the current state from scratch, displays it, and then blocks until the next event.
+
+!!! tip "Run it now"
+    Run the game and hold an arrow key down. The `@` moves without leaving a trail. Do the same with a numpad key and a vi key: every scheme should move it cleanly.
 
 ---
 
@@ -524,14 +536,14 @@ The only rule is that everything stays on the grid: one tile per cell, all the s
 That is the same DejaVu sheet with a few sprites painted into the lower rows (hero, orc, dagger, and so on), plus five rows of directional art added below the original eight. This part only uses the hero tile; the rest waits for the [graphics appendix](append-7.md).
 
 ??? note "Where to find graphics"
-    You can find tile and sprite sets in many styles, free or paid, on sites like [itch.io](https://itch.io), [OpenGameArt](https://opengameart.org), or [Kenney](https://kenney.nl) (there are tens of dedicated webs).
+    You can find tile and sprite sets in many styles, free or paid, on sites like [itch.io](https://itch.io), [OpenGameArt](https://opengameart.org), or [Kenney](https://kenney.nl) (there are dozens of dedicated websites).
 
     The sprites used here are adapted from two CC0 sets by Merchant Shade:
 
     - [16x16 Puny Characters Plus Sprites](https://merchant-shade.itch.io/16x16-puny-characters-plus-sprites) (paid)
     - [16x16 Mixed RPG Icons](https://merchant-shade.itch.io/16x16-mixed-rpg-icons) (free)
 
-    One free, one paid, both released under CC0. I had to adapt them, because our font is `12 × 12` and few sprites come in that size: `16 × 16` is far more common. There is nothing special about `12 × 12`, though. Pick whatever tile size suits your art, as long as the whole sheet uses one consistent size.
+    One free, one paid, both released under CC0. We adapted them, because our font is `12 × 12` and few sprites come in that size: `16 × 16` is far more common. There is nothing special about `12 × 12`, though. Pick whatever tile size suits your art, as long as the whole sheet uses one consistent size.
 
 With just those few tiles, the same game looks like this:
 
@@ -542,7 +554,21 @@ With just those few tiles, the same game looks like this:
 
 ### Swapping the @ for a sprite
 
-Two small changes to `main.py`. First, load the extended sheet and point a free codepoint at the hero tile:
+Three small changes to `main.py`. First, name a free codepoint for the hero. Both `main()` and `game_loop()` need it, so it goes at module level, below the imports:
+
+```diff
+ from game.actions import EscapeAction, MovementAction
+ from game.input_handlers import EventHandler
+ 
++# 0xE000 starts the Unicode Private Use Area: a range of codepoints that
++# never map to a real character, so a sprite there can never clash.
++PUA = 0xE000
++
+ 
+ def game_loop(
+```
+
+Next, load the extended sheet and point that codepoint at the hero tile:
 
 ```diff
      tileset = tcod.tileset.load_tilesheet(
@@ -554,11 +580,7 @@ Two small changes to `main.py`. First, load the extended sheet and point a free 
          tcod.tileset.CHARMAP_TCOD,
      )
 +
-+    # 0xE000 starts the Unicode Private Use Area: a range of codepoints that
-+    # never map to a real character, so a sprite there can never clash.
-+    # Point its first slot at the hero tile (column 0, row 5 of the sheet).
-+    PUA = 0xE000
-+
++    # The hero tile is at column 0, row 5 of the sheet.
 +    tileset.remap(PUA, 0, 5)
 ```
 
@@ -576,23 +598,22 @@ Then draw that codepoint instead of `"@"`:
     Run the game and move around. The hero walks as a sprite instead of an `@`, in every direction, same as before. That is the whole trick.
 
 !!! note "Why exactly `0xE000`?"
-    `0xE000` is simply the first slot of the Private Use Area: easy to remember, easy to type. That is enough for one sprite. Once a sheet grows to dozens of tiles, picking a codepoint by hand for each one gets tedious and easy to get wrong. A neater trick is to encode a tile's row and column *into* the codepoint itself, so it can be computed instead of memorized. This chapter only needs one sprite, so we are not there yet, but keep the idea in the back of your mind: the [graphics appendix](append-7.md) picks it back up once the sheet is big enough to actually need it.
+    `0xE000` is simply the first slot of the Private Use Area: easy to remember, easy to type. That is enough for one sprite. Once a sheet grows to dozens of tiles, picking a codepoint by hand for each one gets tedious and easy to get wrong. A neater trick is to encode a tile's row and column *into* the codepoint itself, so it can be computed instead of memorized. This chapter only needs one sprite, so we are not there yet, but remember the idea: the [graphics appendix](append-7.md) returns to it once the sheet is big enough to actually need it.
 
 !!! note "About the sheet layout"
     The lower rows of the original DejaVu sheet were empty, so the first sprites fill unused cells, not overwrite any glyph. The `32` and `13` we pass to `load_tilesheet` are exactly that: how many tiles the image holds across and down, and they must match the image or tcod cannot cut it into tiles. The original sheet is `32 × 8 = 256` cells; the extended one adds five rows of art below, for `32 × 13`.
 
-    Growing *downward* is the safe direction. Tiles are numbered left to right, top to bottom, and `CHARMAP_TCOD` hands out its codepoints in that same order: it has 160 entries, enough for the first five rows, which is exactly why the rows below them are free. Tiles numbered past the end of the list get no character, so new rows at the bottom leave the whole font intact, and the new tiles just wait for `remap`. Widening the sheet instead would shift the numbering, and every character past the first row would land on the wrong cell.
+    Growing *downward* is the safe direction. Tiles are numbered left to right, top to bottom, and `CHARMAP_TCOD` assigns its codepoints in that same order: it has 160 entries, enough for the first five rows, which is exactly why the rows below them are free. Tiles numbered past the end of the list get no character, so new rows at the bottom leave the whole font intact, and the new tiles just wait for `remap`. Widening the sheet instead would shift the numbering, and every character past the first row would land on the wrong cell.
 
     This part only uses the hero tile from the extra art; the [graphics appendix](append-7.md) shows the tidy setup that wires up the rest.
 
-### Doing it properly, later
+!!! info "Doing it properly, later"
+    This recipe is enough to *see* a sprite. Once the game grows, two more tiny changes make sprites behave well:
 
-This recipe is enough to *see* a sprite. Once the game grows, two more tiny changes make sprites behave well, and you will be able to see it later:
+    - **Do not tint sprites.** `console.print(..., fg=color)` multiplies the tile by `fg`. That is what paints a green `o` for an orc, but it also changes the colors of a full-color sprite. When you add the `Entity` class (Part 2), force `fg` to white for sprite entities so the art keeps its own colors.
+    - **Tell a codepoint from a character.** Once entities render through the map (Part 4), an entity's glyph may be a real character like `"#"` or a sprite codepoint like `0xE000`. Convert the integer with `chr()` before printing it.
 
-- **Do not tint sprites.** `console.print(..., fg=color)` multiplies the tile by `fg`. That is what paints a green `o` for an orc, but it also stains a full-color sprite. When you add the `Entity` class (Part 2), force `fg` to white for sprite entities so the art keeps its own colors.
-- **Tell a codepoint from a character.** Once entities render through the map (Part 3), an entity's glyph may be a real character like `"#"` or a sprite codepoint like `0xE000`. Convert the integer with `chr()` before printing it.
-
-The full, switchable setup (a `USE_SPRITES` flag, a small `sprites` module with named tiles, and separate left/right tiles for facing) lives in the [graphics appendix](append-7.md).
+    The full, switchable setup (a `USE_SPRITES` flag, a small `sprites` module with named tiles, and separate left/right tiles for facing) lives in the [graphics appendix](append-7.md).
 
 !!! info "Why you cannot just flip a sprite"
     tcod copies each tile to the screen exactly as it sits in the sheet; it never rotates or mirrors them. So a hero facing left and the same hero facing right are *two different tiles*: you draw whichever one matches the current facing. In ASCII this never came up, because a letter does not face anywhere. Honestly, most 2D games do the same even when they *can* mirror, because light hits a character from one side and the highlights should not jump across just because it turned around.
@@ -601,7 +622,7 @@ The full, switchable setup (a `USE_SPRITES` flag, a small `sprites` module with 
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] A window opens with a white `@` in the center
 - [ ] Arrow keys, the numpad, and the `h`, `j`, `k`, `l` keys move the `@` in all four directions
@@ -615,7 +636,7 @@ Run `python main.py`:
 
 We built a game loop that renders, then waits for input. tcod's three key objects (**tileset**, **console**, and **context**) work together: the tileset defines how characters look, the console is the drawing buffer, and the context is the window that displays it.
 
-We separated **actions** (what to do) from **input handlers** (what key triggers it). This separation will pay off as soon as enemies need to take turns.
+We separated **actions** (what to do) from **input handlers** (what key triggers it). This separation will be useful as soon as enemies need to take turns.
 
 We also adopted the project layout we will use for the rest of the tutorial: `main.py` at the root as the entry point, the `game/` package for our modules, and `res/` for static assets like the font sheet. The per-frame work lives in `game_loop`, separate from the setup in `main`.
 
@@ -714,4 +735,4 @@ game/
 
     In many roguelikes, pressing `.` or `5` (numpad) passes a turn without moving. Create a `WaitAction(Action)` class and handle it in both `game/input_handlers.py` and `main.py`.
 
-    Done? Then you will notice that... nothing happens. The `@` stays put, and there is no way to tell whether the game even heard you. Make the turn visible: keep a `turn_count` counter in `game_loop`, add 1 every time `dispatch` returns an action that is not `None`, and draw it each frame with `console.print(x=1, y=0, text=f"Turn: {turn_count}")`, in the top row that exercise 2 left outside the walls. Now hold `.` down: the `@` stands still while time passes. That is the soul of a roguelike, in one corner of the screen: time only passes when you act.
+    Done? Then you will notice that... nothing happens. The `@` stays put, and there is no way to tell whether the game even heard you. Make the turn visible: keep a `turn_count` counter in `game_loop`, add 1 every time `dispatch` returns an action that is not `None`, and draw it each frame with `console.print(x=1, y=0, text=f"Turns: {turn_count}")`, in the top row that exercise 2 left outside the walls. Now hold `.` down: the `@` stands still while time passes. That is the soul of a roguelike, in one corner of the screen: time only passes when you act.

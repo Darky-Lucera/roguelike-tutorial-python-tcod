@@ -6,6 +6,8 @@ By the end of this part, deeper dungeon floors will feel harder in a way the pla
 
 ## Learning goals
 
+In this part we will:
+
 - Replace fixed per-room spawn limits with floor-keyed tables
 - Turn the flat weighted spawn table from Part 5 into a depth-aware encounter table
 - Make both monster variety and item variety scale with dungeon depth
@@ -461,7 +463,7 @@ The maximum items per room also steps up, from 1 to 2 at floor 4. The ordering i
 
 ## Testing your work
 
-Run `python main.py` multiple times and descend to different floors:
+Run the game multiple times with `uv run main.py` (or `python main.py`) and descend to different floors:
 
 - [ ] Floor 1: mostly trolls with the occasional orc; at most 2 monsters and 1 item per room; only potions and chests on the ground
 - [ ] Floor 2: confusion scrolls join the item pool

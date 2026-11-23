@@ -14,6 +14,8 @@ By the end of Part 8a, health potions and chests appear in the dungeon as instan
 
 ## Learning goals
 
+In this part we will:
+
 - Add an `owner` back-reference to `Entity`
 - Add `Item` as an entity subclass with a required `Consumable`
 - Introduce `Impossible` as a structured rejection pattern
@@ -439,9 +441,8 @@ The constructor parameter is `GameMap | None`: entities start on the map or unow
 +        self.x = x
 +        self.y = y
 +        if game_map is not None:
-+            if self.owner is not None:
-+                if isinstance(self.owner, GameMap):
-+                    self.owner.entities.discard(self)
++            if isinstance(self.owner, GameMap):
++                self.owner.entities.discard(self)
 +
 +            self.owner = game_map
 +            game_map.entities.add(self)
@@ -449,7 +450,7 @@ The constructor parameter is `GameMap | None`: entities start on the map or unow
      def set_position(self, x: int, y: int) -> None:
 ```
 
-The local import makes `GameMap` available at runtime without introducing a module-level circular import. `self.owner is not None` guards against placing a fresh template entity for the first time. Once that check passes, `isinstance(self.owner, GameMap)` determines whether the entity is registered directly with the map and needs to be removed from it: items being dropped from inventory have `owner = Inventory`, so the isinstance check is `False` and the discard is skipped correctly.
+The local import makes `GameMap` available at runtime without introducing a module-level circular import. `isinstance(self.owner, GameMap)` checks whether the entity is registered directly with the map and must be removed from it. It is `False` in the other two cases, so the discard is skipped: a fresh template entity placed for the first time has `owner = None`, and an item dropped from the inventory has `owner = Inventory`.
 
 ### Step 5: Add `inventory` to `Actor` and fix the `ai` annotation
 

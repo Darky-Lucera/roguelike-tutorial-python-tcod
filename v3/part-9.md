@@ -6,6 +6,8 @@ By the end of this part, the player will be able to use scrolls with targeted ef
 
 ## Learning goals
 
+In this part we will:
+
 - Add a targeting cursor the player moves with keyboard or mouse
 - Implement three spell scrolls: lightning bolt (auto-target), confusion (cursor), fireball (Area of Effect)
 - Show a visual radius ring for Area of Effect (AoE) targeting
@@ -109,12 +111,12 @@ This part builds two targeting states: `SingleRangedAttackState` (single-tile cu
 Before writing the class, add the cursor navigation constants to `game/data/keys.py`:
 
 ```diff
- KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
- KEY_EXIT      = tcod.event.KeySym.ESCAPE
-+KEY_SELECT    = {tcod.event.KeySym.RETURN, tcod.event.KeySym.KP_ENTER}
+ KEY_QUIT_GAME   = tcod.event.KeySym.ESCAPE
+ KEY_EXIT        = tcod.event.KeySym.ESCAPE
++KEY_SELECT      = {tcod.event.KeySym.RETURN, tcod.event.KeySym.KP_ENTER}
 +
-+CURSOR_FAST   = tcod.event.Modifier.LSHIFT | tcod.event.Modifier.RSHIFT  # ×5
-+CURSOR_FASTER = tcod.event.Modifier.LCTRL  | tcod.event.Modifier.RCTRL   # ×10
++CURSOR_FAST     = tcod.event.Modifier.LSHIFT | tcod.event.Modifier.RSHIFT  # ×5
++CURSOR_FASTER   = tcod.event.Modifier.LCTRL  | tcod.event.Modifier.RCTRL   # ×10
 ```
 
 `KEY_EXIT` already exists from Part 8 and covers any modal overlay (menus, cursors, dialogs), so there is nothing to rename here; we only add the cursor-navigation keys `KEY_SELECT`, `CURSOR_FAST`, and `CURSOR_FASTER`.
@@ -961,7 +963,7 @@ The `return` is placed after the `try/except`, not before. If a `TargetingAction
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] `~` scrolls appear on the floor in different colors (purple, red, yellow)
 - [ ] Picking up a lightning scroll and pressing `i → l` strikes the nearest enemy

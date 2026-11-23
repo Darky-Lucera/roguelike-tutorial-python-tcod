@@ -6,6 +6,8 @@ By the end of this part, the player and enemies will have hit points, deal melee
 
 ## Learning goals
 
+In this part we will:
+
 - Add a `Fighter` component that owns HP, defense, and attack
 - Introduce the `Actor` class as an entity that can fight and can have AI
 - Calculate damage and print combat messages
@@ -785,7 +787,7 @@ We check `is_alive` **after** `handle_enemy_turns`, so a player killed by an ene
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] Walking into an orc prints: `"Player attacks Orc for 4.2 hit points."`
 - [ ] Orcs attack back when adjacent: `"Orc attacks Player for 2.7 hit points."`

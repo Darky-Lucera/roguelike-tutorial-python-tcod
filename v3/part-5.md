@@ -6,6 +6,8 @@ By the end of this part, enemies will appear in the dungeon, block movement, cha
 
 ## Learning goals
 
+In this part we will:
+
 - Use entity templates (prototype pattern) instead of inline creation
 - Place enemies in dungeon rooms during generation
 - Implement a turn system: player acts, then enemies act
@@ -949,7 +951,7 @@ Everything else, `Engine(...)`, the SDL metadata calls, and the `tcod.context.ne
 
 ## Testing your work
 
-Run `python main.py`:
+Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] Orcs (`o`, green) and Trolls (`T`, dark green) appear in rooms
 - [ ] Enemies are invisible until the player enters their FOV

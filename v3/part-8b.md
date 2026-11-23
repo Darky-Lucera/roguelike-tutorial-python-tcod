@@ -8,6 +8,8 @@ By the end of **Part 8b**, the player can pick up health potions with `G`, brows
 
 ## Learning goals
 
+In this part we will:
+
 - Implement `PickupAction`, `ItemAction`, and `DropItem`
 - Refactor `GameState` so each state controls its own post-action flow
 - Build the inventory overlay using the modal state pattern
@@ -321,7 +323,7 @@ Key differences from the old engine code:
     ```
 
 !!! note "If you kept the Part 7 Page Up/Down scroll exercise"
-    Moving key handling into `GameState.handle_events` also moves the spot where your `keys.SCROLL_UP` / `keys.SCROLL_DOWN` check used to live. Add it back at the start of the `case tcod.event.KeyDown():` branch, before `action = self.event_keydown(event)`, and `return` immediately after adjusting the scroll value, the same way the `except Impossible` branch returns early: scrolling should never reach `event_keydown` or cost a turn.
+    Moving key handling into `GameState.handle_events` also moves the spot where your `keys.LOG_SCROLL_UP` / `keys.LOG_SCROLL_DOWN` check used to live. Add it back at the start of the `case tcod.event.KeyDown():` branch, before `action = self.event_keydown(event)`, and `return` immediately after adjusting the scroll value, the same way the `except Impossible` branch returns early: scrolling should never reach `event_keydown` or cost a turn.
 
 ---
 
@@ -437,8 +439,8 @@ def _trim_text(text: str, max_width: int) -> str:
 One more binding before the states themselves: the overlay closes with `Escape`, and that gets its own name in `game/data/keys.py`, right after `KEY_QUIT_GAME`:
 
 ```diff
- KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
-+KEY_EXIT      = tcod.event.KeySym.ESCAPE
+ KEY_QUIT_GAME   = tcod.event.KeySym.ESCAPE
++KEY_EXIT        = tcod.event.KeySym.ESCAPE
 ```
 
 !!! question "Two names for the same key?"
@@ -493,7 +495,7 @@ class InventoryState(GameState):
         height       = min(max(8, number_of_items_in_inventory + 7), max_height)
         visible_rows = min(number_of_items_in_inventory, max(0, height - 7))
 
-        item_width = max((len(item.name) for item in inventory.items), default=0) + 18
+        item_width = max((len(item.name) for item in inventory.items), default=0) + 14
         width = min(
             console.width - 4,
             max(
@@ -952,7 +954,7 @@ game/
         Three rules, in order: an entry in `_SPECIAL_KEY_NAMES` wins first (`ESCAPE` becomes `Esc`); otherwise, a printable ASCII code (32 to 126) becomes `chr(v).upper()`, so the period key reads `.` instead of the verbose `"PERIOD"`; everything else falls back to `sym.name` (`"F1"`, `"KP_8"`, `"UP"`).
 
     ??? note "Reference implementation"
-        Additions to `game/data/keys.py`. The helper goes near the top of the file, after the `tcod.event` import; the hotkey constants go at the end. The `SCROLL_*` block appears as context: it comes from Part 7 Exercise 2, not from this one:
+        Additions to `game/data/keys.py`. The helper goes near the top of the file, after the `tcod.event` import; the hotkey constants go at the end. The `LOG_SCROLL_*` block appears as context: it comes from Part 7 Exercise 2, not from this one:
 
         ```python
         # Part-8. Exercise 4: Item hotkey constants and key_label
@@ -968,8 +970,8 @@ game/
 
         ```python
         # Part-7. Exercise 2: Scroll the message panel
-        SCROLL_UP   = tcod.event.KeySym.PAGEUP
-        SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN
+        LOG_SCROLL_UP   = tcod.event.KeySym.PAGEUP
+        LOG_SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN
 
         # Part-8. Exercise 4: Item hotkey constants and key_label
         HEALTH_POTION   = tcod.event.KeySym.H
