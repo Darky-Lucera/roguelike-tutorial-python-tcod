@@ -8,36 +8,79 @@ By the end of this part, the player and enemies will have hit points, deal melee
 
 In this part we will:
 
+- Move the entity code into a new `game/entities/` package
 - Add a `Fighter` component that owns HP, defense, and attack
 - Introduce the `Actor` class as an entity that can fight and can have AI
 - Calculate damage and print combat messages
 - Handle death: change appearance, remove blocking, disable AI
+- Choose which entity is drawn on top when several share a tile
 - Add proper A* pathfinding so enemies navigate around obstacles
 - Lock input after the player dies
 
 ---
 
-## Why HP lives in a component
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [Reorganizing into `game/entities/`](#reorganizing-into-gameentities). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### Why HP lives in a component
 
 We could add `hp`, `defense`, and `attack` directly to `Entity`. But then every entity (items, doors, corpses, stairs) would carry fields they never use.
 
 Components keep combat data separate from the base `Entity`. In this part, entities that can fight become `Actor` instances, and each `Actor` owns a `Fighter` component. Items, doors, and other passive entities stay as plain `Entity` objects without combat data.
 
 !!! info "Design decision: Fighter component + Actor subclass"
-    This is composition-over-inheritance applied where it pays off. The alternative is an `Actor` base class with HP and a separate `Item` hierarchy with its own data: two parallel trees that grow apart over time. We keep one `Entity` base, introduce `Actor` only as the small specialization that bundles the components needed to fight, and let new systems (a `Poisoned` status, a `Trader` component) be added by writing a component class instead of editing the hierarchy.
+    This is *composition over inheritance*: we build an object from small parts instead of from a deep class tree. The alternative is an `Actor` base class with HP and a separate `Item` hierarchy with its own data: two parallel class trees that become more different over time.
 
-    At a larger scale than this tutorial, many engines drop the entity class hierarchy entirely and switch to an entity-component-system (ECS) library such as [tcod-ecs](https://github.com/HexDecimal/python-tcod-ecs), where an entity is only an ID and every capability, including position and HP, is a component. That trade pays off once a project has far more entity types and cross-cutting systems than we do here; for this tutorial's scope, `Entity`/`Actor` plus components is the simpler choice.
+    We keep one `Entity` base class and add `Actor` only as a small subclass that groups the components needed to fight. A new system (a `Poisoned` status, a `Trader` component) is then a new component class, not a change to the class hierarchy.
+
+    Larger projects often remove the entity class hierarchy completely and use an entity-component-system (ECS) library such as [tcod-ecs](https://github.com/HexDecimal/python-tcod-ecs). There, an entity is only an ID, and every capability, including position and HP, is a component. That choice is worth it when a project has many more entity types, and many more systems that touch all of them, than we have here. For this tutorial, `Entity`/`Actor` plus components is the simpler choice.
 
 !!! info "Pattern: Component"
     `Fighter` and `AI` are *components*: interchangeable behaviors attached to entities at construction time. The entity does not inherit capabilities; it delegates to them. This keeps the base `Entity` small and lets new systems be added as new component classes without touching the entity hierarchy. `Inventory` joins this same pattern in Part 8.
 
     → [Game Programming Patterns: Component](https://gameprogrammingpatterns.com/component.html)
 
+### Choosing a damage formula
+
+The obvious formula for melee damage is `attack - defense`: subtract one stat from the other. It is easy to read, but it has a design problem. When `defense` reaches `attack`, every hit deals exactly `0`, permanently.
+
+For example, armor arrives in a later part. A troll with `attack = 3` against a player whose `defense` has grown to `3` or more cannot hurt that player at all: not weaker, not risky, just harmless. Once a pair of fighters reaches that point, the troll is no threat for the rest of the game.
+
+This tutorial uses a formula where defense reduces damage as a ratio of the attacker's own power, instead of a flat amount subtracted from it:
+
+```text
+damage = attack² / (attack + defense)
+```
+
+The idea: instead of asking "how much defense do you have", it asks "how much defense do you have *relative to what is hitting you*". A `defense` of `2` barely matters against an attacker with `attack = 20`, but clearly reduces a hit from an attacker with `attack = 3`. Defense still matters, but it never blocks every hit: as long as `attack > 0`, defense can make the result smaller and smaller, but never zero.
+
+With this chapter's numbers, the two formulas mostly agree, but the difference already shows:
+
+| Matchup | Linear (`attack - defense`) | New (`attack² / (attack + defense)`) |
+| --- | ---: | ---: |
+| Player → Orc | `5 - 1 = 4` | `25 / 6 ≈ 4.2` |
+| Player → Troll | `5 - 0 = 5` | `25 / 5 = 5.0` |
+| Orc → Player | `4 - 2 = 2` | `16 / 6 ≈ 2.7` |
+| Troll → Player | `3 - 2 = 1` | `9 / 5 = 1.8` |
+
+If you want the full comparison (a third, simpler-to-tune variant, plus rounding rules, minimum damage, critical hits, and more), see [Appendix 1: Damage Formulas](append-1.md).
+
+### Finding paths with A*
+
+In Part 5, enemies step straight toward the player. That works in an open room, but a wall between them and the player stops them: the straight step is blocked, and they never try another direction.
+
+A pathfinding algorithm solves this by treating the map as a graph. Each walkable tile is a node, and each step to a neighbor tile is an edge with a cost. The algorithm searches for the cheapest chain of steps from the start to the goal.
+
+A* (said "A star", published in 1968) is the classic choice for games. It explores tiles in order of "cost so far plus an estimate of the distance left". The estimate makes it try the tiles that point toward the goal first, so it usually visits far fewer tiles than a blind search, and it still finds the shortest path.
+
+Costs also make the search flexible. A tile with a higher cost is not forbidden, only less attractive, so we can make enemies prefer to go around each other without ever leaving them stuck. `tcod` includes A*, so our code only has to describe those costs.
+
 ---
 
 ## Reorganizing into `game/entities/`
 
-Before we dive into components, we give entity-related modules a dedicated home. As the entity system grows with base classes, render ordering, components, and factories, keeping them together makes the project easier to navigate.
+Before we write any components, we move the entity-related modules into their own package. The entity system grows in this part (base classes, render order, components, factories), and keeping those files together makes the project easier to navigate.
 
 From this part on, everything that defines what entities *are* lives under `game/entities/`:
 
@@ -52,14 +95,9 @@ game/entities/
     └── fighter.py        ← new this part
 ```
 
-Move `game/entity.py` to `game/entities/entity.py` and `game/entity_factories.py` to `game/entities/factories.py` (the `entity_` prefix is redundant inside `entities/`). The `game/components/` folder also moves to `game/entities/components/`. Create empty `__init__.py` files in both new folders so Python treats them as packages:
+Move `game/entity.py` to `game/entities/entity.py` and `game/entity_factories.py` to `game/entities/factories.py` (the `entity_` prefix is redundant inside `entities/`). The `game/components/` folder also moves to `game/entities/components/`, together with the `__init__.py` it got in Part 5. Create an empty `game/entities/__init__.py` so Python treats the new folder as a package.
 
-```text
-game/entities/__init__.py
-game/entities/components/__init__.py
-```
-
-All code blocks in this part already use the new paths. `main.py`, `map_generator.py`, and `engine.py`'s import line are not otherwise touched in this part, so we fix them right now; every other file that still imports `game.entity`, `game.entity_factories`, or `game.components` (`actions.py`, `game_map.py`, and `entity.py`'s own internal import) gets its import line fixed as we reach it below.
+All code blocks in this part already use the new paths. Some of the moved imports run every time the game starts, so we fix those files right now: `main.py`, `map_generator.py`, `factories.py`, and `engine.py`. The other files that still mention `game.entity` or `game.components` (`actions.py`, `game_map.py`, `ai.py`, and `entity.py` itself) only use them for type checking, so we fix their import lines as we reach those files below.
 
 Update `main.py`:
 
@@ -99,6 +137,16 @@ Update the imports at the top of `game/map/map_generator.py`:
 !!! tip "If you completed the Part 5 exercises"
     Rename `entity_factories` to `factories` in that code too, wherever you spawn from the weighted table (Exercise 2) or the chest template (Exercise 3).
 
+`game/entities/factories.py` itself imports the moved modules at the top level. We change the templates later in this part; for now, only fix the import paths:
+
+```diff
+-from game.components.ai import HostileEnemy
+ from game.data import colors, sprites
+-from game.entity import Entity
++from game.entities.components.ai import HostileEnemy
++from game.entities.entity import Entity
+```
+
 `game/engine.py` also imports `Entity` at the top level (not inside `TYPE_CHECKING`, so it runs every time the game starts). Fix its path now too, even though the rest of that file is not touched until later in this part:
 
 ```diff
@@ -109,7 +157,7 @@ Update the imports at the top of `game/map/map_generator.py`:
 !!! tip "Run it now"
     If you run the game at this point, you can check that nothing has changed: same dungeon, same player and enemies, same combat-free bumping into orcs and trolls as at the end of Part 5. That is exactly what success looks like here. So far this part was a *refactor*: it moved files and fixed the imports that pointed at them, without changing what the code does.
 
-    If you get a `ModuleNotFoundError` instead, it is almost certainly a leftover `game.entity`, `game.entity_factories`, or `game.components` import somewhere outside the three files above; the traceback tells you exactly which file and line to fix.
+    If you get a `ModuleNotFoundError` instead, it is almost certainly a leftover `game.entity`, `game.entity_factories`, or `game.components` import somewhere outside the four files above; the traceback tells you exactly which file and line to fix.
 
 ---
 
@@ -130,7 +178,7 @@ class BaseComponent:
     entity: Entity  # set by the owning Entity after creation
 ```
 
-This is a lightweight base class. Its only purpose is to give type checkers a common parent for components and to document the `entity` back-reference that every component will have set on it.
+This is a small base class. Its only purpose is to give type checkers a common parent for components and to document the `entity` back-reference that every component will have set on it.
 
 ---
 
@@ -193,7 +241,7 @@ If you completed the chest exercise in Part 5 and already added `CHEST` sprite/c
 
 ## Render order
 
-When multiple entities occupy the same tile (e.g. a corpse and a live enemy), we need to control which one appears on top.
+When multiple entities occupy the same tile (for example, a corpse and a live enemy), we need to control which one appears on top.
 
 Create `game/entities/render_order.py`:
 
@@ -216,12 +264,13 @@ Higher enum values render last (on top). `ACTOR` > `ITEM` > `CORPSE`, so living 
 
 ## Adding render_order to Entity
 
-Before we introduce combat entities, every entity needs to know where it belongs in the draw stack. A chest, corpse, item, actor, or future staircase may all share a tile, so render order is a general `Entity` concern, not just an `Actor` concern.
+Before we introduce combat entities, every entity needs to know where it belongs in the drawing order. A chest, corpse, item, actor, or future staircase may all share a tile, so render order is a general `Entity` concern, not just an `Actor` concern.
 
 Update `game/entities/entity.py`:
 
 ```diff
  from game.data import colors, sprites
+ from game.data.colors import Color
 +from game.entities.render_order import RenderOrder
 
  if TYPE_CHECKING:
@@ -238,9 +287,9 @@ Update `game/entities/entity.py`:
          y: int                    = 0,
          char: str                 = sprites.UNKNOWN,
          color: Color              = colors.DEFAULT_FG,
-         name: str                 = "<unnamed>",
+         name: str                 = "<unnamed>",    # Part-2. Exercise 1: Add names to entities
+         stays_visible: bool       = False,          # Part-4. Exercise 3: Remember a discovered marker
          blocks_movement: bool     = False,
-         stays_visible: bool       = False,
 +        render_order: RenderOrder = RenderOrder.UNKNOWN,
          ai: BaseAI | None         = None,
      ) -> None:
@@ -248,14 +297,14 @@ Update `game/entities/entity.py`:
          self.y               = y
          self.char            = char
          self.color           = color
-         self.name            = name
+         self.name            = name             # Part-2. Exercise 1: Add names to entities
+         self.stays_visible   = stays_visible    # Part-4. Exercise 3: Remember a discovered marker
          self.blocks_movement = blocks_movement
-         self.stays_visible   = stays_visible
 +        self.render_order    = render_order
          self.ai              = ai
 ```
 
-The default value for render_order is `UNKNOWN` because plain `Entity` objects have not declared what kind of thing they are yet. Rendering them last is a useful debugging default: if you forgot to assign a more specific order, the entity stays visible instead of being hidden under actors or corpses. Specialized classes and factories should still pass a deliberate render order when they know one.
+The default value for `render_order` is `UNKNOWN` because plain `Entity` objects have not declared what kind of thing they are yet. Rendering them last is a useful debugging default: if you forgot to assign a more specific order, the entity stays visible instead of being hidden under actors or corpses. Specialized classes and factories should still pass a deliberate render order when they know one.
 
 ---
 
@@ -308,14 +357,18 @@ class Fighter(BaseComponent):
 !!! question "What does `@hp.setter` do?"
     `@property` lets us read `fighter.hp` like a normal attribute even though it calls the `hp()` method. `@hp.setter` defines what happens when code assigns to that same property, like `fighter.hp -= damage`. The setter clamps the value between `0` and `max_hp`, stores it in the private backing field `_hp`, and triggers `die()` when HP reaches zero. We use `_hp` inside the setter because assigning to `self.hp` there would call the setter again forever.
 
-    A setter that triggers `die()` is a hidden side effect: assigning to `fighter.hp` silently transforms the entity, kills it, and prints a message, none of which is visible at the call site.
+    A setter that triggers `die()` is a hidden side effect: assigning to `fighter.hp` can change the entity, kill it, and print a message, and none of that is visible at the call site.
 
-    Some teams ban this on principle and require an explicit call instead, like `take_damage()` or `apply_death()`. We accept the hidden trigger here because it makes the invariant "HP 0 means dead" impossible to bypass: every code path that drains HP, present or future, gets death handling for free. Part 7 adds the explicit verb anyway, `take_damage()`, so call sites read clearly while the setter still guarantees the invariant underneath.
+    Some teams do not allow this and require an explicit call instead, like `take_damage()` or `apply_death()`. We accept the hidden trigger here because it makes the rule "HP 0 means dead" impossible to skip: every code path that reduces HP, now or in the future, always runs the death handling. Part 7 adds the explicit verb anyway, `take_damage()`, so call sites read clearly while the setter still guarantees the invariant underneath.
 
 With that in place, combat code can reduce HP directly and let the component handle the consequences.
 
 !!! info "Player and enemies share the same death path"
-    `die()` runs for both the player and enemies: same visual change (a red `%`), same name update, same render order. The only difference is the message (`"You died!"` vs `"The Orc is dead!"`), which we pick by checking `self.entity.ai`: the player has no AI, enemies do. In Part 7 this becomes `self.entity.ai is None`, the same idea spelled out explicitly, and each branch gets its own message color. If you ever add a player-controlling AI (a "possession" scroll, an autopilot mode), this check stops working and needs to identify the player some other way.
+    `die()` runs for both the player and enemies: same visual change (a red `%`), same name update, same render order. The only difference is the message (`"You died!"` vs `"The Orc is dead!"`), which we pick by checking `self.entity.ai`: the player has no AI, enemies do.
+
+    In Part 7 this becomes `self.entity.ai is None`, the same idea written explicitly, and each branch gets its own message color.
+
+    If you ever add an AI that controls the player (a "possession" scroll, an autopilot mode), this check stops working and needs to identify the player some other way.
 
 ---
 
@@ -323,15 +376,23 @@ With that in place, combat code can reduce HP directly and let the component han
 
 Entities that fight (player, enemies) share a common profile: they have a `Fighter` component, an optional `AI` component, and they block movement by default. We give this combination a name.
 
-Now add `Actor` below `Entity` in `game/entities/entity.py`:
+Now add `Actor` below `Entity` in `game/entities/entity.py`. First extend the `TYPE_CHECKING` imports:
 
 ```diff
  if TYPE_CHECKING:
      from game.entities.components.ai import BaseAI
 +    from game.entities.components.fighter import Fighter
      from game.map.game_map import GameMap
+```
 
+Then add the class at the end of the file, after `Entity.move()`:
 
+```diff
+     def move(self, dx: int, dy: int) -> None:
+         self.x += dx
+         self.y += dy
++
++
 +class Actor(Entity):
 +    """An entity that can fight: has a Fighter component and optional AI."""
 +
@@ -384,11 +445,10 @@ We wire both back-references the same way: `self.fighter.entity = self` and `sel
 ```diff
  from __future__ import annotations
 
--from game.components.ai import HostileEnemy
  from game.data import colors, sprites
--from game.entity import Entity
-+from game.entities.components.ai import HostileEnemy
+ from game.entities.components.ai import HostileEnemy
 +from game.entities.components.fighter import Fighter
+-from game.entities.entity import Entity
 +from game.entities.entity import Actor
 
 -player = Entity(
@@ -422,7 +482,9 @@ We wire both back-references the same way: `self.fighter.entity = self` and `sel
  )
 ```
 
-Orcs are harder to kill (more HP, some defense) and hit harder than trolls, yet the troll is the common spawn (80% in Part 5's `place_entities`). That is deliberate, not a mismatch: the troll is the weak enemy you meet constantly, and its real trick, fleeing at low HP and regenerating, arrives in the exercises below and gets a full role in Part 12. These starting numbers are deliberately simple so we can verify the combat system works; Part 12 rebalances them alongside the procedural difficulty tables.
+Orcs are harder to kill (more HP, some defense) and hit harder than trolls, yet the troll is the common spawn (80% in Part 5's `place_entities`). That is deliberate, not a mismatch: the troll is the weak enemy you meet all the time. Its real tricks come later: fleeing at low HP in the exercises below, and regeneration in Part 12.
+
+These starting numbers are simple on purpose, so we can check that the combat system works. Part 12 controls how often each monster appears with its procedural difficulty tables.
 
 `blocks_movement=True` disappeared from `player`, `orc`, and `troll` because `Actor.__init__` now passes it to `Entity` internally. Anything that can fight blocks movement by default.
 
@@ -460,7 +522,7 @@ Orcs are harder to kill (more HP, some defense) and hit harder than trolls, yet 
 
 ## MeleeAction does real damage
 
-The combat formula belongs in `Fighter`, not in `MeleeAction`. The action resolves *who* is fighting; the component resolves *how much damage and what happens*. This also sets us up for `ranged_attack` later: any damage path goes through `Fighter` without touching the action layer.
+The combat formula belongs in `Fighter`, not in `MeleeAction`. The action resolves *who* is fighting; the component resolves *how much damage and what happens*. This also helps if you add other kinds of attack later, such as the `ranged_attack` that [Appendix 5](append-5.md) suggests: every damage path goes through `Fighter` without touching the action layer.
 
 Add a TYPE_CHECKING import for `Actor` to `game/entities/components/fighter.py` and add the `melee_attack` method:
 
@@ -469,17 +531,15 @@ Add a TYPE_CHECKING import for `Actor` to `game/entities/components/fighter.py` 
 +
 +from typing import TYPE_CHECKING
 
- from game.entities.components.base_component import BaseComponent
  from game.data import colors, sprites
+ from game.entities.components.base_component import BaseComponent
  from game.entities.render_order import RenderOrder
 +
 +if TYPE_CHECKING:
 +    from game.entities.entity import Actor
 ```
 
-The obvious formula here is `attack - defense`: subtract one stat from the other. It reads well, but it has a structural flaw. The moment `defense` reaches `attack`, every hit deals exactly `0`, permanently, no matter how the fight got there. A troll with `attack = 3` facing a player whose `defense` has grown to `3` or more, from armor added in a later part, cannot hurt that player at all anymore: not weakened, not risky, just harmless. Subtraction has a floor, and once a matchup lands on it, that matchup is over for the rest of the game.
-
-`melee_attack` uses a formula where defense reduces damage as a ratio of the attacker's own power instead of a flat amount subtracted from it:
+`melee_attack` uses the formula `attack² / (attack + defense)`, where defense reduces damage as a ratio of the attacker's own power. ([Background](#choosing-a-damage-formula) explains why we do not use the simpler `attack - defense`.)
 
 ```python
     def melee_attack(self, target: Actor) -> None:
@@ -492,20 +552,7 @@ The obvious formula here is `attack - defense`: subtract one stat from the other
 
 `self.entity` is the attacker (`BaseComponent` always knows its owner). `die()` still triggers automatically through the `hp` setter when HP reaches zero.
 
-Unlike `attack - defense`, this formula never reaches exactly `0` as long as `attack > 0`: `defense` can only shrink the result toward zero, it can never cross it. That is also why `melee_attack` no longer branches on `damage > 0`: there is no "no damage" case left to report, only larger or smaller hits.
-
-The idea: instead of asking "how much defense do you have", it asks "how much defense do you have *relative to what is hitting you*". A `defense` of `2` barely matters against an attacker with `attack = 20`, but meaningfully softens a hit from an attacker with `attack = 3`. Defense still matters, it just never becomes an absolute wall.
-
-At this chapter's numbers, the two formulas mostly agree, but the trend already shows:
-
-| Matchup | Linear (`attack - defense`) | New (`attack² / (attack + defense)`) |
-| --- | ---: | ---: |
-| Player → Orc | `5 - 1 = 4` | `25 / 6 ≈ 4.2` |
-| Player → Troll | `5 - 0 = 5` | `25 / 5 = 5.0` |
-| Orc → Player | `4 - 2 = 2` | `16 / 6 ≈ 2.7` |
-| Troll → Player | `3 - 2 = 1` | `9 / 5 = 1.8` |
-
-If you want the full comparison (a third, simpler-to-tune variant, plus rounding rules, minimum damage, critical hits, and more), see [Appendix 1: Damage Formulas](append-1.md).
+This formula never reaches exactly `0` as long as `attack > 0`, so `melee_attack` needs no `damage > 0` branch: there is no "no damage" case to report, only larger or smaller hits.
 
 `MeleeAction` now only resolves who is fighting and delegates. It needs the `Actor` class to check that both sides can fight, so import it at the top of `game/actions.py`:
 
@@ -581,7 +628,7 @@ Update `game/map/game_map.py`:
 Wire it into `Engine` now, so `handle_enemy_turns` iterates the same `Actor` instances that the pathfinding coming up next expects, instead of the raw `entities` set:
 
 ```diff
--from game.entity import Entity
+-from game.entities.entity import Entity
 +from game.entities.entity import Actor
  from game.input_handlers import EventHandler
  from game.map.game_map import GameMap
@@ -612,7 +659,7 @@ If you completed the variable torch radius or fading memory exercises in Part 4,
 
 ## Proper pathfinding for enemies
 
-The Part 5 AI moved enemies in a straight line, causing them to get stuck on corners. Replace the movement in `game/entities/components/ai.py` with A* pathfinding:
+The Part 5 AI moved enemies in a straight line, so they got stuck on corners. A* (said "A star") is a classic algorithm that finds the shortest path between two points on a grid, going around walls; [Background](#finding-paths-with-a) explains how it works. `tcod` includes it, so we only have to describe the map to it. Replace the movement in `game/entities/components/ai.py` with this pathfinding:
 
 !!! info "`BaseAI` uses the same component convention as `Fighter`"
     We already made `BaseAI` inherit from `BaseComponent` earlier in this chapter. In this version, the `perform` signature also tightens its type hint from `Entity` to `Actor`, since by definition only actors carry AI.
@@ -665,9 +712,16 @@ class BaseAI(BaseComponent):
         return [(x, y) for x, y in path]
 ```
 
-Adding `10` to the cost of an occupied tile is high enough that the pathfinder prefers to route around another entity, yet it still passes through when there is truly no other way. `tcod.path.SimpleGraph` creates a weighted graph from the cost array. Cardinal moves cost 2, diagonal moves cost 3 (this approximates real distance without floating point). `pathfinder.path_to` returns the full path including the start; we drop the first element (`[1:]`) since that is the entity's current position. If the entity is already standing on the destination, that leaves an empty list and the caller simply does nothing.
+The cost array tells the pathfinder how expensive each tile is to enter: `0` means blocked, and walkable tiles start at `1`. Adding `10` to the cost of an occupied tile is high enough that the pathfinder prefers to go around another entity, but it still goes through when there is no other way.
 
-If you run `pylint`, it flags the final line as `unnecessary-comprehension`, assuming `[(x, y) for x, y in path]` is just a roundabout copy of `path` you could replace with `list(path)`. That is a false positive: `path` holds `list[int]` pairs, and the comprehension turns each pair into a `tuple[int, int]`, which is what the return type promises. `list(path)` would keep the inner lists instead, silently breaking that contract. The `# pylint: disable` comment silences the check on this one line rather than leaving you hunting for a "fix" that would make the code worse.
+`tcod.path.SimpleGraph` creates a weighted graph from the cost array. Cardinal moves cost 2, diagonal moves cost 3 (this is close to the real distance ratio without using floating point). `pathfinder.path_to` returns the full path including the start; we drop the first element (`[1:]`) since that is the entity's current position. If the entity is already standing on the destination, that leaves an empty list and the caller simply does nothing.
+
+!!! note "Why the `# pylint: disable` comment?"
+    If you run `pylint`, it flags the final line as `unnecessary-comprehension`, assuming `[(x, y) for x, y in path]` is just a roundabout copy of `path` you could replace with `list(path)`.
+
+    That is a false positive: `path` holds `list[int]` pairs, and the comprehension turns each pair into a `tuple[int, int]`, which is what the return type promises. `list(path)` would keep the inner lists instead and break that promise without any error.
+
+    The comment turns off the check on this one line, so you do not search for a "fix" that would make the code worse.
 
 `HostileEnemy` puts `get_path_to` to work, falling back to it only when the player is not already adjacent:
 
@@ -697,15 +751,15 @@ class HostileEnemy(BaseAI):
 ```
 
 !!! note "Enemies forget you the instant you leave their sight"
-    The opening `if not engine.game_map.visible[entity.x, entity.y]: return` means a monster freezes the moment it loses sight of you, even if it was chasing you a tile ago. This keeps the AI as simple as it can be while you learn the pattern, but it is not very convincing: something that just watched you round a corner should at least walk to where you were. Part 12 fixes this in its Exercise 4, *Monsters that remember*, by giving each enemy a `last_known_position` to head toward. That one change also turns breaking line of sight into a tactic, letting you lure monsters out of a room you would rather not fight in.
+    The opening `if not engine.game_map.visible[entity.x, entity.y]: return` means a monster stops the moment it loses sight of you, even if it was chasing you a tile ago. This keeps the AI as simple as possible while you learn the pattern, but it is not very convincing: a monster that just saw you turn a corner should at least walk to where you were.
+
+    Part 12 fixes this in its Exercise 4, *Monsters that remember*, by giving each enemy a `target_position` to walk toward. That one change also makes breaking line of sight a tactic: you can lead monsters out of a room you do not want to fight in.
 
 ---
 
 ## GameMap: actor lookup and sorted rendering
 
 Two more changes to `GameMap`. First, a small location lookup that later targeting code will use. Second, rendering should draw entities with a higher `render_order` last, so they appear on top.
-
-`get_actor_at` and the `actors` property both scan every entity on the floor. A linear scan is fine at this scale (dozens of entities); if your game grows to hundreds of entities per floor, the standard fix is a position-keyed dict or spatial grid kept in sync on every move.
 
 Update `game/map/game_map.py`:
 
@@ -734,6 +788,11 @@ Update `game/map/game_map.py`:
 
 Sorting by `render_order.value` ensures corpses (`CORPSE=1`) render before items (`ITEM=2`), items render before living actors (`ACTOR=3`), and uncategorized entities (`UNKNOWN=4`) render on top of all. If an orc dies on the same tile as another orc, the living orc appears on top; if an entity accidentally keeps the default `UNKNOWN`, it remains visible so the mistake is easy to spot.
 
+!!! info "When a linear scan stops being enough"
+    `get_actor_at` and the `actors` property both scan every entity on the floor. A linear scan is fine at this scale (dozens of entities).
+
+    If your game grows to hundreds of entities per floor, the usual fix is a dict keyed by position, or a spatial grid, updated on every move.
+
 !!! note "If you skipped Part 4 Exercise 3 (`stays_visible`)"
     The render loop now includes `stays_visible` handling in the main path. The `stays_visible` field has been part of `Entity` since Part 5, so this compiles for everyone; if you never set `stays_visible=True` on an entity, the flag stays `False` and the extra check simply has no effect.
 
@@ -744,7 +803,9 @@ Sorting by `render_order.value` ensures corpses (`CORPSE=1`) render before items
 When the player's HP hits zero, `Fighter.die()` already runs: the player turns into a red `%` and the message `"You died!"` is printed. What we still need is to **stop accepting movement input** so the player cannot keep walking around as a corpse.
 
 !!! note "A very short-lived haunting"
-    Without this fix, dying does not actually stop you: `blocks_movement=False` lets your corpse walk anywhere, and nothing in `MeleeAction` checks `is_alive`, so a dead player can still attack. If your corpse finishes off the very enemy that killed you, its corpse also stops blocking, and since both corpses share `render_order.CORPSE`, they can land on the same tile with only one `%` drawn (which one wins is not guaranteed, since `entities` is a `set`). For one confusing turn, it looks like you are dragging the body of whoever killed you around the dungeon.
+    Without this fix, dying does not actually stop you: `blocks_movement=False` lets your corpse walk anywhere, and nothing in `MeleeAction` checks `is_alive`, so a dead player can still attack.
+
+    If your corpse kills the enemy that killed you, that enemy's corpse also stops blocking. Both corpses share `RenderOrder.CORPSE`, so they can end up on the same tile with only one `%` drawn (which one is drawn is not guaranteed, since `entities` is a `set`). For one confusing turn, it looks like you are dragging the body of your killer around the dungeon.
 
 Update `game/input_handlers.py`. `EventHandler` stays exactly as it is; we only add a `GameOverEventHandler` subclass below it that ignores every key except `Escape`:
 
@@ -849,7 +910,7 @@ game/
 │   ├── factories.py            ← moved (game/entity_factories.py), modified
 │   ├── render_order.py         ← new
 │   └── components/
-│       ├── __init__.py         ← new
+│       ├── __init__.py         ← moved (game/components/__init__.py)
 │       ├── ai.py               ← moved (game/components/ai.py), modified
 │       ├── base_component.py   ← new
 │       └── fighter.py          ← new
@@ -867,6 +928,30 @@ game/
 1. **Feedback for non-combat blockers**:
 
     If you kept the chest exercise from Part 5, bumping into the chest now blocks movement but prints nothing, because the chest is an `Entity`, not an `Actor`. Update `MeleeAction.perform()` so that when the player bumps into a blocking non-actor, it prints something like `"The Chest blocks your way."` instead of silently doing nothing.
+
+    ??? note "Reference implementation"
+        In `MeleeAction.perform()` (`game/actions.py`), split the combined `isinstance` check in two, so a blocking non-actor gets its own branch:
+
+        ```diff
+                 if not target:
+                     return
+
+        -        if not isinstance(entity, Actor) or not isinstance(target, Actor):
+        -            return  # Both attacker and defender must be Actors to fight
+        +        # Part-6. Exercise 1: Feedback for non-combat blockers
+        +        if not isinstance(target, Actor):
+        +            if entity is engine.player:
+        +                print(f"The {target.name} blocks your way.")
+        +            return
+        +
+        +        # Both attacker and defender must be Actors to fight
+        +        if not isinstance(entity, Actor):
+        +            return
+
+                 entity.fighter.melee_attack(target)
+        ```
+
+        The `entity is engine.player` check keeps the message for the player only. An enemy that bumps into a chest while chasing you should not print anything.
 
 2. **Combat effect: critical hits**:
 
@@ -886,13 +971,170 @@ game/
 
     You will want a small `critical_hit` bool alongside `damage`: once the calculation is done, the number alone no longer tells you whether it was a crit. Import the function with `from random import random`, and print `"critical hit!"` whenever the crit triggers. `base_damage` is never `0` with this formula, so unlike a subtraction-based formula there is no absorbed-crit edge case to special-case.
 
+    With only the default values, every creature has the same chance and multiplier. If you want more variety, pass your own values to some templates in `factories.py`, for example a troll that rarely lands a critical hit and an orc whose critical hits hurt more.
+
+    ??? note "Reference implementation"
+        In `game/entities/components/fighter.py`, import `random` at the top:
+
+        ```diff
+         from __future__ import annotations
+
+        +from random import random
+         from typing import TYPE_CHECKING
+        ```
+
+        Extend `Fighter.__init__()`:
+
+        ```python
+            def __init__(
+                self,
+                hp: int,
+                defense: float,
+                attack: float,
+                # Part-6. Exercise 2: Combat effect: critical hits
+                critical_chance: float     = 0.1,
+                critical_multiplier: float = 2.0,
+            ) -> None:
+                self.max_hp              = hp
+                self._hp: float          = float(hp)
+                self.defense             = float(defense)
+                self.attack              = float(attack)
+                self.critical_chance     = float(critical_chance)
+                self.critical_multiplier = float(critical_multiplier)
+        ```
+
+        Then update `melee_attack()`:
+
+        ```python
+            def melee_attack(self, target: Actor) -> None:
+                base_damage = (self.attack * self.attack) / (self.attack + target.fighter.defense)
+
+                # Part-6. Exercise 2: Combat effect: critical hits
+                if random() < self.critical_chance:
+                    damage = base_damage * self.critical_multiplier
+                    critical_hit = True
+                else:
+                    damage = base_damage
+                    critical_hit = False
+
+                attack_msg = f"{self.entity.name.capitalize()} attacks {target.name}"
+
+                if critical_hit:
+                    print("critical hit!")
+
+                print(f"{attack_msg} for {damage:.1f} hit points.")
+                target.fighter.hp -= damage
+        ```
+
+        The new parameters have default values, so the existing templates in `factories.py` keep working without changes.
+
 3. **Flee behavior**:
 
     Add a `CowardEnemy` AI class that moves *away* from the player. Then make fleeing a per-creature property rather than hardcoded logic:
 
-    - Add a `flee_threshold: float = 0.0` parameter to `Fighter.__init__`. A value of `0.0` means the creature never flees; `0.25` means it flees when HP drops below 25 % of max.
-    - Add a `should_flee() -> bool` method to `Fighter` that returns `True` when the threshold is exceeded.
+    - Add a `flee_threshold: float = 0.0` parameter to `Fighter.__init__`. A value of `0.0` means the creature never flees; `0.25` means it flees when HP drops below 25% of max.
+    - Add a `should_flee() -> bool` method to `Fighter` that returns `True` when `hp / max_hp` is below `flee_threshold`.
     - In `HostileEnemy.perform()`, after the FOV check (the enemy can only decide to flee if it can see the player), call `entity.fighter.should_flee()`. If it returns `True`, create a `CowardEnemy`, assign it as the entity's AI, print a flee message, and let it act immediately this turn.
     - In factories, give the troll `flee_threshold=0.3`. Orcs are brave and never flee (default `flee_threshold=0.0`). The troll's early retreat will pay off later when you add regeneration.
 
     Observe how orcs and trolls behave differently at low HP.
+
+    ??? note "Reference implementation"
+        In `game/entities/components/fighter.py`, add the parameter and the method. The listing assumes you did Exercise 2; if you did not, ignore the critical-hit lines:
+
+        ```diff
+                 critical_multiplier: float = 2.0,
+        +        # Part-6. Exercise 3: Flee behavior
+        +        flee_threshold: float      = 0.0,
+             ) -> None:
+                 ...
+                 self.critical_multiplier = float(critical_multiplier)
+        +        self.flee_threshold      = float(flee_threshold)
+        ```
+
+        ```python
+            # Part-6. Exercise 3: Flee behavior
+            def should_flee(self) -> bool:
+                return self.flee_threshold > 0.0 and self.hp / self.max_hp < self.flee_threshold
+        ```
+
+        In `game/entities/components/ai.py`, import `MovementAction` and switch to `CowardEnemy` right after the FOV check:
+
+        ```diff
+        -from game.actions import BumpAction
+        +from game.actions import BumpAction, MovementAction
+        ```
+
+        ```diff
+                 if not engine.game_map.visible[entity.x, entity.y]:
+                     return  # Out of player FOV; cannot act
+
+        +        # Part-6. Exercise 3: Flee behavior
+        +        if entity.fighter.should_flee():
+        +            entity.ai = CowardEnemy()
+        +            entity.ai.entity = entity
+        +            print(f"The {entity.name} flees!")
+        +            entity.ai.perform(engine, entity)
+        +            return
+        +
+                 target = engine.player
+        ```
+
+        The new AI is a component like any other, so it needs its `entity` back-reference before it acts.
+
+        At the end of the same file, add the new AI. It looks at the eight neighbor tiles and steps to the free one that is farthest from the player. If no tile increases the distance, the troll stays where it is:
+
+        ```python
+        # Part-6. Exercise 3: Flee behavior
+        class CowardEnemy(BaseAI):
+
+            def perform(self, engine: Engine, entity: Actor) -> None:
+                if not engine.game_map.visible[entity.x, entity.y]:
+                    return  # Out of player FOV; cannot act.
+
+                target = engine.player
+                current_distance = max(abs(target.x - entity.x), abs(target.y - entity.y))
+                best_move: tuple[int, int] | None = None
+                best_distance = current_distance
+
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+
+                        dest_x = entity.x + dx
+                        dest_y = entity.y + dy
+
+                        if not engine.game_map.in_bounds(dest_x, dest_y):
+                            continue
+
+                        if not engine.game_map.tiles["walkable"][dest_x, dest_y]:
+                            continue
+
+                        if engine.game_map.get_blocking_entity_at(dest_x, dest_y):
+                            continue
+
+                        distance = max(abs(target.x - dest_x), abs(target.y - dest_y))
+                        if distance > best_distance:
+                            best_move = (dx, dy)
+                            best_distance = distance
+
+                if best_move:
+                    MovementAction(*best_move).perform(engine, entity)
+        ```
+
+        `CowardEnemy` uses `MovementAction`, not `BumpAction`, so a fleeing troll never attacks, even when you corner it.
+
+        Finally, in `game/entities/factories.py`:
+
+        ```diff
+         troll = Actor(
+             char            = sprites.TROLL,
+             color           = colors.TROLL,
+             name            = "Troll",
+             ai              = HostileEnemy(),
+        -    fighter         = Fighter(hp=12, defense=0, attack=3),
+        +    # Part-6. Exercise 3: Flee behavior
+        +    fighter         = Fighter(hp=12, defense=0, attack=3, flee_threshold=0.3),
+         )
+        ```

@@ -2,21 +2,26 @@
 
 ## What You Will Build
 
-By the end of this part, your game will have a health bar, a message log, and a look cursor that lets the player inspect the map. For the first time, the game will communicate with the player through the screen rather than the terminal.
+By the end of this part, your game will have a health bar, a message log, the names of the entities under the mouse cursor, and a real game-over screen. For the first time, the game will talk to the player through the window instead of the terminal.
 
 ## Learning goals
 
 In this part we will:
 
 - Divide the screen into a map area and a UI panel
-- Add a health bar that updates in real time
-- Introduce a message log that replaces `print()` calls
+- Add a health bar that updates after every turn
+- Add a message log that replaces the `print()` calls
 - Show entity names under the mouse cursor
-- Refactor game states so each one owns its rendering logic
+- Turn the input handlers into game states that also draw their own screen
+- Show a framed game-over panel when the player dies
 
 ---
 
-## What information does a player need?
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [The screen layout](#the-screen-layout). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### What does a player need to see?
 
 A roguelike UI has one design constraint: every piece of information the player needs to make a decision must be visible *without* leaving the main screen. That means:
 
@@ -24,19 +29,64 @@ A roguelike UI has one design constraint: every piece of information the player 
 - **Recent events**: what just happened? (especially damage numbers)
 - **Context**: what is this tile or entity I'm hovering over?
 
-For now, this tutorial dedicates 44 rows to the map and 6 rows to a UI panel at the bottom. Row 44 belongs to the panel: it shows entity names under the mouse cursor, while the remaining rows hold the health bar and a short message history. Later, you can decide where to place the panel and which size makes the most sense for each part of your UI.
+The panel we build in this part answers these three questions: a health bar, a message log, and the names of the entities under the mouse cursor.
+
+### One message log for the whole game
+
+Many parts of the game want to write to the log: a `Fighter` when it attacks or dies, an AI when a monster flees, and later the consumables. So the question is where the log lives, and how all those parts reach it.
+
+The v2 tutorial stores a `MessageLog` instance on `Engine`. That works, but every component that wants to log must receive `engine` as a parameter just to reach `engine.message_log`. The 2019 tutorial has no `Engine`: components return lists of result dictionaries, and the main loop reads the messages from them and adds them to its own log.
+
+We use a third option: a static class. `MessageLog` keeps its messages in class-level state, no instance is ever created, and any module can call `MessageLog.add_message(...)` after a one-line import, with no extra dependency on `Engine`.
+
+!!! info "Pattern: Singleton-like global state"
+    This gives the main benefit of a Singleton (one object that everyone can reach) without the `__new__` code that a classic Singleton uses to block a second instance.
+
+    The trade-off is also the same: it is easy to use from anywhere, and for that reason it can hide dependencies. Reading a module's parameters no longer tells you that it writes to the log.
+
+    The *Game Programming Patterns* chapter on Singleton is worth reading.
+
+    → [Game Programming Patterns: Singleton](https://gameprogrammingpatterns.com/singleton.html)
+
+    → [Refactoring Guru: Singleton](https://refactoring.guru/design-patterns/singleton) ([Python example](https://refactoring.guru/design-patterns/singleton/python/example))
+
+### Game states
+
+Until now, the input handler only turned key presses into actions, and `Engine` drew the screen the same way in every situation. That stops working as soon as the game has more than one screen: the game-over panel in this part, then inventory menus, targeting, and a main menu. If `Engine` drew all of them, its `render()` would grow one branch for every mode.
+
+Instead, each situation becomes a *game state*: an object that handles the input **and** draws the screen for that situation. `Engine` only keeps a reference to the active state and passes events and drawing calls to it. Adding a new screen then means adding a new state class, without touching `Engine`.
+
+!!! info "Pattern: State"
+    `GameState` and its subclasses implement the *State* pattern: each subclass stands for one game state (normal play, game over) and holds both the input handling and the drawing for that state. `Engine` is the *context*, the object that owns the current state: it stores the active state and passes `handle_events` and `on_render` calls to it.
+
+    In this part, `Engine` still makes the switch to the game-over state. In later parts, modal states also switch states themselves (`self.engine.game_state = ...`), so the switching code stays close to the state that causes it. Inventory and targeting states build on this same structure.
+
+    → [Game Programming Patterns: State](https://gameprogrammingpatterns.com/state.html)
+
+    → [Refactoring Guru: State](https://refactoring.guru/design-patterns/state) ([Python example](https://refactoring.guru/design-patterns/state/python/example))
+
+---
+
+## The screen layout
+
+For now, we use 44 rows for the map (rows 0 to 43) and 6 rows for a UI panel at the bottom (rows 44 to 49). The panel's top row shows the names of the entities under the mouse cursor. The health bar sits on the left of the next row, and the message log fills the five rows on its right. Later, you can decide where to place the panel and how big each part of your UI should be.
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                                                                              │
-│                           MAP AREA  (80 × 44)                                │
-│                                                                              │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ HP: ████████░░  14/30    You attack the Orc for 3 hit points.                │
-│                          The Orc attacks you for 2 hit points.               │
-│ Turns: 56                The Troll is dead!                                  │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                │
+│                        MAP AREA (80 × 44, rows 0 to 43)                        │
+│                                                                                │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                     Orc                                                        │
+│▓HP: 27/30▓▓▓▓▓▓▓▓░░ Hello and welcome, adventurer, to yet                      │
+│                     another dungeon!                                           │
+│                     Player attacks Orc for 4.2 hit points.                     │
+│                     Orc attacks Player for 2.7 hit points.                     │
+│                     Player attacks Orc for 4.2 hit points.                     │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+The `HP: 27/30` text is printed on top of the bar: the `▓` cells are the filled part, the `░` cells the empty part.
 
 ---
 
@@ -75,19 +125,19 @@ GAME_OVER_TEXT      = Color(255, 232, 224)
 GAME_OVER_DIM       = Color(216, 144, 144)
 ```
 
-We split the new constants into different sections (`Generic colors`, `Combat message colors`, `UI colors`, ...) to make scanning the file easier as it grows. Notice we name the death colors `PLAYER_DEATH` and `ENEMY_DEATH`, not `_die`: full words read better at every call site.
+We put the new constants in separate sections (`Generic colors`, `Combat message colors`, `UI colors`, ...) so the file stays easy to scan as it grows. Notice that we name the death colors `PLAYER_DEATH` and `ENEMY_DEATH`, not `PLAYER_DIE`: the color belongs to an event, so we use the noun.
 
 !!! note "If you kept earlier exercises"
     Extra exercise messages can get their own colors here as well. For example, the reference implementation uses `ENEMY_FLEE` and `BLOCKED` for Part 5/6 exercise feedback. They are useful, but not required for the base tutorial path.
 
 !!! question "Why this lives in `data/`, not in `engine.py`"
-    `game/data/colors.py` is imported by `hud`, `message_log`, `fighter`, and eventually every UI component. Putting colors in `game/engine.py` would force circular imports, those modules would need to import `engine` just for a tuple.
+    `game/data/colors.py` is imported by `hud`, `message_log`, `fighter`, and later by every UI component. If the colors lived in `game/engine.py`, those modules would need to import `engine` just to get a color. But `engine` already imports them, so we would get circular imports.
 
 ---
 
 ## message_log.py
 
-The message log stores recent events and renders them in the panel. Two features make it feel polished: **color** (attacks are different from deaths) and **stacking** (if the same message repeats, it shows `(x3)` instead of three identical lines).
+The message log stores recent events and draws them in the panel. Two features make it easy to read: **color** (attacks look different from deaths) and **stacking** (if the same message repeats, it shows `(x3)` instead of three identical lines).
 
 Create `game/message_log.py`:
 
@@ -163,10 +213,14 @@ class MessageLog:
             )
 ```
 
-`MessageLog` has no `__init__`: `messages` is a class variable shared by everyone, and the methods operate on it without needing an instance. The `ClassVar` annotation marks this sharing as intentional. `render` first flattens all messages into a list of `(line, color)` pairs, then takes a slice of `height` lines from the end (the most recent ones) and renders them top to bottom. `clear()` empties the list; it is called in Part 10 when starting a new game.
+`MessageLog` has no `__init__`. `messages` is a class variable that every part of the game shares, and the methods work on it without an instance. The `ClassVar` annotation says that this sharing is intentional.
+
+`render` first turns all messages into one list of `(line, color)` pairs, wrapping long messages to the panel width. Then it takes the last `height` lines (the most recent ones) and prints them from top to bottom. `clear()` empties the list; Part 10 calls it when a new game starts.
 
 !!! info "@classmethod vs @staticmethod"
-    A **`@classmethod`** receives the class itself as its first argument (`cls`). That is what `add_message` needs: it reads and writes `cls.messages`, the shared list. A **`@staticmethod`** receives nothing implicit (no `self`, no `cls`). `render` qualifies because it only reads `MessageLog.messages` by name; it does not need to be overridden in a subclass, and it does not modify class state.
+    A **`@classmethod`** receives the class itself as its first argument (`cls`). That is what `add_message` needs: it reads and writes `cls.messages`, the shared list.
+
+    A **`@staticmethod`** receives nothing automatically (no `self`, no `cls`). `render` can be static because it only reads `MessageLog.messages` by name. It does not change class state, and no subclass needs to override it.
 
 !!! info "ClassVar and shared class state"
     `ClassVar` comes from the `typing` module. It marks an attribute as belonging to the class itself, not to each instance. It changes nothing at runtime: it is a note for type checkers and linters.
@@ -185,23 +239,14 @@ class MessageLog:
 
     This is a common bug when each instance should have its own list; the fix is to create the list in `__init__` with `self.items = []`. Linters warn about any mutable value in a class body for this reason. `MessageLog` never creates instances, so sharing is exactly what we want. `ClassVar` says so, and the warning goes away.
 
-!!! question "Why a static class instead of an instance on Engine (as in the 2019 and v2 tutorials)"
-    The 2019 and v2 tutorials store a `MessageLog` instance on `Engine`. That works, but it means every component that wants to log (a `Fighter`, an AI, a consumable) must receive `engine` as a parameter just to reach `engine.message_log`. With a static `MessageLog`, any module can call `MessageLog.add_message(...)` after a one-line import, with no extra dependency on `Engine`.
-
-!!! info "Pattern: Singleton-like global state"
-    `MessageLog` acts as a globally shared resource via class-level state: no instance is ever created, and any module can reach it with a one-line import. This achieves the core benefit of a Singleton (a single, globally accessible object) without the `__new__` machinery. The trade-off is the same: it is easy to use from anywhere, and that ease can make dependencies implicit.
-
-    The *Game Programming Patterns* chapter on Singleton is worth reading.
-
-    → [Game Programming Patterns: Singleton](https://gameprogrammingpatterns.com/singleton.html)
-
-    → [Refactoring Guru: Singleton](https://refactoring.guru/design-patterns/singleton) ([Python example](https://refactoring.guru/design-patterns/singleton/python/example))
+!!! question "Why a static class instead of an instance?"
+    Because many modules write to the log, and a static class lets them do it without receiving `engine` as a parameter. [One message log for the whole game](#one-message-log-for-the-whole-game), in the Background section, compares this with the 2019 and v2 tutorials and explains the trade-off.
 
 ---
 
 ## hud.py
 
-Three standalone HUD helpers that the engine calls each frame.
+The HUD (heads-up display: the information drawn on top of the game view) needs three small drawing functions. The engine calls them every frame.
 
 Create `game/hud.py`:
 
@@ -282,21 +327,25 @@ def render_names_at_mouse_location(
         console.print(x=x, y=y, text=names)
 ```
 
-`render_panel` fills the six-row HUD area with `HUD_BG` before anything else is drawn on top of it. `render_bar` draws a filled rectangle for the filled portion and an empty rectangle for the background, then overlays the text `"HP: N/M"`. `render_names_at_mouse_location` collects all entity names at the cursor position and joins them with commas. All three functions take only what they need: no `Engine` reference, no hidden dependencies.
+- `render_panel` fills the six-row HUD area with `HUD_BG`, before anything else is drawn on top of it.
+- `render_bar` first draws the whole bar in the empty color, then draws the filled part over it, and finally prints the text `"HP: N/M"` on top.
+- `render_names_at_mouse_location` collects the names of all entities on the cursor's tile and joins them with commas. It only does this when the tile is in view, so the mouse cannot reveal monsters you cannot see.
+
+All three functions take only what they need: no `Engine` reference, no hidden dependencies.
 
 ---
 
-## Refactor game_states.py
+## From input handlers to game states
 
 The classes in `game/input_handlers.py` are about to do more than translate input:
-each one will also render the screen for a distinct situation, such as normal play or
-game over. Keeping both responsibilities in the state prevents `Engine` from growing a
-separate rendering branch for every future menu and mode.
+each one will also draw the screen for one situation, such as normal play or
+game over. If each state does both jobs, `Engine` does not need a separate drawing
+branch for every future menu and mode.
 
-Rename the file to `game/game_states.py` so its name reflects that broader role. We
-will also update the classes to take an engine, handle events, and render themselves.
-This structure will later support inventory screens, spell targeting, and states that
-return other states.
+Rename the file to `game/game_states.py`, so its name matches that wider role. We
+will also change the classes so they take an engine, handle events, and draw themselves.
+Later parts use this structure for inventory screens, spell targeting, and states that
+switch to other states.
 
 Each state:
 
@@ -305,15 +354,9 @@ Each state:
 - Has an `on_render(console)` method that draws anything the state needs
 
 !!! info "Pattern: State"
-    `GameState` and its subclasses implement the *State* pattern: each subclass represents a distinct game state (normal play, game over) and encapsulates both input handling and rendering for that state. `Engine` is the *context*: it holds the active state and delegates `handle_events` and `on_render` to it.
+    This is the *State* design pattern. [Game states](#game-states), in the Background section, explains the idea and links to further reading.
 
-    At this point, `Engine` still performs the game-over transition. In later parts, modal states also initiate transitions themselves (`self.engine.game_state = ...`), which keeps transition logic close to the state that triggers it. Inventory and targeting states build on this same structure.
-
-    → [Game Programming Patterns: State](https://gameprogrammingpatterns.com/state.html)
-
-    → [Refactoring Guru: State](https://refactoring.guru/design-patterns/state) ([Python example](https://refactoring.guru/design-patterns/state/python/example))
-
-Replace `game/input_handlers.py` with `game/game_states.py`. Note a small bonus of the Part 5 decision to keep key tables in `game/data/keys.py`: there are no key maps to carry along, so the new file contains only states and their rendering helpers. Start with the imports and the panel-drawing helper every state will share:
+Replace `game/input_handlers.py` with `game/game_states.py`. Here we see a small benefit of the Part 5 decision to keep the key tables in `game/data/keys.py`: there are no key maps to move, so the new file contains only the states and their drawing helpers. Start with the imports and the panel-drawing helper that every state will share:
 
 ```python
 from __future__ import annotations
@@ -375,10 +418,10 @@ def _draw_panel(
     )
 ```
 
-`_draw_panel()` is the panel workhorse; later parts reuse it for every menu and popup, so it is worth understanding once. It renders in three passes:
+`_draw_panel()` draws a framed box. Later parts use it for every menu and popup, so it is worth understanding once. It draws in three passes:
 
-1. An optional **drop shadow**: a plain black `draw_rect` offset one cell right and down from the panel origin, which gives the panel a floating look.
-2. A **fill** pass: `draw_rect` covers the panel area with a space character using `bg_blend=tcod.constants.BKGND_SET`, which writes the background color directly over whatever tcod previously rendered. `ch=ord(" ")` clears the character layer too, so the dungeon tiles underneath are fully hidden.
+1. An optional **drop shadow**: a plain black `draw_rect`, moved one cell right and one cell down from the panel's corner. It makes the panel look like it floats above the map.
+2. A **fill** pass: `draw_rect` covers the panel area with spaces. `bg_blend=tcod.constants.BKGND_SET` replaces the background color of each cell instead of mixing it with what was drawn before. `BKGND_SET` is already the default for `draw_rect`, so this argument changes nothing; we write it anyway because the whole point of this pass is to cover what is underneath, and the explicit value says so. `ch=ord(" ")` replaces the characters too, so the dungeon tiles underneath are fully hidden.
 3. A **frame** pass: `draw_frame` with `clear=False` draws only the border characters, preserving the interior just filled by `draw_rect`.
 
 Next, the base `GameState` every other state inherits from:
@@ -409,9 +452,15 @@ class GameState:
         self.engine.render(console)
 ```
 
-`handle_events()` dispatches on the event type: `Quit` always ends the game no matter which state is active, `KeyDown` delegates to `event_keydown()` so each subclass decides what its own keys do, and `on_render()` just calls `engine.render()` unless a subclass overrides it, which `GameOverState` does below.
+`handle_events()` chooses what to do by event type:
 
-The `MouseMotion` case stores the cursor tile position in `engine.mouse_location` so `render_names_at_mouse_location` always has current data. `integer_position` is the tile-space coordinate set by `context.convert_event`; the older `event.tile` attribute is deprecated.
+- `Quit` (closing the window) always ends the game, no matter which state is active.
+- `MouseMotion` stores the cursor position in `engine.mouse_location`, so `render_names_at_mouse_location` always has current data.
+- `KeyDown` is passed to `event_keydown()`, so each subclass decides what its own keys do.
+
+`on_render()` just calls `engine.render()`, unless a subclass overrides it. `GameOverState` does that below.
+
+Mouse events arrive in pixel coordinates. The engine will pass each event through `context.convert_event`, which returns a copy with the position in tile coordinates. `integer_position` rounds that position down to whole tiles. You may see `event.tile` in older code: it is deprecated since tcod 21.
 
 Then `MainGameState`, the state the engine starts in and the one play returns to once any other state closes:
 
@@ -434,7 +483,7 @@ class MainGameState(GameState):
         return None
 ```
 
-`event_keydown()` does exactly what `EventHandler.event_keydown` used to do before this rename: movement keys become a `BumpAction`, the wait keys become a `WaitAction`, and the quit key becomes an `EscapeAction`. Any other key falls through to `return None`, so `GameState.handle_events()` reports no action and the turn does not advance.
+`event_keydown()` does exactly what `EventHandler.event_keydown` did before this rename: movement keys become a `BumpAction`, the wait keys become a `WaitAction`, and the quit key becomes an `EscapeAction`. Any other key reaches `return None`, so `GameState.handle_events()` reports no action and no turn passes.
 
 *Normal play, with the new HUD panel*:
 
@@ -504,13 +553,13 @@ class GameOverState(GameState):
 
 ![Screenshot Game Over](images/part_7_screenshot_gameover.png)
 
-`GameOverState` declares three class variables (`TITLE`, `FG_COLOR`, and `BG_COLOR`) so subclasses can override them independently. The pattern will appear again in Part 8 for the inventory overlays.
+`GameOverState` declares three class variables (`TITLE`, `FG_COLOR`, and `BG_COLOR`), so a subclass can change any of them without touching the others. Part 8 uses the same idea for the inventory overlays.
 
-`on_render()` starts by dimming everything already on the console: `console.fg[:] = console.fg // 2` halves every foreground color channel in place, and the matching `bg` line halves the backgrounds. The map and HUD stay visible but faded, so the player's attention moves to the panel. This dimming trick reappears in every modal screen from here on (inventory, popups, level-up).
+`on_render()` starts by dimming everything already on the console. `console.fg[:] = console.fg // 2` halves every foreground color channel in place, and the matching `bg` line halves the backgrounds. The map and HUD stay visible but faded, so the player looks at the panel. Every modal screen from here on (inventory, popups, level-up) uses this dimming trick again.
 
-The panel width adapts to its longest content line (title, message, or hint, each padded for the borders and a margin). The title is centered on the top border row with a separate `console.print`, overwriting the frame characters there with the padded title string. The message is centered in the interior, and the hint sits on the row just above the bottom border in a dimmer color, so it reads as secondary information.
+The panel width adapts to its longest line (title, message, or hint, each with extra space for the borders and a margin). A separate `console.print` centers the title on the top border row, replacing the frame characters there. The message is centered inside the panel. The hint sits on the row just above the bottom border, in a dimmer color, so it reads as secondary information.
 
-`engine.py` still imports `from game.input_handlers import EventHandler, GameOverEventHandler`, the module you just replaced, so do not run the game yet: it would fail with `ModuleNotFoundError: No module named 'game.input_handlers'`. That is expected; the next section rewires `engine.py` to use `game_states.py` instead.
+`engine.py` still imports `from game.input_handlers import EventHandler, GameOverEventHandler`, the module you just replaced, so do not run the game yet: it would fail with `ModuleNotFoundError: No module named 'game.input_handlers'`. That is expected; the next section changes `engine.py` to use `game_states.py` instead.
 
 ---
 
@@ -601,9 +650,9 @@ Replace the existing `render()` method. It no longer receives `context` or contr
 These coordinates map directly onto the panel layout from the start of the chapter. The HP bar fills columns `0-19` of row `45` (`total_width=20`), so the message log and the hover names start one column past it, at `x=21`. Row `44` (the panel's top row) holds the names under the cursor; rows `45-49` hold the five wrapped message lines (`y=45`, `height=5`).
 
 !!! note "If you kept the Part 1 turn counter"
-    Part 1, Exercise 3 added a `turn_count` counter, printed with `console.print(x=0, y=44, text=f"Turns: {self.turn_count}")` right after `Engine.__init__` (Part 2). Row `44` now belongs to the panel: it shows hover names, so the old print would land on top of them.
+    Part 1, Exercise 3 added a `turn_count` counter, and since Part 2 `Engine.render()` prints it with `console.print(x=0, y=44, text=f"Turns: {self.turn_count}")`. Row `44` now belongs to the panel: it shows hover names, so the old print would land on top of them.
 
-    Move it into `render()` instead, on the panel's bottom row, which stays free for the rest of this chapter:
+    The new `render()` above replaces the old one, so add the counter back, this time on the panel's bottom row, which stays free for the rest of this chapter:
 
     ```diff
              hud.render_names_at_mouse_location(
@@ -618,7 +667,7 @@ These coordinates map directly onto the panel layout from the start of the chapt
     +        console.print(x=0, y=49, text=f"Turns: {self.turn_count}")
     ```
 
-    Row `49` is the panel's last row (`y=44`, `height=6`, so rows `44` through `49`). Later parts add more HUD pieces (Part 11's floor display, gold counter, and XP bar) but they all sit on rows `44`-`46`, so the counter keeps its spot without another move.
+    Row `49` is the panel's last row (`y=44`, `height=6`, so rows `44` through `49`). Later parts add more HUD pieces (the gold counter in Part 8, the floor display and the XP bar in Part 11), but they all sit on rows `44` to `46`, so the counter keeps its place.
 
 Update `run()` to delegate rendering to the active game state and to capture the result of `context.convert_event`:
 
@@ -635,13 +684,15 @@ Update `run()` to delegate rendering to the active game state and to capture the
 +                self.handle_events([event])
 ```
 
-`context.convert_event(event)` returns a new event object with tile-space coordinates set. The return value must be captured; the original event object is not modified in place.
+`context.convert_event(event)` returns a new event object with the mouse position in tile coordinates. We must keep the return value: the original event is not changed in place.
 
 !!! info "render() vs game_map.render()"
-    `GameMap.render()` draws tiles and entity sprites. `Engine.render()` composes the full frame: map first, then the UI panel on top. Keeping these separate means the map never needs to know about the UI layout.
+    `GameMap.render()` draws tiles and entity sprites. `Engine.render()` builds the full frame: the map first, then the UI panel on top. Because the two are separate, the map never needs to know about the UI layout.
 
 !!! tip "Run it now"
-    If you run the game now, you can check that the panel itself works: the health bar tracks your HP, and hovering the mouse over a visible entity shows its name on the panel's top row. The message log area stays empty, since nothing has posted a message to it yet, and combat and death still print to the terminal instead of the log, exactly as they did at the end of Part 6. It is a good habit to check the panel on its own like this, before wiring in the message log, so that any layout or coordinate mistake is easy to spot instead of getting mixed up with log output.
+    If you run the game now, you can check that the panel itself works: the health bar follows your HP, and moving the mouse over a visible entity shows its name on the panel's top row.
+
+    The message log area stays empty, because nothing has posted a message to it yet. Combat and death still print to the terminal, exactly as they did at the end of Part 6. It is a good habit to check the panel on its own like this, before you connect the message log: any layout or coordinate mistake is easy to spot, and it does not get mixed with log output.
 
 ---
 
@@ -652,9 +703,9 @@ Two small changes: two new imports and posting the welcome message.
 Add the imports:
 
 ```diff
- from game.entities import factories
 +from game.data import colors
  from game.engine import Engine
+ from game.entities import factories
  from game.map.map_generator import generate_dungeon
 +from game.message_log import MessageLog
 ```
@@ -674,7 +725,7 @@ Post the welcome message after creating the engine:
 
 ## Replace print() with message_log in fighter.py
 
-All the `print()` calls from Parts 5 and 6 now route through `MessageLog.add_message()`. Because `MessageLog` is a static class, `melee_attack()` and `die()` can call it directly with no extra parameters. `die()` returns to the `hp` setter, where it always belonged.
+All the `print()` calls from Parts 5 and 6 now go through `MessageLog.add_message()`. Because `MessageLog` is a static class, `melee_attack()` and `die()` can call it directly, with no extra parameters. `die()` is still called from the `hp` setter, as in Part 6.
 
 Add the import at the top of `game/entities/components/fighter.py`:
 
@@ -701,7 +752,9 @@ First, add `heal()` and `take_damage()` to `Fighter` in `game/entities/component
         self.hp -= amount
 ```
 
-`take_damage()` is a thin wrapper over `self.hp -= amount` that gives call sites a readable name; `melee_attack()` will use it next, and later damage sources reuse the same method. It still delegates to the `hp` setter, so death is triggered exactly as before. `heal()` returns the amount actually recovered; the `hp` setter clamps to `max_hp`, so you cannot overheal. `heal()` has no caller yet in this part: the healing potions in Part 8 will be its first user, but it belongs here next to the other HP methods.
+`take_damage()` only runs `self.hp -= amount`, but it gives the call sites a readable name. `melee_attack()` will use it next, and later damage sources use the same method. The assignment still goes through the `hp` setter, so death works exactly as before.
+
+`heal()` never raises HP above `max_hp`, and it returns the amount actually recovered. No code calls it yet in this part: the healing potions in Part 8 will be the first to use it, but it belongs here, next to the other HP methods.
 
 Update `Fighter.melee_attack()` in `game/entities/components/fighter.py`:
 
@@ -717,7 +770,7 @@ Update `Fighter.melee_attack()` in `game/entities/components/fighter.py`:
 +    target.fighter.take_damage(damage)
 ```
 
-`self.entity.ai is None` identifies the player: the player never has an AI component, enemies always do. Player attacks use a lighter color (`PLAYER_ATTACK`) and enemy attacks a red tint (`ENEMY_ATTACK`), so the player can scan the log quickly. Damage now goes through `target.fighter.take_damage(damage)`, the method you just added, instead of assigning to `target.fighter.hp` directly.
+`self.entity.ai is None` identifies the player: the player never has an AI component, and living enemies always do. Player attacks use a light grey (`PLAYER_ATTACK`) and enemy attacks a red tint (`ENEMY_ATTACK`), so the player can scan the log quickly. Damage now goes through `target.fighter.take_damage(damage)`, the method you just added, instead of assigning to `target.fighter.hp` directly.
 
 Update `Fighter.die()` in `game/entities/components/fighter.py` to write to the message log:
 
@@ -742,10 +795,16 @@ Update `Fighter.die()` in `game/entities/components/fighter.py` to write to the 
 ```
 
 !!! note "If you kept Part 5/6 exercise code"
-    Convert those messages to `MessageLog.add_message(...)` too. For example, non-combat blockers in `actions.py` should log instead of printing, and optional flee/critical-hit logic in `fighter.py` should keep the same behavior while routing its feedback through the message log.
+    Change those messages to `MessageLog.add_message(...)` too. For example, the non-combat blocker message in `actions.py`, the flee message in `ai.py`, and the critical-hit message in `fighter.py` should keep the same behavior but send their text to the message log.
 
 !!! tip "Run it now"
-    With the message log wired all the way through, running the game now shows the full picture: the welcome message greets you as soon as the game starts, attacking and being attacked post colored lines instead of printing to the terminal, and dying writes `"You died!"` to the log. Comparing this against the earlier checkpoint, where the same panel sat with an empty log area, is a satisfying way to see how much changed in this part.
+    With the message log connected, running the game now shows the full picture:
+
+    - the welcome message appears as soon as the game starts;
+    - attacking and being attacked add colored lines to the log instead of printing to the terminal;
+    - dying writes `"You died!"` to the log.
+
+    Compare this with the earlier checkpoint, where the same panel had an empty log area: it is a nice way to see how much changed in this part.
 
     ![Screenshot With Panel](images/part_7_screenshot_with_panel.png)
 
@@ -756,22 +815,22 @@ Update `Fighter.die()` in `game/entities/components/fighter.py` to write to the 
 Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] The bottom panel has a dark background, visually distinct from the map area above it
-- [ ] A health bar appears in the bottom-left corner showing `HP: 30/30`
+- [ ] A health bar appears on the left of the panel, showing `HP: 30/30`
 - [ ] The welcome message appears in the message log panel
 - [ ] Attacking an enemy adds a colored line to the message log
 - [ ] When enemies attack you, the message appears in a different color
 - [ ] Hovering the mouse over a visible entity shows its name on the panel's top row
 - [ ] On death, `"You died!"` appears in the log and the bar shows 0 HP
 - [ ] On death, the screen dims and a framed game-over panel with a drop shadow appears centered
-- [ ] Repeated identical messages stack: `"Orc attacks Player for 2.7 hit points. (x3)"`
+- [ ] Repeated identical messages stack: wait (`.` or numpad `5`) next to an orc and you see `"Orc attacks Player for 2.7 hit points. (x3)"`
 
 ---
 
 ## Summary
 
-The UI panel is now live. Key additions:
+The game now has a working UI panel. Key additions:
 
-- **`game/data/colors.py`**: centralized color constants for the whole project
+- **`game/data/colors.py`**: new colors for messages, the HUD, and the game-over screen
 - **`MessageLog`**: static class that stores and renders recent events with stacking and color
 - **`hud`**: stateless HUD helpers for the bar and mouse names
 - **`_draw_panel()`**: shared shadow + fill + frame helper reused by every later menu and popup
@@ -829,7 +888,7 @@ game/
 
 1. **Colored HP bar**:
 
-    Make both the filled and empty portions of the bar change color based on the HP percentage. Define three pairs of constants in `colors.py`:
+    Make both the filled and the empty part of the bar change color with the HP percentage: healthy above 70%, injured above 30%, critical at 30% or less. Use these three pairs of colors in `colors.py`:
 
     ```python
     HP_BAR_HEALTHY_FILLED  = Color( 32, 160,  64)
@@ -840,16 +899,145 @@ game/
     HP_BAR_CRITICAL_EMPTY  = Color( 58,  16,  16)
     ```
 
-    In `render_bar`, compute the HP ratio and select the pair before calling `draw_rect`:
+    ??? note "Reference implementation"
+        Add the six constants above at the end of `game/data/colors.py`, under a `# Part-7. Exercise 1: Colored HP bar` comment.
 
-    - HP > 70% → healthy colors
-    - HP > 30% → injured colors
-    - HP ≤ 30% → critical colors
+        In `render_bar` (`game/hud.py`), compute the HP ratio once, choose the pair of colors, and use them in the two `draw_rect` calls:
+
+        ```diff
+         ) -> None:
+        -    bar_width = int(float(current_value) / maximum_value * total_width)
+        +    # Part-7. Exercise 1: Colored HP bar
+        +    hp_ratio = float(current_value) / maximum_value
+        +    bar_width = int(hp_ratio * total_width)
+        +    if hp_ratio > 0.70:
+        +        bar_color_fg = colors.HP_BAR_HEALTHY_FILLED
+        +        bar_color_bg = colors.HP_BAR_HEALTHY_EMPTY
+        +    elif hp_ratio > 0.30:
+        +        bar_color_fg = colors.HP_BAR_INJURED_FILLED
+        +        bar_color_bg = colors.HP_BAR_INJURED_EMPTY
+        +    else:
+        +        bar_color_fg = colors.HP_BAR_CRITICAL_FILLED
+        +        bar_color_bg = colors.HP_BAR_CRITICAL_EMPTY
+
+             console.draw_rect(
+                 ...
+        -        bg     = colors.HP_BAR_EMPTY,
+        +        bg     = bar_color_bg,
+             )
+
+             if bar_width > 0:
+                 console.draw_rect(
+                     ...
+        -            bg     = colors.HP_BAR_FILLED,
+        +            bg     = bar_color_fg,
+                 )
+        ```
 
 2. **Scroll the message panel**:
 
-    The message log shows only the five most recent wrapped lines. Add `Page Up` / `Page Down` bindings that shift which portion of the log is visible. Define them in `game/data/keys.py` like every other binding (`LOG_SCROLL_UP = tcod.event.KeySym.PAGEUP`, `LOG_SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN`). Store the current scroll value in `MessageLog` as another `ClassVar`. When rendering, wrap all messages first, clamp `scroll` between `0` and `max(0, total - height)`, then use it to offset the visible slice: `start = max(0, total - height - scroll)` and `end = start + height`. Reset `scroll` to `0` when a new message is added.
+    The message log shows only the five most recent wrapped lines. Let the player read older messages with `Page Up` and `Page Down`. Define the keys in `game/data/keys.py` like every other binding, as `LOG_SCROLL_UP` and `LOG_SCROLL_DOWN`, and keep the scroll offset in `MessageLog` as another `ClassVar`. A new message should jump back to the most recent lines, and scrolling must never cost a turn.
+
+    ??? note "Reference implementation"
+        Add the keys at the end of `game/data/keys.py`:
+
+        ```python
+        LOG_SCROLL_UP   = tcod.event.KeySym.PAGEUP
+        LOG_SCROLL_DOWN = tcod.event.KeySym.PAGEDOWN
+        ```
+
+        In `game/message_log.py`, add the offset, reset it when a message arrives or the log is cleared, and add two methods to change it. `render` becomes a `@classmethod`, because it now writes class state: it clamps the offset between `0` and the number of hidden lines.
+
+        ```diff
+         class MessageLog:
+             messages: ClassVar[list[Message]] = []
+        +    # Part-7. Exercise 2: Scroll the message panel
+        +    scroll: ClassVar[int] = 0
+
+             @classmethod
+             def add_message(
+                 ...
+                 else:
+                     cls.messages.append(Message(text, fg))
+
+        +        # Part-7. Exercise 2: Scroll the message panel
+        +        cls.scroll = 0
+        +
+             @classmethod
+             def clear(cls) -> None:
+                 cls.messages.clear()
+        +        # Part-7. Exercise 2: Scroll the message panel
+        +        cls.scroll = 0
+        +
+        +    # Part-7. Exercise 2: Scroll the message panel
+        +    @classmethod
+        +    def scroll_up(cls, amount: int = 1) -> None:
+        +        cls.scroll += amount
+        +
+        +    @classmethod
+        +    def scroll_down(cls, amount: int = 1) -> None:
+        +        cls.scroll = max(0, cls.scroll - amount)
+
+        -    @staticmethod
+        +    @classmethod
+             def render(
+        +        cls,
+                 console: tcod.console.Console,
+                 ...
+                 total = len(wrapped_lines)
+        -        start = max(0, total - height)
+        +        max_scroll = max(0, total - height)
+        +        cls.scroll = max(0, min(cls.scroll, max_scroll))
+        +        start = max(0, total - height - cls.scroll)
+                 end   = start + height
+        ```
+
+        Handle the keys in `GameState.handle_events` (`game/game_states.py`), before `event_keydown`, so they work in every state and return no action (no action, no turn). Import `MessageLog` at the top of the file:
+
+        ```diff
+                     case tcod.event.KeyDown():
+        +                # Part-7. Exercise 2: Scroll the message panel
+        +                if event.sym == keys.LOG_SCROLL_UP:
+        +                    MessageLog.scroll_up()
+        +                    return None
+        +
+        +                if event.sym == keys.LOG_SCROLL_DOWN:
+        +                    MessageLog.scroll_down()
+        +                    return None
+        +
+                         return self.event_keydown(event)
+        ```
 
 3. **Entity details**:
 
-    When hovering over an entity, show full combat stats if it is an `Actor`: `"Player (HP: 30.0/30.0, ATK: 5.0, DEF: 2.0)"` (one decimal place). Plain entities (items, corpses) still show just their name. Modify `hud.render_names_at_mouse_location` to iterate with an explicit loop, check `isinstance(entity, Actor)`, and format the stats line accordingly. Remember to import `Actor` in `hud.py`: `from game.entities.entity import Actor`.
+    When the mouse is over a living actor, show its combat stats next to its name, with one decimal place: `"Player (HP: 30.0/30.0, ATK: 5.0, DEF: 2.0)"`. Everything else keeps showing only its name. Careful: a corpse is still an `Actor` (`die()` only changes it), so it should show `remains of Orc`, not `remains of Orc (HP: 0.0/18.0, ...)`.
+
+    ??? note "Reference implementation"
+        In `game/hud.py`, import `Actor` (`from game.entities.entity import Actor`) and replace the generator expression in `render_names_at_mouse_location` with an explicit loop:
+
+        ```diff
+             if game_map.in_bounds(mouse_x, mouse_y) and game_map.visible[mouse_x, mouse_y]:
+        -        names = ", ".join(
+        -            entity.name
+        -            for entity in game_map.entities
+        -            if entity.x == mouse_x and entity.y == mouse_y
+        -        )
+        +        # Part-7. Exercise 3: Entity details
+        +        names_at: list[str] = []
+        +        for entity in game_map.entities:
+        +            if entity.x != mouse_x or entity.y != mouse_y:
+        +                continue
+        +
+        +            if isinstance(entity, Actor) and entity.is_alive:
+        +                names_at.append(
+        +                    f"{entity.name} "
+        +                    f"(HP: {entity.fighter.hp:.1f}/{float(entity.fighter.max_hp):.1f}, "
+        +                    f"ATK: {entity.fighter.attack:.1f}, "
+        +                    f"DEF: {entity.fighter.defense:.1f})"
+        +                )
+        +            else:
+        +                names_at.append(entity.name)
+        +
+        +        names = ", ".join(names_at)
+                 console.print(x=x, y=y, text=names)
+        ```

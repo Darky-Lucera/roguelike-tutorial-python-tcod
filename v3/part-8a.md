@@ -68,12 +68,8 @@ In `game/data/colors.py`, add the corresponding entity and item colors. The item
  # Entity colors
  ...
  CORPSE           = Color(191,   0,   0)
-
- DEBUG_MARKER        = Color(255, 255,   0)  # Part-4. Exercise 2: Add a debug marker entity
-PERSISTENT_MARKER   = Color(255,   0, 255)  # Part-4. Exercise 3: Remember a discovered marker
-
 +CHEST            = Color(180, 128,  40)
-+
+
 +# Item colors
 +HEALTH_POTION    = Color(127,   0, 255)
 ```
