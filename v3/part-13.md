@@ -83,15 +83,15 @@ class Equippable(ItemComponent):
     def __init__(
         self,
         equipment_type: EquipmentType,
-        attack_bonus: float  = 0,
-        defense_bonus: float = 0,
+        attack_bonus: float  = 0.0,
+        defense_bonus: float = 0.0,
     ) -> None:
         self.equipment_type = equipment_type
         self.attack_bonus   = attack_bonus
         self.defense_bonus  = defense_bonus
 ```
 
-That is the whole file. An `Equippable` is pure data: which slot it occupies and what it adds. The concrete numbers (a dagger gives +2, chain mail gives +3) do not live here; they go in `factories.py` later in this chapter, next to the templates, exactly where `Fighter(hp=30, defense=2, attack=5)` and the Part 12 spawn tables already live. One file tells you everything about an item.
+That is the whole file. An `Equippable` is pure data: which slot it occupies and what it adds. The concrete numbers (a dagger gives +2, chain mail gives +3) do not live here; they go in `factories.py` later in this chapter, next to the templates, exactly where `Fighter(hp=30.0, defense=2.0, attack=5.0)` and the Part 12 spawn tables already live. One file tells you everything about an item.
 
 !!! info "Why not a subclass per item?"
     The older tutorials define `class Dagger(Equippable)` and friends, one subclass per item type. It works, but every new weapon then needs edits in two files, and none of those subclasses add behavior; they only store different parameters. We already have a place for parameters: the template in `factories.py`. Subclasses earn their keep when items need different *code*, not different *numbers*.
@@ -695,7 +695,12 @@ Wire the new components into `game/entities/factories.py`. First the imports:
  from game.entities.components.fighter import Fighter
  from game.entities.components.inventory import Inventory
  from game.entities.components.level import Level
- from game.entities.entity import Actor, Item, Stairs, StairsDirection
+ from game.entities.entity import (
+     Actor,
+     Item,
+     Stairs,
+     StairsDirection,
+ )
 +from game.entities.equipment_type import EquipmentType
 ```
 
@@ -719,28 +724,28 @@ dagger = Item(
     char       = sprites.DAGGER,
     color      = colors.DAGGER,
     name       = "Dagger",
-    equippable = Equippable(equipment_type=EquipmentType.WEAPON, attack_bonus=2),
+    equippable = Equippable(equipment_type=EquipmentType.WEAPON, attack_bonus=2.0),
 )
 
 sword = Item(
     char       = sprites.SWORD,
     color      = colors.SWORD,
     name       = "Sword",
-    equippable = Equippable(equipment_type=EquipmentType.WEAPON, attack_bonus=4),
+    equippable = Equippable(equipment_type=EquipmentType.WEAPON, attack_bonus=4.0),
 )
 
 leather_armor = Item(
     char       = sprites.LEATHER_ARMOR,
     color      = colors.LEATHER_ARMOR,
     name       = "Leather Armor",
-    equippable = Equippable(equipment_type=EquipmentType.ARMOR, defense_bonus=1),
+    equippable = Equippable(equipment_type=EquipmentType.ARMOR, defense_bonus=1.0),
 )
 
 chain_mail = Item(
     char       = sprites.CHAIN_MAIL,
     color      = colors.CHAIN_MAIL,
     name       = "Chain Mail",
-    equippable = Equippable(equipment_type=EquipmentType.ARMOR, defense_bonus=3),
+    equippable = Equippable(equipment_type=EquipmentType.ARMOR, defense_bonus=3.0),
 )
 ```
 
@@ -988,6 +993,8 @@ game/
 ---
 
 ## Exercises
+
+Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
 
 1. **Show equipment bonuses in the inventory**:
 

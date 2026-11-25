@@ -127,7 +127,7 @@ ogre = Actor(
     color     = colors.OGRE,
     name      = "Ogre",
     ai        = HostileEnemy(),
-    fighter   = Fighter(hp=30, defense=1, attack=6),
+    fighter   = Fighter(hp=30.0, defense=1.0, attack=6.0),
     inventory = Inventory(capacity=0, max_capacity=0),
     level     = Level(xp_given=100),
 )
@@ -535,8 +535,10 @@ game/
 
 ## Exercises
 
+The next parts assume you did these exercises. Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
+
 !!! tip "Don't skip the ending"
-    These exercises are optional and a bit long. Even if you skip them, read the closing section, [A cast, not a difficulty curve](#a-cast-not-a-difficulty-curve), right after: it is the design lesson this whole chapter has been building toward.
+    These exercises are a bit long. Even if you skip them, read the closing section, [A cast, not a difficulty curve](#a-cast-not-a-difficulty-curve), right after: it is the design lesson this whole chapter has been building toward.
 
 1. **Stairs guardian**:
 
@@ -627,7 +629,7 @@ game/
             color     = colors.GHOUL,
             name      = "Ghoul",
             ai        = HostileEnemy(),
-            fighter   = Fighter(hp=14, defense=0, attack=5, lifesteal=0.75),
+            fighter   = Fighter(hp=14.0, defense=0.0, attack=5.0, lifesteal=0.75),
             inventory = Inventory(capacity=0, max_capacity=0),
             level     = Level(xp_given=75),
         )
@@ -676,15 +678,15 @@ game/
 
         ```diff
         -    fighter   = Fighter(
-        -        hp            = 12,
-        -        defense       = 0,
-        -        attack        = 3,
+        -        hp            = 12.0,
+        -        defense       = 0.0,
+        -        attack        = 3.0,
         -        flee_threshold = 0.3,
         -    ),
         +    fighter   = Fighter(
-        +        hp            = 12,
-        +        defense       = 0,
-        +        attack        = 3,
+        +        hp            = 12.0,
+        +        defense       = 0.0,
+        +        attack        = 3.0,
         +        flee_threshold = 0.3,
         +        regeneration  = 1.0,
         +    ),
@@ -706,7 +708,26 @@ game/
         +                actor.fighter.regenerate()
         ```
 
-        Finally, make `CowardEnemy.perform` (`game/entities/components/ai.py`) reversible by checking, before it flees, whether it should turn back:
+        Finally, make `CowardEnemy` (`game/entities/components/ai.py`) reversible. `HostileEnemy.perform` passes itself as the AI to return to:
+
+        ```diff
+            # Part-6. Exercise 3: Flee behavior
+            if entity.fighter.should_flee():
+        -        entity.ai = CowardEnemy()
+        +        entity.ai = CowardEnemy(previous_ai=self)
+                entity.ai.entity = entity
+        ```
+
+        `CowardEnemy` stores it. Only a `HostileEnemy` creates a `CowardEnemy`, so unlike in `ConfusedEnemy`, `previous_ai` is never `None`:
+
+        ```python
+        # Part-12. Exercise 3: The regenerating troll
+        def __init__(self, previous_ai: BaseAI) -> None:
+            super().__init__()
+            self.previous_ai = previous_ai
+        ```
+
+        Then `perform` checks, before it flees, whether it should turn back:
 
         ```diff
         def perform(self, engine: Engine, entity: Actor) -> None:

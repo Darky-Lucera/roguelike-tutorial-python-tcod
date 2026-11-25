@@ -955,8 +955,8 @@ Two call sites are not a plain string swap. `SingleRangedTargetingAction` and `A
 HUD code already builds strings from live numbers, so only the labels move, in `game/hud.py`:
 
 ```diff
--hp_text = f"HP: {int(current_value)}/{maximum_value}"
-+hp_text = f"{Messages.current.HUD_HP}: {int(current_value)}/{maximum_value}"
+-hp_text = f"HP: {int(current_value)}/{int(maximum_value)}"
++hp_text = f"{Messages.current.HUD_HP}: {int(current_value)}/{int(maximum_value)}"
 ```
 
 ```diff

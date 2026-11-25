@@ -44,7 +44,8 @@ A complete, playable roguelike featuring:
 | 5 | [Enemies and the Turn System](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-5.html) |
 | 6 | [Combat](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-6.html) |
 | 7 | [The User Interface](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-7.html) |
-| 8 | [Items and Inventory](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-8-intro.html) (full or split into 8a / 8b) |
+| 8a | [The Item System](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-8a.html) |
+| 8b | [Inventory](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-8b.html) |
 | 9 | [Spells and Targeting](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-9.html) |
 | 10 | [Save and Load](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-10.html) |
 | 11 | [Dungeon Levels and Experience](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-11.html) |

@@ -58,9 +58,9 @@ DEFAULT_LEVEL_UP_BASE   = 200
 DEFAULT_LEVEL_UP_FACTOR = 100
 
 # Stat bonuses on level-up
-LEVEL_STAT_HP      = 20
-LEVEL_STAT_ATTACK  = 1
-LEVEL_STAT_DEFENSE = 1
+LEVEL_STAT_HP      = 20.0
+LEVEL_STAT_ATTACK  = 1.0
+LEVEL_STAT_DEFENSE = 1.0
 ```
 
 `DEFAULT_LEVEL_UP_BASE` and `DEFAULT_LEVEL_UP_FACTOR` name the numbers that drive the XP curve explained above. `LEVEL_STAT_*` name the per-choice bonuses awarded in the level-up modal; adjusting them in one place changes the feel of every stat option at once.
@@ -144,15 +144,15 @@ class Level(ActorComponent):
         # On level up recover all hp points
         self.entity.fighter.heal(self.entity.fighter.max_hp)
 
-    def increase_max_hp(self, amount: int = config.LEVEL_STAT_HP) -> None:
+    def increase_max_hp(self, amount: float = config.LEVEL_STAT_HP) -> None:
         self.entity.fighter.max_hp += amount
         self.increase_level()
 
-    def increase_attack(self, amount: int = config.LEVEL_STAT_ATTACK) -> None:
+    def increase_attack(self, amount: float = config.LEVEL_STAT_ATTACK) -> None:
         self.entity.fighter.base_attack += amount
         self.increase_level()
 
-    def increase_defense(self, amount: int = config.LEVEL_STAT_DEFENSE) -> None:
+    def increase_defense(self, amount: float = config.LEVEL_STAT_DEFENSE) -> None:
         self.entity.fighter.base_defense += amount
         self.increase_level()
 ```
@@ -184,7 +184,7 @@ Update `game/entities/components/fighter.py`. Remove the `hp` setter entirely, t
             return 0.0
 
         new_hp_value = self.hp + amount
-        new_hp_value = min(new_hp_value, float(self.max_hp))
+        new_hp_value = min(new_hp_value, self.max_hp)
 
         recovered    = new_hp_value - self.hp
         self._hp     = new_hp_value
@@ -193,7 +193,7 @@ Update `game/entities/components/fighter.py`. Remove the `hp` setter entirely, t
 
     # only heal and take_damage can write to self._hp
     def take_damage(self, amount: float, attacker: Actor) -> None:
-        self._hp = max(0.0, min(self.hp - amount, float(self.max_hp)))
+        self._hp = max(0.0, min(self.hp - amount, self.max_hp))
 
         if self.hp == 0:
             # Part-10. Exercise 2: Record a graveyard file
@@ -521,7 +521,12 @@ UP_STAIRS   = Color(200, 200, 255)
 Update `game/entities/factories.py` to use `Stairs` instead of bare `Entity`, and add the up-stairs factory:
 
 ```python
-from game.entities.entity import Actor, Item, Stairs, StairsDirection
+from game.entities.entity import (
+    Actor,
+    Item,
+    Stairs,
+    StairsDirection,
+)
 
 down_stairs = Stairs(
     char      = sprites.DOWN_STAIRS,
@@ -541,7 +546,12 @@ up_stairs = Stairs(
 Add both stair locations as class-level attributes and a helper that finds a `Stairs` entity at a given position:
 
 ```python
-from game.entities.entity import Actor, Entity, Item, Stairs
+from game.entities.entity import (
+    Actor,
+    Entity,
+    Item,
+    Stairs,
+)
 
 class GameMap:
     downstairs_location: tuple[int, int] = (0, 0)
@@ -731,9 +741,9 @@ class LevelUpState(GameState):
 
         fighter = self.engine.player.fighter
         options = [
-            ("a", "Constitution", "+20 HP",     f"from {fighter.max_hp}"),
-            ("b", "Strength",     "+1 attack",  f"from {fighter.base_attack}"),
-            ("c", "Agility",      "+1 defense", f"from {fighter.base_defense}"),
+            ("a", "Constitution", "+20 HP",     f"from {fighter.max_hp:g}"),
+            ("b", "Strength",     "+1 attack",  f"from {fighter.base_attack:g}"),
+            ("c", "Agility",      "+1 defense", f"from {fighter.base_defense:g}"),
         ]
 
         width  = 52
@@ -936,7 +946,7 @@ Also give `render_bar` a default width:
  def render_bar(
      console: Console,
      current_value: float,
-     maximum_value: int,
+     maximum_value: float,
 -    total_width: int,
 +    total_width: int     = config.BAR_WIDTH,
      y: int               = 45,
@@ -952,14 +962,14 @@ BAR_TEXT_DARK = BLACK
 Replace the final `console.print` in `render_bar`:
 
 ```diff
--    hp_text = f"HP: {int(current_value)}/{maximum_value}"
+-    hp_text = f"HP: {int(current_value)}/{int(maximum_value)}"
 -    console.print(
 -        x    = (total_width - len(hp_text)) // 2,
 -        y    = y,
 -        text = hp_text,
 -        fg   = colors.BAR_TEXT,
 -    )
-+    hp_text = f"HP: {int(current_value)}/{maximum_value}"
++    hp_text = f"HP: {int(current_value)}/{int(maximum_value)}"
 +    _print_bar_text(
 +        console          = console,
 +        text             = hp_text,
@@ -1188,6 +1198,8 @@ game/
 ---
 
 ## Exercises
+
+The next parts assume you did these exercises. Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
 
 1. **XP display**:
 

@@ -322,8 +322,8 @@ from game.entities.render_order import RenderOrder
 
 class Fighter(BaseComponent):
 
-    def __init__(self, hp: int, defense: float, attack: float) -> None:
-        self.max_hp       = hp
+    def __init__(self, hp: float, defense: float, attack: float) -> None:
+        self.max_hp       = float(hp)
         self._hp: float   = float(hp)
         self.defense      = float(defense)
         self.attack       = float(attack)
@@ -334,7 +334,7 @@ class Fighter(BaseComponent):
 
     @hp.setter
     def hp(self, value: float) -> None:
-        self._hp = max(0.0, min(value, float(self.max_hp)))
+        self._hp = max(0.0, min(value, self.max_hp))
         if self._hp == 0:
             self.die()
 
@@ -458,7 +458,7 @@ We wire both back-references the same way: `self.fighter.entity = self` and `sel
      name            = "Player",
 -    blocks_movement = True,
 +    ai              = None,  # player is controlled by the keyboard
-+    fighter         = Fighter(hp=30, defense=2, attack=5),
++    fighter         = Fighter(hp=30.0, defense=2.0, attack=5.0),
  )
 
 -orc = Entity(
@@ -468,7 +468,7 @@ We wire both back-references the same way: `self.fighter.entity = self` and `sel
      name            = "Orc",
 -    blocks_movement = True,
      ai              = HostileEnemy(),
-+    fighter         = Fighter(hp=18, defense=1, attack=4),
++    fighter         = Fighter(hp=18.0, defense=1.0, attack=4.0),
  )
 
 -troll = Entity(
@@ -478,7 +478,7 @@ We wire both back-references the same way: `self.fighter.entity = self` and `sel
      name            = "Troll",
 -    blocks_movement = True,
      ai              = HostileEnemy(),
-+    fighter         = Fighter(hp=12, defense=0, attack=3),
++    fighter         = Fighter(hp=12.0, defense=0.0, attack=3.0),
  )
 ```
 
@@ -925,6 +925,8 @@ game/
 
 ## Exercises
 
+The next parts assume you did these exercises. Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
+
 1. **Feedback for non-combat blockers**:
 
     If you kept the chest exercise from Part 5, bumping into the chest now blocks movement but prints nothing, because the chest is an `Entity`, not an `Actor`. Update `MeleeAction.perform()` so that when the player bumps into a blocking non-actor, it prints something like `"The Chest blocks your way."` instead of silently doing nothing.
@@ -988,14 +990,14 @@ game/
         ```python
             def __init__(
                 self,
-                hp: int,
+                hp: float,
                 defense: float,
                 attack: float,
                 # Part-6. Exercise 2: Combat effect: critical hits
                 critical_chance: float     = 0.1,
                 critical_multiplier: float = 2.0,
             ) -> None:
-                self.max_hp              = hp
+                self.max_hp              = float(hp)
                 self._hp: float          = float(hp)
                 self.defense             = float(defense)
                 self.attack              = float(attack)
@@ -1133,8 +1135,8 @@ game/
              color           = colors.TROLL,
              name            = "Troll",
              ai              = HostileEnemy(),
-        -    fighter         = Fighter(hp=12, defense=0, attack=3),
+        -    fighter         = Fighter(hp=12.0, defense=0.0, attack=3.0),
         +    # Part-6. Exercise 3: Flee behavior
-        +    fighter         = Fighter(hp=12, defense=0, attack=3, flee_threshold=0.3),
+        +    fighter         = Fighter(hp=12.0, defense=0.0, attack=3.0, flee_threshold=0.3),
          )
         ```

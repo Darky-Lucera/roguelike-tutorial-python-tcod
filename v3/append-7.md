@@ -702,7 +702,14 @@ with the import line grown to match:
 
 ```diff
 -from game.entities.components.graphic import DirectionalGraphic2, Graphic, StaticGraphic
-+from game.entities.components.graphic import DirectionalGraphic2, DirectionalGraphic4, DirectionalGraphic8, Graphic, GraphicDirection, StaticGraphic
++from game.entities.components.graphic import (
++    DirectionalGraphic2,
++    DirectionalGraphic4,
++    DirectionalGraphic8,
++    Graphic,
++    GraphicDirection,
++    StaticGraphic,
++)
 ```
 
 An actor upgrades by naming its eight tiles; the fallback works exactly as before:

@@ -276,7 +276,7 @@ def render_panel(console: Console, y: int = 44, height: int = 6) -> None:
 def render_bar(
     console: Console,
     current_value: float,
-    maximum_value: int,
+    maximum_value: float,
     total_width: int,
     y: int = 45,
 ) -> None:
@@ -304,7 +304,7 @@ def render_bar(
     console.print(
         x    = 1,
         y    = y,
-        text = f"HP: {int(current_value)}/{maximum_value}",
+        text = f"HP: {int(current_value)}/{int(maximum_value)}",
         fg   = colors.BAR_TEXT,
     )
 
@@ -365,7 +365,12 @@ from typing import TYPE_CHECKING
 
 import tcod
 
-from game.actions import Action, BumpAction, EscapeAction, WaitAction
+from game.actions import (
+    Action,
+    BumpAction,
+    EscapeAction,
+    WaitAction,
+)
 from game.data import colors, keys
 from game.data.colors import Color
 
@@ -741,7 +746,7 @@ First, add `heal()` and `take_damage()` to `Fighter` in `game/entities/component
             return 0.0
 
         new_hp_value = self._hp + amount
-        new_hp_value = min(new_hp_value, float(self.max_hp))
+        new_hp_value = min(new_hp_value, self.max_hp)
 
         recovered = new_hp_value - self._hp
         self.hp = new_hp_value
@@ -885,6 +890,8 @@ game/
 ---
 
 ## Exercises
+
+The next parts assume you did these exercises. Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
 
 1. **Colored HP bar**:
 
@@ -1031,7 +1038,7 @@ game/
         +            if isinstance(entity, Actor) and entity.is_alive:
         +                names_at.append(
         +                    f"{entity.name} "
-        +                    f"(HP: {entity.fighter.hp:.1f}/{float(entity.fighter.max_hp):.1f}, "
+        +                    f"(HP: {entity.fighter.hp:.1f}/{entity.fighter.max_hp:.1f}, "
         +                    f"ATK: {entity.fighter.attack:.1f}, "
         +                    f"DEF: {entity.fighter.defense:.1f})"
         +                )

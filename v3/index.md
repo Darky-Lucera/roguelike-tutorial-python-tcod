@@ -78,12 +78,9 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 - [Part 7: The User Interface](part-7.md): Build the HUD: health bar, message log, and mouse-hover entity names.
 
-- [Part 8: Items and Inventory](part-8-intro.md): Add items to the dungeon and give the player an inventory. Available in two formats (pick one on the chapter's landing page):
+- [Part 8a: The Item System](part-8a.md): Add items to the dungeon as a new entity type, with an ownership model for floor and inventory.
 
-    - [Full chapter](part-8.md): the complete Part 8 on a single page.
-    - [Part 8a: The Item System](part-8a.md) + [Part 8b: Inventory](part-8b.md): the same content split into two shorter chapters (easier to tackle in two sittings).
-
-    Which format works better for you? Let us know.
+- [Part 8b: Inventory](part-8b.md): Let the player pick up, use, and drop items through a letter-keyed inventory overlay.
 
 - [Part 9: Spells and Targeting](part-9.md): Implement a targeting cursor and three scroll types with spell effects.
 

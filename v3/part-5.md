@@ -567,7 +567,12 @@ KEY_QUIT_GAME = tcod.event.KeySym.ESCAPE
  import tcod.event
 
 -from game.actions import Action, EscapeAction, MovementAction, WaitAction
-+from game.actions import Action, BumpAction, EscapeAction, WaitAction
++from game.actions import (
++    Action,
++    BumpAction,
++    EscapeAction,
++    WaitAction,
++)
 +from game.data import keys
 ```
 
@@ -1010,6 +1015,8 @@ game/
 ---
 
 ## Exercises
+
+The next parts assume you did these exercises. Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
 
 1. **Minimum monsters per room**:
 

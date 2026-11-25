@@ -10,19 +10,23 @@ In this part we will:
 
 - Add a targeting cursor the player moves with keyboard or mouse
 - Implement three spell scrolls: lightning bolt (auto-target), confusion (cursor), fireball (Area of Effect)
-- Show a visual radius ring for Area of Effect (AoE) targeting
+- Highlight the tiles an Area of Effect (AoE) spell will hit, and stop the blast at walls with a line-of-sight check
 - Add a `ConfusedEnemy` AI that wanders randomly
 
 ---
 
-## Targeting as a game state
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [Add entity.distance()](#add-entitydistance). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### Targeting as a game state
 
 So far, every keypress either moves the player or triggers an action. Spells that require targeting need a different mode: the player moves a cursor around the map and confirms a target, or presses Escape to cancel.
 
-This fits naturally into the game-state pattern from Part 8. When the player uses a targeting scroll, we push a new game state. That state:
+This is a job for the game states from Part 8. When the player uses a targeting scroll, we switch to a new game state. That state:
 
 1. Intercepts all keyboard and mouse input
-2. Draws the cursor (and for AoE, the radius ring) on every frame
+2. Draws the cursor (and for AoE, the area that will be hit) on every frame
 3. On confirm, runs the action and returns to `MainGameState`
 4. On Escape, cancels and returns to `MainGameState`
 
@@ -46,21 +50,25 @@ MainGameState  (back to normal play)
 
 ## Add entity.distance()
 
-The spell code needs a reusable way to measure the distance from an entity to a map coordinate. Add to `Entity`:
+The spell code needs a reusable way to measure the distance from an entity to a map coordinate. `entity.py` did not need `math` before this chapter, so add the import at the top of the file:
+
+```diff
+ import copy
++import math
+ from typing import TYPE_CHECKING
+```
+
+Then add the method to `Entity`:
 
 ```python
-import math
-
-...
-
 def distance(self, x: int, y: int) -> float:
     return math.hypot(self.x - x, self.y - y)
 ```
 
-`entity.py` did not need `math` before this chapter, so add the import at the top of the file.
-
 !!! tip "`math.hypot` vs manual sqrt"
-    `math.hypot(a, b)` computes `sqrt(a² + b²)` in one call. It is more readable than `math.sqrt(a*a + b*b)` and numerically stable. Performance is equivalent. When you only need to *compare* a distance against a threshold, you can skip `sqrt` entirely: `dx*dx + dy*dy <= r*r` is equivalent to `hypot(dx, dy) <= r` but avoids any floating-point root. We will use that trick later in `get_aoe_tiles_in_radius` (aoe -> Area of Effect).
+    `math.hypot(a, b)` computes `sqrt(a² + b²)` in one call. It is more readable than `math.sqrt(a*a + b*b)`, numerically stable, and about as fast.
+
+    When you only need to *compare* a distance against a threshold, you can skip `sqrt` entirely: `dx*dx + dy*dy <= r*r` is equivalent to `hypot(dx, dy) <= r` but avoids any floating-point root. We will use that trick later in `get_aoe_tiles_in_radius` (`aoe` stands for Area of Effect).
 
 ---
 
@@ -83,7 +91,7 @@ class ActionModalState(GameState):
     """State that returns to the main game after a successful action."""
 ```
 
-Any state that inherits from `ActionModalState` will be closed automatically on finish.
+Any state that inherits from `ActionModalState` closes automatically after a successful action.
 
 Update `InventoryState` from Part 8 to inherit from it:
 
@@ -102,11 +110,14 @@ And update the isinstance check in `GameState.handle_events`:
 
 Adding a new modal state in the future requires no changes to `handle_events`.
 
+!!! tip "Run it now"
+    If you run the game now, it should play exactly as at the end of Part 8: this was a refactor, so nothing visible changes. Once an enemy has hurt you, open the inventory with `i`, drink a potion, and check that the overlay still closes by itself. Do it again with `d` to drop an item. Running the game after a refactor like this one is a good habit: if something broke, you know it was this small change.
+
 ---
 
 ## SelectIndexState: cursor base class
 
-This part builds two targeting states: `SingleRangedAttackState` (single-tile cursor) and `AreaRangedAttackState` (AoE radius ring). Both share cursor movement, keyboard shortcuts, and mouse-click logic. `SelectIndexState` extracts that common behavior so each concrete state only needs to implement `on_index_selected`:
+This part builds two targeting states: `SingleRangedAttackState` (single-tile cursor) and `AreaRangedAttackState` (a cursor that highlights the area a spell will hit). Both share cursor movement, keyboard shortcuts, and mouse-click logic. `SelectIndexState` holds that common behavior, so each concrete state only needs to implement `on_index_selected`.
 
 Before writing the class, add the cursor navigation constants to `game/data/keys.py`:
 
@@ -115,11 +126,11 @@ Before writing the class, add the cursor navigation constants to `game/data/keys
  KEY_EXIT        = tcod.event.KeySym.ESCAPE
 +KEY_SELECT      = {tcod.event.KeySym.RETURN, tcod.event.KeySym.KP_ENTER}
 +
-+CURSOR_FAST     = tcod.event.Modifier.LSHIFT | tcod.event.Modifier.RSHIFT  # ×5
-+CURSOR_FASTER   = tcod.event.Modifier.LCTRL  | tcod.event.Modifier.RCTRL   # ×10
++CURSOR_FAST     = tcod.event.Modifier.LSHIFT | tcod.event.Modifier.RSHIFT  # x5
++CURSOR_FASTER   = tcod.event.Modifier.LCTRL  | tcod.event.Modifier.RCTRL   # x10
 ```
 
-`KEY_EXIT` already exists from Part 8 and covers any modal overlay (menus, cursors, dialogs), so there is nothing to rename here; we only add the cursor-navigation keys `KEY_SELECT`, `CURSOR_FAST`, and `CURSOR_FASTER`.
+`KEY_EXIT` already exists from Part 8 and closes any modal overlay (menus, cursors, dialogs), so the cursor reuses it. We only add `KEY_SELECT`, `CURSOR_FAST`, and `CURSOR_FASTER`.
 
 Now add to `game/game_states.py`:
 
@@ -168,9 +179,8 @@ class SelectIndexState(ActionModalState):
 
     def event_mousebuttondown(self, event: tcod.event.MouseButtonDown) -> Action | None:
         x, y = event.integer_position
-        if self.engine.game_map.in_bounds(x, y):
-            if event.button == 1:
-                return self.on_index_selected(x, y)
+        if self.engine.game_map.in_bounds(x, y) and event.button == 1:
+            return self.on_index_selected(x, y)
 
         return None
 
@@ -178,13 +188,22 @@ class SelectIndexState(ActionModalState):
         raise NotImplementedError()
 ```
 
-The cursor starts at the player's position. Holding Shift multiplies movement speed by 5; holding Ctrl multiplies by 10, handy on large maps. Enter or left-click confirms the selection.
+The cursor starts at the player's position. Each key press moves it one tile; with Shift held it moves 5 tiles, with Ctrl 10, and with both 50, which helps on large maps. Enter or left-click confirms the selection.
 
 Escape cancels targeting and returns to normal gameplay.
 
 ---
 
 ## SingleRangedAttackState
+
+The targeting states receive a function as a parameter, so they need a type for "a function". Add this import at the top of `game/game_states.py`:
+
+```diff
+ from __future__ import annotations
+
++from collections.abc import Callable
+ from typing import TYPE_CHECKING
+```
 
 ```python
 class SingleRangedAttackState(SelectIndexState):
@@ -193,7 +212,7 @@ class SingleRangedAttackState(SelectIndexState):
     def __init__(
         self,
         engine: Engine,
-        callback,
+        callback: Callable[[tuple[int, int]], Action],
     ) -> None:
         super().__init__(engine)
         self.callback = callback
@@ -202,7 +221,7 @@ class SingleRangedAttackState(SelectIndexState):
         return self.callback((x, y))
 ```
 
-The `callback` is a function that accepts `(x, y)` and returns an `Action`. The consumable provides the callback when it creates the state.
+The `callback` is a function that accepts `(x, y)` and returns an `Action`. Its annotation says exactly that: `Callable[[tuple[int, int]], Action]` reads as "a callable that takes one `tuple[int, int]` argument and returns an `Action`". The list holds the parameter types; the last item is the return type. The consumable provides the callback when it creates the state.
 
 ---
 
@@ -216,7 +235,7 @@ The state does not hardcode a color. Different spells may want different highlig
 FIREBALL_AOE = Color(255, 0, 0)
 ```
 
-Keep it as its own constant rather than reusing the scroll's item color, so the blast highlight can diverge from the glyph later.
+Keep it as its own constant rather than reusing the scroll's item color, so you can change the blast color later without changing the scroll.
 
 Add the class to `game/game_states.py`:
 
@@ -229,7 +248,7 @@ class AreaRangedAttackState(SelectIndexState):
         engine: Engine,
         radius: int,
         color: Color,
-        callback,
+        callback: Callable[[tuple[int, int]], Action],
     ) -> None:
         super().__init__(engine)
         self.radius   = radius
@@ -265,9 +284,9 @@ def on_render(self, console: tcod.console.Console) -> None:
 
 `draw_frame` draws a rectangle outline. `clear=False` leaves the tiles inside untouched.
 
-![Fireball frame](images/firewall_1.png)
+![Fireball frame](images/fireball_1.png)
 
-The square is quick to implement, but misleading: corner tiles are further from the center than the stated radius, and the outline ignores walls. Let's replace it with a real circle.
+The square is quick to implement, but misleading: corner tiles are farther from the center than the stated radius, and the outline ignores walls. We will replace it with a real circle.
 
 ### Step 2: True circle
 
@@ -300,14 +319,25 @@ Now add two straight-line checks. They share the same shape, but answer differen
 - **`has_line_of_sight`** asks whether vision can pass along the line, so it uses `is_opaque`.
 - **`has_line_of_movement`** asks whether a straight-line path can be traversed, so it uses `is_blocking`.
 
-The fireball AoE will use `has_line_of_sight`. That keeps this targeting rule tied to what the map currently knows about visibility: opaque tiles stop the blast preview, transparent tiles do not. We add `has_line_of_movement` now as its deliberate companion: the same Bresenham shape, but answering the *traversal* question (is the straight path blocked by a non-walkable tile?) rather than the *vision* one. Part 9 never calls it, yet it is exactly what a later straight-line movement effect needs, such as a charge or dash spell that must stop at the first wall. Writing the pair together keeps the two questions, vision via `is_opaque` and traversal via `is_blocking`, side by side.
+The fireball AoE uses `has_line_of_sight`, so the blast follows the same rule as vision: opaque tiles stop it, transparent tiles do not.
+
+`has_line_of_movement` has the same shape but answers a different question: can something travel along this straight line, or does a non-walkable tile block it? Part 9 never calls it. We write it now, next to its twin, because it is what a straight-line movement effect needs, such as a charge or dash spell that must stop at the first wall.
+
+Both use `tcod.los`, and the AoE helpers below use `math`, so update the imports at the top of `game/map/game_map.py`:
+
+```diff
+ from __future__ import annotations
+
++import math
+ from collections.abc import Iterable, Iterator
+ from typing import TYPE_CHECKING
+
+ import numpy as np
++import tcod
+ from tcod.console import Console
+```
 
 ```python
-import math
-import tcod
-
-...
-
 def has_line_of_sight(self, origin_x: int, origin_y: int, target_x: int, target_y: int) -> bool:
     if not self.in_bounds(origin_x, origin_y) or not self.in_bounds(target_x, target_y):
         return False
@@ -349,7 +379,7 @@ def has_line_of_movement(self, origin_x: int, origin_y: int, target_x: int, targ
 **`get_aoe_tiles_in_radius`** returns a boolean numpy mask of every tile within radius that has line of sight to the center:
 
 ```python
-def get_aoe_tiles_in_radius(self, center_x: int, center_y: int, radius: float):
+def get_aoe_tiles_in_radius(self, center_x: int, center_y: int, radius: float) -> np.ndarray:
     area = np.zeros((self.width, self.height), dtype=bool, order="F")
 
     if not self.in_bounds(center_x, center_y):
@@ -366,7 +396,7 @@ def get_aoe_tiles_in_radius(self, center_x: int, center_y: int, radius: float):
     min_y = max(0,           math.floor(center_y - radius))
     max_y = min(self.height, math.ceil( center_y + radius) + 1)
 
-    radius_sqr = radius * radius
+    radius_sqr = radius * radius + radius
     for y in range(min_y, max_y):
         dy = y - center_y
         dy_sqr = dy * dy
@@ -381,7 +411,18 @@ def get_aoe_tiles_in_radius(self, center_x: int, center_y: int, radius: float):
     return area
 ```
 
-The circle test is `dx² + dy² <= r²`. Comparing squared distances is mathematically equivalent to comparing distances, but avoids `math.sqrt` entirely. The line-of-sight check then cuts out tiles that an opaque wall would shield.
+The circle test compares squared distances, which is mathematically equivalent to comparing distances but avoids `math.sqrt` entirely. The line-of-sight check then cuts out tiles that an opaque wall would shield.
+
+The threshold is `r² + r`, not `r²`. The plain `dx² + dy² <= r²` test is correct, but on a grid it looks lumpy: with `r = 3`, each side of the circle ends in a single tile that sticks out. The extra `+ r` fixes that.
+
+!!! tip "Why `r² + r` draws a rounder circle"
+    Grid circles look best when their edge falls on the *boundary between* tiles, not through the middle of a tile. In practice that means a radius of 3.5 instead of 3.
+
+    So the test we want is `dx² + dy² <= (r + 0.5)²`, which expands to `r² + r + 0.25`. For whole-number `dx`, `dy`, and `r`, the left side is always a whole number, so the `0.25` can never change the result: `r² + r` gives exactly the same tiles with no floats at all.
+
+    Amit Patel's [Circle drawing on a grid](https://www.redblobgames.com/grids/circle-drawing/) (Red Blob Games) shows the difference interactively.
+
+Only this yes/no helper changes. The weighted version in Step 3 already fades its edge smoothly, so it keeps the plain radius.
 
 Rewrite `on_render` to highlight the matching tiles:
 
@@ -390,16 +431,21 @@ def on_render(self, console: tcod.console.Console) -> None:
     super().on_render(console)
 
     x, y = self.engine.mouse_location
-    aoe = self.engine.game_map.get_aoe_tiles_in_radius(x, y, self.radius)
-    console.bg[aoe] = self.color
+    game_map = self.engine.game_map
+    aoe = game_map.get_aoe_tiles_in_radius(x, y, self.radius)
+    console.bg[0 : game_map.width, 0 : game_map.height][aoe] = self.color
 ```
 
 `console.bg` is a numpy array of shape `(width, height, 3)`. Indexing it with a boolean mask sets the background color of every `True` tile in one operation.
 
+The mask has the map's shape, `(80, 44)`, but the console is `(80, 50)`: the extra rows hold the HUD. numpy refuses a mask whose shape does not match the array, so we first slice the console down to the map area, the same slice `GameMap.render` uses for `console.rgb`.
+
 !!! note "Shorthand aliases"
     `console.bg` and `console.fg` are shorthand for `console.rgb["bg"]` and `console.rgb["fg"]`. You may see either form in tcod documentation or other tutorials.
 
-![Fireball circle](images/firewall_2.png)
+    They are not deprecated, but the explicit form is clearer. The name `console.bg` does not say which buffer it reads: `console.rgb` stores colors as RGB, while `console.rgba` adds an alpha channel. `console.rgb["bg"]` makes that clear at the call site. This tutorial keeps the short form because it is easier to read in small listings; in your own code, prefer the explicit one.
+
+![Fireball circle](images/fireball_2.png)
 
 ### Step 3: Antialiased circle
 
@@ -410,7 +456,7 @@ The circle above has a hard edge: each tile is either fully highlighted or not. 
 Add `get_aoe_weights_in_radius` to `GameMap`. It returns a `float32` array where interior tiles carry `1.0` and edge tiles carry a value between `0.0` and `1.0`:
 
 ```python
-def get_aoe_weights_in_radius(self, center_x: int, center_y: int, radius: float):
+def get_aoe_weights_in_radius(self, center_x: int, center_y: int, radius: float) -> np.ndarray:
     weights = np.zeros((self.width, self.height), dtype=np.float32, order="F")
 
     if not self.in_bounds(center_x, center_y):
@@ -453,8 +499,12 @@ Unlike Step 2's `get_aoe_tiles_in_radius`, which only needed a yes/no threshold 
 
 Update `on_render` to scale the highlight color by each tile's weight. Add this import to `game/game_states.py`:
 
-```python
-import math
+```diff
+ from __future__ import annotations
+
++import math
+ from collections.abc import Callable
+ from typing import TYPE_CHECKING
 ```
 
 Then the final `on_render`:
@@ -482,7 +532,7 @@ def on_render(self, console: tcod.console.Console) -> None:
 
 The bounds `min_x/max_x/min_y/max_y` are precomputed to avoid iterating the entire map on every render frame. `Color.scale(factor)` multiplies each RGB channel by `factor` and rounds to the nearest integer; it is the method we added to `Color` back in Part 5. At `factor = 1.0` the color is unchanged; at `factor = 0.5` it is half as bright.
 
-![Fireball smooth](images/firewall_3.png)
+![Fireball smooth](images/fireball_3.png)
 
 ---
 
@@ -503,7 +553,7 @@ Extend `game/data/sprites.py`:
 Extend `game/data/colors.py`:
 
 ```diff
- HEALTH_POTION = Color(127, 0, 255)
+ HEALTH_POTION    = Color(127,   0, 255)
 +
 +CONFUSION_SCROLL = Color(207,  63, 255)
 +FIREBALL_SCROLL  = Color(255,   0,   0)
@@ -524,25 +574,43 @@ def get_action(self, _consumer, engine):
     # returns None implicitly; the method appears to do nothing
 ```
 
-Two problems with this:
+It runs, but it has two problems:
 
 - `get_action()` is declared `-> Action | None` but uses `None` as a signal for "I already handled it." A caller reading the signature has no idea a state was just installed.
-- `consumable.py` (model layer) imports from `game_states.py` (UI layer), which already imports from `actions.py`. That creates a dependency cycle at the module level.
+- `consumable.py` is part of the game model: it decides what an item does. `game_states.py` is the user interface: it reads keys and draws the screen. Today the user interface depends on the model, never the other way round. The naive version adds a dependency in the opposite direction, so the two layers would depend on each other, and the consumable could only be used where a screen and a cursor exist.
 
-The fix is a thin data class in `game/actions.py`. `get_action()` returns it; `GameState.handle_events()` reads its fields and creates the state. The model layer never imports from the UI layer.
+The fix is a thin data class in `game/actions.py`. `get_action()` returns it; `GameState.handle_events()` reads its fields and creates the state. The model layer never imports from the user interface.
 
-Add to `game/actions.py`, after `DropItem`. Also add this import at the top of the file:
+The targeting actions build an `ItemAction` that also carries the chosen tile, so first give `ItemAction` a `target_pos` parameter in `game/actions.py`:
 
-```python
-from game.data.colors import Color
+```diff
+ class ItemAction(Action):
+
+-    def __init__(self, item: Item) -> None:
++    def __init__(self, item: Item, target_pos: tuple[int, int] | None = None) -> None:
+         super().__init__()
+         self.item = item
++        self.target_pos = target_pos
 ```
+
+`perform` is unchanged from Part 8: it still asserts `isinstance(entity, Actor)` before calling `activate`. Items that need no target, such as the health potion, simply leave `target_pos` as `None`.
+
+The AoE targeting action stores a color, so import `Color` at the top of the same file:
+
+```diff
+ from game.data import colors
++from game.data.colors import Color
+ from game.entities.entity import Actor, Item
+```
+
+Then add the targeting actions after `DropItem`:
 
 ```python
 class TargetingAction(Action):
     """Data container: GameState dispatches to the appropriate targeting state."""
     prompt: str
 
-    def perform(self, _engine: Engine, _entity: Entity) -> None:
+    def perform(self, engine: Engine, entity: Entity) -> None:
         pass  # satisfies ABC; GameState does the real work
 
 
@@ -572,9 +640,9 @@ class AreaRangedTargetingAction(TargetingAction):
 
 `perform()` is a no-op that satisfies the abstract base class. The real work happens in `handle_events()` after `perform()` returns: it checks `isinstance(action, TargetingAction)`, reads `prompt` and `callback`, and installs the correct state. `actions.py` never imports `game_states`.
 
-`callback` is a lambda built at construction time. When the player confirms a target, the targeting state calls `callback((x, y))` and the result becomes the next action. The same pattern works for chained targeting: a callback that returns another `TargetingAction` would chain into a second cursor, handled automatically by the next loop iteration.
+Its parameters are unused, but they keep the names `engine` and `entity`, as in `EscapeAction.perform`. `Action.perform` declares those names, so a caller could pass them by keyword; renaming them to `_engine` in an override breaks that, and pyright reports it. The underscore trick only works when the base method itself uses underscored names, as `Consumable.get_action` does.
 
-Note that `callback` uses `ItemAction(item=item, target_pos=pos)`. The `target_pos` parameter does not exist in `ItemAction` yet; you will add it shortly in the `ConfusionConsumable` section.
+`callback` is a lambda built at construction time. When the player confirms a target, the targeting state calls `callback((x, y))` and the result becomes the next action. The same pattern works for chained targeting: a callback that returns another `TargetingAction` opens a second cursor, because `handle_events()` treats it like any other targeting action it receives.
 
 `prompt: str` is a class-level annotation without a value. It tells the type checker that every `TargetingAction` subclass provides a `.prompt` attribute, without forcing a default. Python does not enforce this at runtime; the subclass `__init__` is what actually sets the value.
 
@@ -589,13 +657,16 @@ Note that `callback` uses `ItemAction(item=item, target_pos=pos)`. The `target_p
 
 ## ConfusedEnemy AI
 
-Add to `game/entities/components/ai.py`:
+`ConfusedEnemy` picks a random direction, so `game/entities/components/ai.py` needs `random`. It already imports `MessageLog`, which the new class also uses:
 
-```python
-import random
+```diff
+ from __future__ import annotations
 
-from game.message_log import MessageLog
++import random
+ from typing import TYPE_CHECKING
 ```
+
+Then add the class:
 
 ```python
 class ConfusedEnemy(BaseAI):
@@ -630,17 +701,16 @@ class ConfusedEnemy(BaseAI):
             BumpAction(direction_x, direction_y).perform(engine, entity)
 ```
 
-A confused enemy picks a random direction each turn. It can still accidentally attack the player if it bumps into them; this is a feature, not a bug. When the confusion expires it restores its previous AI.
+A confused enemy picks a random direction each turn. If that direction happens to point at the player, `BumpAction` turns the step into an attack; this is intended, since a confused orc is still dangerous at close range. When the confusion expires, it restores its previous AI.
 
 !!! info "Why does `ConfusedEnemy` receive `entity` in `__init__`?"
-    Every other component gets its `entity` set externally after creation (`component.entity = self` in `Actor.__init__`). `ConfusedEnemy` is different because it is created at runtime during gameplay, not at game initialisation. The target actor is already known at construction time, so passing `entity` directly and assigning `self.entity = entity` in `__init__` is the right approach here.
-
-!!! tip "Part 6 Exercise 3: update CowardEnemy to use this pattern"
-    If you implemented the flee behavior from Part 6 Exercise 3, `CowardEnemy` currently has no way to revert when the enemy recovers HP. Apply the same `previous_ai` pattern here: give `CowardEnemy` a `previous_ai` parameter in `__init__`, and at the start of `perform()` check `entity.fighter.should_flee()`. If it returns `False`, restore `previous_ai` and act normally. Pass `previous_ai=entity.ai` when constructing `CowardEnemy` in `HostileEnemy.perform()`.
+    Every other component gets its `entity` set externally after creation (`component.entity = self` in `Actor.__init__`). `ConfusedEnemy` is different because it is created during play, not when the game starts. The target actor is already known at construction time, so passing `entity` directly and assigning `self.entity = entity` in `__init__` is the right approach here.
 
 ---
 
 ## Three new consumables
+
+All three go in `game/entities/components/consumable.py`, next to `HealingConsumable`.
 
 ### LightningDamageConsumable (auto-target nearest)
 
@@ -678,7 +748,7 @@ class LightningDamageConsumable(Consumable):
 
 ### ConfusionConsumable (cursor targeting)
 
-Update the imports at the top of `consumable.py`. The targeting classes now come from `actions.py`, so the local `import game.game_states` disappears:
+Update the imports at the top of `consumable.py`. The targeting classes come from `actions.py`, and the confusion effect needs `ConfusedEnemy`:
 
 ```diff
 -from game.actions import ItemAction
@@ -687,7 +757,9 @@ Update the imports at the top of `consumable.py`. The targeting classes now come
 +    ItemAction,
 +    SingleRangedTargetingAction,
 +)
+ from game.data import colors
 +from game.entities.components.ai import ConfusedEnemy
+ from game.entities.components.base_component import ItemComponent
 ```
 
 Add the targeting colors to `game/data/colors.py` (used by the confusion message below and, shortly, by the targeting prompt in `handle_events`):
@@ -696,6 +768,8 @@ Add the targeting colors to `game/data/colors.py` (used by the confusion message
 NEEDS_TARGET          = Color(63, 255, 255)
 STATUS_EFFECT_APPLIED = Color(63, 255, 63)
 ```
+
+Then add the consumable to `consumable.py`:
 
 ```python
 class ConfusionConsumable(Consumable):
@@ -736,21 +810,7 @@ class ConfusionConsumable(Consumable):
         self.consume()
 ```
 
-`get_action()` now returns a value. `_engine` becomes genuinely unused and is underscored. `GameState.handle_events()` reads the returned `SingleRangedTargetingAction`, installs the state, and shows the prompt; the consumable does none of that work.
-
-`ItemAction` needs a `target_pos` parameter. Add it to `__init__` in `game/actions.py`:
-
-```diff
- class ItemAction(Action):
-
--    def __init__(self, item: Item) -> None:
-+    def __init__(self, item: Item, target_pos: tuple[int, int] | None = None) -> None:
-         super().__init__()
-         self.item = item
-+        self.target_pos = target_pos
-```
-
-`perform` is unchanged from Part 8: it still asserts `isinstance(entity, Actor)` before calling `activate`.
+`get_action()` now returns a value. Unlike the naive version, it never touches `engine`, so the parameter keeps its underscore. `GameState.handle_events()` reads the returned `SingleRangedTargetingAction`, installs the state, and shows the prompt; the consumable does none of that work.
 
 ### FireballDamageConsumable (AoE cursor)
 
@@ -799,17 +859,17 @@ class FireballDamageConsumable(Consumable):
         self.consume()
 ```
 
-`FireballDamageConsumable.get_action()` returns an `AreaRangedTargetingAction`; `handle_events()` installs the `AreaRangedAttackState`. On confirm, `activate()` uses the same weight grid that drives the visual preview (the same `get_aoe_weights_in_radius` call). Actors at the center receive full `damage`; actors in the outer ring receive a fraction proportional to their weight (between 0.0 and 1.0). It raises `Impossible` only if the tile is not visible or no actor was hit.
+`FireballDamageConsumable.get_action()` returns an `AreaRangedTargetingAction`; `handle_events()` installs the `AreaRangedAttackState`. On confirm, `activate()` uses the same weight grid that drives the visual preview (the same `get_aoe_weights_in_radius` call). Actors within the radius receive full `damage`; actors in the outer ring receive a fraction proportional to their weight (between 0.0 and 1.0). It raises `Impossible` only if the tile is not visible or no actor was hit.
 
 !!! note "Damage falloff at the edges"
-    Using `get_aoe_weights_in_radius` instead of `get_aoe_tiles_in_radius` ties the damage model directly to the visual one: the gradient the player sees on screen is the same gradient that determines how hard each actor is hit. Actors fully inside the radius take `damage × 1.0`; actors in the antialiased outer ring take proportionally less. This makes the radius ring a meaningful indicator rather than a decorative effect.
+    Using `get_aoe_weights_in_radius` instead of `get_aoe_tiles_in_radius` ties the damage model directly to the visual one: the gradient the player sees on screen is the same gradient that determines how hard each actor is hit. Actors fully inside the radius take `damage × 1.0`; actors in the antialiased outer ring take proportionally less. This makes the highlighted area a real indicator, not decoration.
 
 ---
 
 ## game/entities/factories.py: add scrolls
 
 !!! note "If you skipped Part 8 Exercises 2, 3 or 4"
-    This section reuses optional Part 8 exercises. **Exercise 2** added `BackpackConsumable` and the `backpack_scroll` template: if you skipped it, omit the `BackpackConsumable` import and the `backpack_scroll` line in `item_chances`. **Exercise 3** added the `key` parameter to `Item`: if you skipped it, omit the `key=` lines on each scroll and the `keys.py` hotkey additions below. **Exercise 4** gave those hotkeys named constants: if you did Exercise 3 but not 4, write raw values (`key=tcod.event.KeySym.C`) instead of the `keys.*` constants.
+    This section reuses Part 8 exercises. **Exercise 2** added `BackpackConsumable` and the `backpack_scroll` template: if you skipped it, omit the `BackpackConsumable` import and the `backpack_scroll` line in `item_chances`. **Exercise 3** added the `key` parameter to `Item`: if you skipped it, omit the `key=` lines on each scroll and the `keys.py` hotkey additions below. **Exercise 4** gave those hotkeys named constants: if you did Exercise 3 but not 4, write raw values (`key=tcod.event.KeySym.C`) instead of the `keys.*` constants.
 
 Add the scroll hotkeys to `keys.py`:
 
@@ -845,7 +905,7 @@ fireball_scroll = Item(
     char       = sprites.FIREBALL_SCROLL,
     color      = colors.FIREBALL_SCROLL,
     name       = "Fireball Scroll",
-    consumable = FireballDamageConsumable(damage=12, radius=3),
+    consumable = FireballDamageConsumable(damage=12.0, radius=3),
     # Part-8. Exercise 3: Persistent item keys
     key        = keys.FIREBALL_SCROLL,       # Part-8. Exercise 4: Item hotkey constants and key_label
 )
@@ -854,7 +914,7 @@ lightning_scroll = Item(
     char       = sprites.LIGHTNING_SCROLL,
     color      = colors.LIGHTNING_SCROLL,
     name       = "Lightning Scroll",
-    consumable = LightningDamageConsumable(damage=20, maximum_range=5),
+    consumable = LightningDamageConsumable(damage=20.0, maximum_range=5),
     # Part-8. Exercise 3: Persistent item keys
     key        = keys.LIGHTNING_SCROLL,      # Part-8. Exercise 4: Item hotkey constants and key_label
 )
@@ -877,6 +937,11 @@ Each scroll pairs a sprite and color constant with its consumable. The parameter
 
 Because `place_entities` already reads `factories.item_chances` via `zip`, the map generator picks up the new items without any changes.
 
+!!! tip "Run it now"
+    If you run the game now, you can check the first half of the work. Scrolls (`~`) appear on the floor in three colors. Pick up a lightning scroll, walk within a few tiles of an enemy, and use it: the nearest visible enemy is struck. Try it with no enemy in sight, too: you get a message and keep the scroll.
+
+    The confusion and fireball scrolls do nothing yet: the turn passes and the scroll stays in your inventory. Their targeting actions reach `handle_events()`, which does not know about them yet. The next section connects them to the cursor states.
+
 ---
 
 ## Update GameState.handle_events
@@ -892,11 +957,13 @@ The targeting states respond to mouse clicks. Add the `MouseButtonDown` case to 
              self.engine.mouse_location = event.integer_position
 
 +        case tcod.event.MouseButtonDown():
-+            action = self.event_mousebuttondown(event)
++            action = self.event_mousebuttondown(event)  # pylint: disable=assignment-from-none
 
          case tcod.event.KeyDown():
-             action = self.event_keydown(event)
+             action = self.event_keydown(event)  # pylint: disable=assignment-from-none
 ```
+
+The new line needs the same pylint comment as the `event_keydown` line below it: the base `event_mousebuttondown` always returns `None`, and pylint cannot see that subclasses override it.
 
 ```python
 def event_mousebuttondown(self, _event: tcod.event.MouseButtonDown) -> Action | None:
@@ -950,14 +1017,16 @@ Import the new classes at the top of `game_states.py`:
      PickupAction,
 +    SingleRangedTargetingAction,
 +    TargetingAction,
-     WaitAction
+     WaitAction,
  )
 ```
 
 The `return` is placed after the `try/except`, not before. If a `TargetingAction.perform()` override ever raises `Impossible` (for example "you cannot target while stunned"), the existing `except` already catches it. Placing the targeting check before the try would bypass that protection.
 
 !!! tip "Why `perform()` is a no-op"
-    The alternative is to do the import and state creation inside `perform()`. It runs correctly, but pylint still flags `consumable.py → game_states.py → actions.py → consumable.py` as a cycle, even with a local import. With the current design, `actions.py` has zero imports from `game_states.py`; the dependency is strictly one-way.
+    The alternative is to do the import and state creation inside `perform()`. It runs correctly, but `game_states.py` already imports `actions.py`, so `actions.py` importing `game_states.py` back closes a cycle. pylint reports it (`cyclic-import`, `game.actions -> game.game_states`) even when the import is inside the function.
+
+    With the current design, `actions.py` has zero imports from `game_states.py`; the dependency is strictly one-way.
 
 ---
 
@@ -966,8 +1035,8 @@ The `return` is placed after the `try/except`, not before. If a `TargetingAction
 Run the game with `uv run main.py` (or `python main.py`):
 
 - [ ] `~` scrolls appear on the floor in different colors (purple, red, yellow)
-- [ ] Picking up a lightning scroll and pressing `i → l` strikes the nearest enemy
-- [ ] Picking up a confusion scroll opens a targeting cursor (white highlight on player tile)
+- [ ] Using a lightning scroll from the inventory (`i`, then its letter) strikes the nearest visible enemy
+- [ ] Using a confusion scroll opens a targeting cursor (white highlight on the player's tile)
 - [ ] Moving the cursor to an enemy and pressing Enter confuses it; it wanders randomly for ~10 turns
 - [ ] A fireball scroll opens AoE targeting with a red circle highlight
 - [ ] The fireball damages all actors (including the player!) within the radius
@@ -1045,52 +1114,145 @@ game/
 
 ## Exercises
 
+The next parts assume you did these exercises. Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
+
+Each exercise adds a new scroll. Register it the same way this part registered the three spell scrolls: a sprite, a color, a template in `factories.py`, and an entry in `item_chances`. If you did Part 8 Exercises 3 and 4, give it a hotkey too. Name the templates `mapping_scroll`, `drain_scroll`, and `teleport_scroll`: Part 12 refers to them by those names when it rebuilds the item table.
+
+??? note "Reference: registering the three scrolls"
+    `game/data/sprites.py`:
+
+    ```diff
+     LIGHTNING_SCROLL = "~"
+    +MAPPING_SCROLL   = "~"  # Part-9. Exercise 1: Scroll of mapping
+    +DRAIN_SCROLL     = "~"  # Part-9. Exercise 2: Drain scroll
+    +TELEPORT_SCROLL  = "~"  # Part-9. Exercise 3: Teleport scroll
+    ```
+
+    `game/data/colors.py`:
+
+    ```diff
+     LIGHTNING_SCROLL    = Color(255, 255,   0)
+    +MAPPING_SCROLL      = Color(127, 191, 255)  # Part-9. Exercise 1: Scroll of mapping
+    +DRAIN_SCROLL        = Color(127, 255,  63)  # Part-9. Exercise 2: Drain scroll
+    +TELEPORT_SCROLL     = Color(255,  63, 191)  # Part-9. Exercise 3: Teleport scroll
+    ```
+
+    `game/data/keys.py` (only with Part 8 Exercises 3 and 4). `D` already drops items, so the drain scroll uses `R`:
+
+    ```diff
+     LIGHTNING_SCROLL = tcod.event.KeySym.L
+    +MAPPING_SCROLL   = tcod.event.KeySym.M  # Part-9. Exercise 1: Scroll of mapping
+    +DRAIN_SCROLL     = tcod.event.KeySym.R  # Part-9. Exercise 2: Drain scroll
+    +TELEPORT_SCROLL  = tcod.event.KeySym.T  # Part-9. Exercise 3: Teleport scroll
+    ```
+
+    `game/entities/factories.py`, the imports:
+
+    ```diff
+         ConfusionConsumable,
+    +    DrainConsumable,  # Part-9. Exercise 2: Drain scroll
+         FireballDamageConsumable,
+         HealingConsumable,
+         LightningDamageConsumable,
+    +    MappingConsumable,  # Part-9. Exercise 1: Scroll of mapping
+    +    TeleportConsumable,  # Part-9. Exercise 3: Teleport scroll
+         TreasureConsumable,
+    ```
+
+    The templates, after `lightning_scroll`:
+
+    ```python
+    # Part-9. Exercise 1: Scroll of mapping
+    mapping_scroll = Item(
+        char       = sprites.MAPPING_SCROLL,
+        color      = colors.MAPPING_SCROLL,
+        name       = "Mapping Scroll",
+        consumable = MappingConsumable(),
+        # Part-8. Exercise 3: Persistent item keys
+        key        = keys.MAPPING_SCROLL,       # Part-8. Exercise 4: Item hotkey constants and key_label
+    )
+
+    # Part-9. Exercise 2: Drain scroll
+    drain_scroll = Item(
+        char       = sprites.DRAIN_SCROLL,
+        color      = colors.DRAIN_SCROLL,
+        name       = "Drain Scroll",
+        consumable = DrainConsumable(damage=10.0, maximum_range=5),
+        # Part-8. Exercise 3: Persistent item keys
+        key        = keys.DRAIN_SCROLL,         # Part-8. Exercise 4: Item hotkey constants and key_label
+    )
+
+    # Part-9. Exercise 3: Teleport scroll
+    teleport_scroll = Item(
+        char       = sprites.TELEPORT_SCROLL,
+        color      = colors.TELEPORT_SCROLL,
+        name       = "Teleport Scroll",
+        consumable = TeleportConsumable(),
+        # Part-8. Exercise 3: Persistent item keys
+        key        = keys.TELEPORT_SCROLL,      # Part-8. Exercise 4: Item hotkey constants and key_label
+    )
+    ```
+
+    And the spawn table:
+
+    ```diff
+         (lightning_scroll, 15),
+    +    (mapping_scroll,   15),  # Part-9. Exercise 1: Scroll of mapping
+    +    (drain_scroll,     15),  # Part-9. Exercise 2: Drain scroll
+    +    (teleport_scroll,  15),  # Part-9. Exercise 3: Teleport scroll
+     ]
+    ```
+
 1. **Scroll of mapping**:
 
-    Add a `MappingConsumable` that reveals the whole floor's layout. The design catch is *what* to reveal: `explored[:] = True` would also expose the uninitialised tiles at the map edges. Instead, track which tiles were actually **carved** during generation, in a boolean array filled as rooms and tunnels are dug, and reveal only those. Make the reveal persist under Part 4's fading-memory system, so the mapped area does not fade back to black.
+    Add a `MappingConsumable` that reveals the whole floor's layout. The design catch is *what* to reveal: the map starts as solid wall, so `explored[:] = True` would also draw all the rock between rooms that no corridor ever reaches. Instead, track which tiles were actually **dug** during generation, in a boolean array filled as rooms and tunnels are dug, and reveal only those.
+
+    The second catch is making the map last. If you did Part 4's fading memory (Exercise 4), `update_fov()` rebuilds `explored` from `memory` on every turn, so anything the scroll adds to `explored` disappears on the next turn, or a few turns later if you also refresh `memory`. A magic map should stay: keep a second array with the tiles the scroll revealed, and include it when `update_fov()` rebuilds `explored`. If you skipped that exercise, `explored` never fades and revealing it once is enough.
 
     ??? note "Reference implementation"
-        A carved-tiles array in `GameMap.__init__` (`game/map/game_map.py`):
+        Two new arrays in `GameMap.__init__` (`game/map/game_map.py`): the tiles dug during generation, and the tiles a scroll has revealed:
 
         ```diff
-        self.explored = np.full((width, height), fill_value=False, order="F")
+         self.explored = np.full((width, height), fill_value = False, order="F")
+
+        +# Part-9. Exercise 1: Scroll of mapping
         +self.mapped_tiles = np.full((width, height), fill_value=False, order="F")
+        +self.revealed     = np.full((width, height), fill_value=False, order="F")
         ```
 
         An `outer` property on `RectangularRoom` (`game/map/map_generator.py`), the room's bounding box including its surrounding walls:
 
         ```python
+        # Part-9. Exercise 1: Scroll of mapping
         @property
         def outer(self) -> tuple[slice, slice]:
             """The room's bounding box including surrounding walls as numpy slices."""
             return slice(self.x1, self.x2 + 1), slice(self.y1, self.y2 + 1)
         ```
 
-        Fill `mapped_tiles` as `generate_dungeon` carves. When a room is dug:
+        Fill `mapped_tiles` as `generate_dungeon` digs. When a room is dug:
 
         ```diff
-        dungeon.tiles[new_room.inner]        = tile_types.floor
-        +dungeon.mapped_tiles[new_room.outer] = True
+         dungeon.tiles[new_room.inner] = tile_types.floor
+        +dungeon.mapped_tiles[new_room.outer] = True  # Part-9. Exercise 1: Scroll of mapping
         ```
 
-        ...and in the tunnel loop:
+        ...and in the tunnel loop, the tile plus its eight neighbors, so the tunnel walls show too:
 
         ```diff
-        dungeon.tiles[x, y] = tile_types.floor
-        +dungeon.mapped_tiles[x-1:x+2, y-1:y+2] = True
+         dungeon.tiles[x, y] = tile_types.floor
+        +dungeon.mapped_tiles[x-1:x+2, y-1:y+2] = True  # Part-9. Exercise 1: Scroll of mapping
         ```
 
-        The consumable in `game/entities/components/consumable.py`: reveal with `|=` and refresh `memory` so the reveal survives the fading-memory system. No targeting is needed, so the base `get_action()` works as-is:
+        The consumable in `game/entities/components/consumable.py`. No targeting is needed, so the base `get_action()` works as-is:
 
         ```python
         # Part-9. Exercise 1: Scroll of mapping
         class MappingConsumable(Consumable):
 
             def activate(self, _action: ItemAction, engine: Engine, _consumer: Actor) -> None:
+                engine.game_map.revealed |= engine.game_map.mapped_tiles
                 engine.game_map.explored |= engine.game_map.mapped_tiles
-
-                # Part-4. Exercise 4: Fading memory
-                engine.game_map.memory[engine.game_map.mapped_tiles] = max(1, engine.memory_duration)
 
                 MessageLog.add_message(
                     "The scroll reveals the layout of this floor!",
@@ -1098,6 +1260,19 @@ game/
                 )
                 self.consume()
         ```
+
+        With fading memory, `update_fov()` (`game/engine.py`) keeps the revealed tiles explored:
+
+        ```diff
+         else:
+             # Part-4. Exercise 4: Fading memory
+             self.game_map.memory[self.game_map.visible] = self.memory_duration
+        -    self.game_map.explored[:] = self.game_map.memory > 0
+        +    # Part-9. Exercise 1: Scroll of mapping
+        +    self.game_map.explored[:] = (self.game_map.memory > 0) | self.game_map.revealed
+        ```
+
+        Only the layout is revealed for good. Monsters and items still appear only when you see them, and ordinary memory still fades as before.
 
 2. **Drain scroll**:
 
@@ -1112,6 +1287,56 @@ game/
 
     Enforce range explicitly after the visibility check: `consumer.distance(target.x, target.y) > self.maximum_range`. This mirrors how `LightningDamageConsumable` uses its own `maximum_range`.
 
+    ??? note "Reference implementation"
+        In `game/entities/components/consumable.py`:
+
+        ```python
+        # Part-9. Exercise 2: Drain scroll
+        class DrainConsumable(Consumable):
+
+            def __init__(self, damage: float, maximum_range: int) -> None:
+                self.damage = damage
+                self.maximum_range = maximum_range
+
+            def get_action(self, _consumer: Actor, _engine: Engine) -> Action:
+                return SingleRangedTargetingAction(
+                    item   = self.entity,
+                    prompt = "Select a target to drain.",
+                )
+
+            def activate(self, action: ItemAction, engine: Engine, consumer: Actor) -> None:
+                if action.target_pos is None:
+                    raise Impossible("You need to select a target")
+
+                target = engine.game_map.get_actor_at(*action.target_pos)
+
+                if not target or target is consumer or target.ai is None:
+                    raise Impossible("You must select an enemy to target.")
+
+                if not engine.game_map.visible[target.x, target.y]:
+                    raise Impossible("You cannot target an area you cannot see.")
+
+                if consumer.distance(target.x, target.y) > self.maximum_range:
+                    raise Impossible("That target is too far away.")
+
+                amount_drained = min(self.damage, target.fighter.hp)
+
+                MessageLog.add_message(
+                    f"You drain {amount_drained:.1f} HP from the {target.name}!",
+                    colors.PLAYER_ATTACK,
+                )
+                target.fighter.take_damage(amount_drained)
+
+                amount_recovered = consumer.fighter.heal(amount_drained)
+                MessageLog.add_message(
+                    f"You recover {amount_recovered:.1f} HP!",
+                    colors.HEALTH_RECOVERED,
+                )
+                self.consume()
+        ```
+
+        The damage message comes before `take_damage()`, so if the hit kills the target, its death message appears after the drain message, in the order things happened.
+
 3. **Teleport scroll**:
 
     Add a `TeleportConsumable` that returns a `SingleRangedTargetingAction` from `get_action()` with prompt `"Select a destination."`. The destination must be in bounds, explored, and walkable. Also check that no blocking entity (another actor) occupies the tile:
@@ -1123,6 +1348,48 @@ game/
     ```
 
     Once the destination passes every check, move the player there with `consumer.place(x, y, game_map)` and log the teleport.
+
+    ??? note "Reference implementation"
+        In `game/entities/components/consumable.py`:
+
+        ```python
+        # Part-9. Exercise 3: Teleport scroll
+        class TeleportConsumable(Consumable):
+
+            def get_action(self, _consumer: Actor, _engine: Engine) -> Action:
+                return SingleRangedTargetingAction(
+                    item   = self.entity,
+                    prompt = "Select a destination.",
+                )
+
+            def activate(self, action: ItemAction, engine: Engine, consumer: Actor) -> None:
+                if action.target_pos is None:
+                    raise Impossible("You need to select a target")
+
+                x, y = action.target_pos
+                game_map = engine.game_map
+
+                if not game_map.in_bounds(x, y):
+                    raise Impossible("You cannot teleport out of the map.")
+
+                if not game_map.explored[x, y]:
+                    raise Impossible("You cannot teleport to a place you have not explored.")
+
+                if not game_map.is_walkable(x, y):
+                    raise Impossible("You cannot teleport into a wall.")
+
+                blocking_entity = game_map.get_blocking_entity_at(x, y)
+                if blocking_entity is not None and blocking_entity is not consumer:
+                    raise Impossible("You cannot teleport onto another actor.")
+
+                consumer.place(x, y, game_map)
+                for item in engine.game_map.get_items_at(consumer.x, consumer.y):
+                    item.consumable.on_contact(engine=engine, consumer=consumer)
+                MessageLog.add_message("You teleport!", colors.STATUS_EFFECT_APPLIED)
+                self.consume()
+        ```
+
+        The loop after `place()` is the auto-collect step explained in the tip below.
 
 !!! tip "Auto-collect and teleport"
     `TeleportConsumable` calls `consumer.place()` directly, which bypasses the `on_contact` check in `MovementAction`. A player who teleports onto a chest will not pick it up automatically unless you add the same call after `consumer.place()`:

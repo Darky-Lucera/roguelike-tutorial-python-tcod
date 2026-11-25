@@ -14,6 +14,32 @@ In this part we will:
 - Refactor `GameState` so each state controls its own post-action flow
 - Build the inventory overlay using the modal state pattern
 - Add treasure chests as auto-collected items with a gold counter
+- Remove the vi movement keys so their letters are free for actions and items
+
+---
+
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [Update `game/actions.py`](#update-gameactionspy). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### Who decides what happens after an action?
+
+Until now, `Engine.handle_events()` ran the whole cycle: it asked the active state for an action, performed it, ran the enemy turns, and updated the field of view. With one state, that was enough.
+
+The inventory overlay changes this. When the player selects an item in the overlay, the game must use the item and then close the overlay, going back to `MainGameState`. The engine cannot make that switch, because it does not know which state to go back to. The state does: the overlay knows it was opened from the map, so it knows it must close.
+
+So in this part the cycle moves into `GameState.handle_events()`. Each state then decides what happens after an action, and the engine only passes events to the current state.
+
+### Modal screens
+
+A *modal* screen takes all the input until it closes: while the inventory is open, letter keys select items instead of moving the player. We already have one modal screen: `GameOverState` from Part 7 draws an overlay on top of the map and handles its own keys.
+
+The inventory overlay is the same kind of state. It overrides `on_render()` to draw on top of the map, and `event_keydown()` to handle its own keys. It closes in one of two ways:
+
+- The player selects a valid item. The action runs, and then `GameState.handle_events()` switches back to `MainGameState`.
+- The player presses `Escape`. `event_keydown()` sets the state directly and returns no action, so no turn passes.
+
+Any state can open any other state. The current state is simply `self.engine.game_state`, so there is no stack of states to maintain.
 
 ---
 
@@ -71,7 +97,7 @@ class DropItem(ItemAction):
 
 `ItemAction` delegates to `consumable.activate()`. `DropItem` extends `ItemAction` because dropping also needs the item reference, but calls `inventory.drop_item()` instead, raising `Impossible` on the `False` case the same way `PickupAction` does for a full inventory.
 
-The `assert isinstance(entity, Actor)` calls enforce a design contract: `Action.perform` is declared with `entity: Entity`, but these three actions require an `Actor` (only actors have `inventory`). The asserts make that constraint explicit at runtime and narrow the declared type, so a type checker can verify the subsequent attribute accesses without casts.
+The `assert isinstance(entity, Actor)` lines make a rule explicit. `Action.perform` accepts any `Entity`, but these three actions need an `Actor`, because only actors have an `inventory`. The assert checks this at runtime. It also tells the type checker that `entity` is an `Actor` from that line on, so the attribute accesses after it need no cast.
 
 Also add `PickupAction` to the import list at the top of `game/game_states.py`:
 
@@ -95,7 +121,9 @@ Now that `ItemAction` exists, import it at module level, add `get_action()` to `
 
 ```diff
 +from game.actions import ItemAction
-+
+ from game.data import colors
+ ...
+
  if TYPE_CHECKING:
      from game.actions import Action
 ```
@@ -129,25 +157,16 @@ Moving `ItemAction`'s import to module level is safe for the same reason as the 
 
 ## Move action execution into `GameState`
 
-So far `Engine.handle_events()` ran the action returned by the active game state. That worked with only one state, but modal states (the inventory overlay) need to switch the active state *after* an action completes. Only the state knows which state it should return to; the engine does not.
+The inventory overlay must close itself *after* its action runs, and only the state knows which state comes next (see [Who decides what happens after an action?](#who-decides-what-happens-after-an-action) in the Background). So the action cycle moves from the engine into `GameState.handle_events()`.
 
-!!! info "Why move execution into the state?"
-    `Engine.handle_events()` currently does: get action from state, perform it, run enemy turns, update FOV. That is fine with one state. But when the inventory overlay is open, pressing a key should use the item *and then close the overlay* (returning to `MainGameState`). The engine cannot make that switch because it does not know which state to return to. The state does: it opened the overlay, so it knows to close it.
-
-    Moving the execution loop into `GameState.handle_events()` gives each state control over what happens after an action.
-
-Update `game/engine.py`. The `handle_events` signature changes from `Iterable[Any]` to `Iterable[tcod.event.Event]`, so `Any` is no longer needed. `GameOverState` also moves out of `engine.py` (it is now referenced from inside `GameState.handle_events` in `game_states.py`):
+Update `game/engine.py`. The `handle_events` signature changes from `Iterable[Any]` to `Iterable[tcod.event.Event]`, so `Any` is no longer needed. `engine.py` also stops importing `GameOverState`: from now on, `GameState.handle_events` in `game_states.py` is the code that switches to it:
 
 ```diff
 -from typing import Any
 
  import tcod.event
  ...
--from game.game_states import (
--    GameOverState,
--    GameState,
--    MainGameState,
--)
+-from game.game_states import GameOverState, GameState, MainGameState
 +from game.game_states import GameState, MainGameState
 ```
 
@@ -176,8 +195,7 @@ Then simplify `handle_events()` to a one-line dispatch:
 Also add `INVALID` to `game/data/colors.py`, since the rewritten `handle_events` uses it for rejection messages:
 
 ```diff
- WELCOME_TEXT        = Color( 32, 160, 255)
- ...
+ GOLD                = Color(255, 215,   0)
 +INVALID             = Color(255, 255,   0)
 ```
 
@@ -190,7 +208,7 @@ Now rewrite `GameState.handle_events()` in `game/game_states.py` to own the full
  from game.message_log import MessageLog
 ```
 
-The rewritten method checks `isinstance(self.engine.game_state, (InventoryUseState, InventoryDropState))`, but neither class exists yet. Add these placeholder classes at the bottom of the file so the reference resolves from the start. The base class logs a message and returns to `MainGameState` on any key, so pressing `I` or `D` before the real implementation exists gives feedback instead of leaving the game stuck. The "Inventory states" section below replaces all three with the full implementation:
+The rewritten method checks `isinstance(self.engine.game_state, (InventoryUseState, InventoryDropState))`, but neither class exists yet. Add these placeholder classes at the bottom of the file, so the names exist from the start. The base class logs a message and returns to `MainGameState` on any key. That way, pressing `I` or `D` before the real overlay exists gives feedback instead of leaving the game stuck. The "Inventory states" section below replaces all three classes:
 
 ```python
 class InventoryState(GameState):
@@ -247,7 +265,7 @@ def handle_events(self, event: tcod.event.Event) -> None:
         self.engine.update_fov()
 ```
 
-Notice that the return type of `handle_events` changes from `Action | None` to `None`. Don't forget to update the method signature line accordingly.
+The return type of `handle_events` changes from `Action | None` to `None`, because the method now runs the action itself instead of returning it. Remember to change the signature line too.
 
 Key differences from the old engine code:
 
@@ -255,10 +273,14 @@ Key differences from the old engine code:
 - After a successful action, if the current state is an inventory state, it switches back to `MainGameState`. Opening the inventory does not advance time; using or dropping an item does.
 
 !!! note "What Impossible is for"
-    `Impossible` is reserved for rejections that are worth telling the player about: a full inventory, an already-healed condition, nothing to pick up. Low-level movement failures (bumping into a wall, trying to walk off the map) are not raised as `Impossible`. Those actions still cost a turn (the player pressed a key and something was attempted), but generating a log message for every wall collision would be noise. The convention is: if the player needs to read why an action failed, raise `Impossible`; if the failure is self-evident from the game state, return silently.
+    `Impossible` is only for rejections that are worth telling the player about: a full inventory, an already-healed condition, nothing to pick up.
+
+    Low-level movement failures (walking into a wall, trying to walk off the map) do not raise `Impossible`. Those actions still cost a turn, because the player pressed a key and tried something. But a log message for every wall collision would be noise.
+
+    The rule is: if the player needs to read why an action failed, raise `Impossible`; if the failure is obvious from what is on screen, return silently.
 
 !!! info "Why an exception instead of a result-object?"
-    Part 8a picked `raise Impossible(...)` over the other mainstream alternative: a result-object, for example `ActionResult(success, message)`. A result-object avoids exceptions entirely and composes well, a caller can inspect a result and decide what to do next, but every intermediate function has to check it and relay it onward: that repetitive relay code is what the comment below calls plumbing.
+    Part 8a chose `raise Impossible(...)` over the other common option: a result-object, for example `ActionResult(success, message)`. A result-object needs no exceptions, and a caller can inspect the result and decide what to do next. The cost is that every function in between has to check the result and pass it on. That repeated pass-it-on code is what the comment below calls plumbing.
 
     Here is the same `activate()` → `perform()` chain you just built, shown with the result-object mechanism instead:
 
@@ -290,7 +312,7 @@ Key differences from the old engine code:
     The [2019 tutorial](https://www.rogueliketutorials.com/tutorials/tcod/2019/part-8/) used the result-object shape, but as a plain dict: `results.append({"consumed": False, "message": Message("You are already at full health", ...)})`. Every caller up the chain had to inspect `consumed` and decide whether to keep going.
 
 !!! note "If you kept the Part 1 turn counter"
-    Moving `action.perform(...)` out of `Engine.handle_events` also moves the only place `self.turn_count += 1` used to live. Add it back on the successful-action path, right after the `except` block: a turn that raises `Impossible` should not count, the player did not actually act.
+    Moving `action.perform(...)` out of `Engine.handle_events` also moves the only place `self.turn_count += 1` used to live. Add it back on the successful-action path, right after the `except` block: a turn that raises `Impossible` should not count, because the player did not actually act.
 
     ```diff
         if action is not None:
@@ -323,30 +345,35 @@ Key differences from the old engine code:
     ```
 
 !!! note "If you kept the Part 7 Page Up/Down scroll exercise"
-    Moving key handling into `GameState.handle_events` also moves the spot where your `keys.LOG_SCROLL_UP` / `keys.LOG_SCROLL_DOWN` check used to live. Add it back at the start of the `case tcod.event.KeyDown():` branch, before `action = self.event_keydown(event)`, and `return` immediately after adjusting the scroll value, the same way the `except Impossible` branch returns early: scrolling should never reach `event_keydown` or cost a turn.
+    Your `keys.LOG_SCROLL_UP` / `keys.LOG_SCROLL_DOWN` check already lives in this method, at the start of the `case tcod.event.KeyDown():` branch. Keep it there when you rewrite the method, before `action = self.event_keydown(event)`.
+
+    Its two `return None` lines become a plain `return`, because the method no longer returns an action. They still exit before any action runs, the same way the `except Impossible` branch returns early: scrolling never reaches `event_keydown` and never costs a turn.
 
 ---
 
 ## Trim movement keys
 
-Vi keys (`b`, `h`, `j`, `k`, `l`, `n`, `u`, `y`) have been part of roguelikes since the original *Rogue* (1980), which reused vi's hjkl keys (Part 1 already told you their ADM-3A origin). On a modern keyboard, arrow keys and the numpad cover the same directions with less ambiguity, and freeing those letters matters here: this chapter adds `G`, `I`, and `D` as action keys, and Exercise 3 assigns the remaining letters to items for direct use from the map.
+Since Part 1, the vi keys (`b`, `h`, `j`, `k`, `l`, `n`, `u`, `y`) also move the player (Part 1 explains where they come from). The arrow keys and the numpad cover the same directions, and we now need those letters: this chapter adds `G`, `I`, and `D` as action keys, and Exercise 3 gives the remaining letters to items, so the player can use them directly from the map.
 
 Remove the vi keys block from `MOVE_KEYS` in `game/data/keys.py`:
 
 ```diff
+     tcod.event.KeySym.KP_9:     ( 1, -1), # RIGHT - UP
+-
 -    # Vi keys
--    tcod.event.KeySym.B:     (-1,  1),
--    tcod.event.KeySym.J:     ( 0,  1),
--    tcod.event.KeySym.N:     ( 1,  1),
--    tcod.event.KeySym.H:     (-1,  0),
--    tcod.event.KeySym.L:     ( 1,  0),
--    tcod.event.KeySym.Y:     (-1, -1),
--    tcod.event.KeySym.K:     ( 0, -1),
--    tcod.event.KeySym.U:     ( 1, -1),
+-    tcod.event.KeySym.B:        (-1,  1), # LEFT  - DOWN
+-    tcod.event.KeySym.J:        ( 0,  1), #         DOWN
+-    tcod.event.KeySym.N:        ( 1,  1), # RIGHT - DOWN
+-    tcod.event.KeySym.H:        (-1,  0), # LEFT
+-    tcod.event.KeySym.L:        ( 1,  0), # RIGHT
+-    tcod.event.KeySym.Y:        (-1, -1), # LEFT  - UP
+-    tcod.event.KeySym.K:        ( 0, -1), #         UP
+-    tcod.event.KeySym.U:        ( 1, -1), # RIGHT - UP
+ }
 ```
 
 !!! info "Numpad vs. regular number keys"
-    `tcod.event.KeySym.KP_1`–`KP_9` are distinct key codes from `tcod.event.KeySym.N1`–`N9`. Numpad keys continue to work for movement. Regular number keys (`1`–`9`, `0`) remain free for future use, such as equipment slots in Part 13.
+    `tcod.event.KeySym.KP_1`–`KP_9` are different key codes from `tcod.event.KeySym.N1`–`N9`. Numpad keys still work for movement. Regular number keys (`1`–`9`, `0`) remain free for future use, such as equipment slots in Part 13.
 
 !!! warning "No numpad, no default diagonals"
     Some laptop keyboards have no numpad. On those keyboards, removing the vi keys leaves no diagonal movement: the arrow keys only cover the four cardinal directions. This tutorial does not add a replacement binding for that case; add your own keys to `MOVE_KEYS` in `game/data/keys.py` if you need diagonals without a numpad.
@@ -386,7 +413,7 @@ Then add the three checks at the end of `event_keydown`:
 !!! tip "Run it now"
     If you run the game at this point, you can check that movement, combat, and the message log still behave exactly as before: the engine refactor moved code around without changing what it does.
 
-    Then try the three new keys. `G` over a health potion picks it up and logs a message. `I` and `D` switch to the inventory state and immediately answer back with "Inventory not implemented yet." in yellow, instead of leaving the game unresponsive. That confirms the key bindings and the stub are both wired correctly, before the next section replaces the stub with a real overlay.
+    Then try the three new keys. `G` over a health potion picks it up and logs a message. `I` and `D` switch to the inventory state and immediately show "Inventory not implemented yet." in yellow, instead of leaving the game unresponsive. That confirms the key bindings and the stub are both wired correctly, before the next section replaces the stub with a real overlay.
 
 ---
 
@@ -418,9 +445,6 @@ Add the inventory overlay colors to `game/data/colors.py`:
 
 The inventory overlay uses two distinct color schemes: green tones for item use (activation) and purple tones for item dropping. At a glance, the player always knows which overlay is open. The `INVENTORY_MENU_*` constants are shared by both schemes: title, text, and dim shades that look the same in either overlay, plus the key badge foreground.
 
-!!! tip "Modal states"
-    An inventory state follows exactly the same pattern as `GameOverState` from Part 7: it overrides `on_render()` to draw an overlay on top of the map, and `event_keydown()` to handle its own key set. The overlay closes when the player selects a valid item (an action executes, then `GameState.handle_events` switches back to `MainGameState`) or presses `Escape` (handled explicitly in `event_keydown`, which sets the state directly without returning an action). Any other unrecognised key does nothing. This pattern composes cleanly: any state can open any other state, and the "stack" is simply `self.engine.game_state` with no state stack to maintain.
-
 Item names come from data, so a very long name could overflow the panel. A small helper trims text to a maximum width and marks the cut with `...`. Add it to `game/game_states.py`, next to `_draw_panel` from Part 7:
 
 ```python
@@ -446,7 +470,7 @@ One more binding before the states themselves: the overlay closes with `Escape`,
 !!! question "Two names for the same key?"
     `KEY_QUIT_GAME` and `KEY_EXIT` both map to `ESCAPE`, on purpose. The name records *intent*: `KEY_QUIT_GAME` ends the program, `KEY_EXIT` closes an overlay and returns to the map.
 
-    Today they happen to share a physical key. If you later decide overlays should close with `Q` or `Backspace` instead, that is a one-line remap in `keys.py`; with a single shared constant, the two meanings would be tangled together and the change would need a code hunt.
+    Today they happen to share a physical key. If you later decide overlays should close with `Q` or `Backspace` instead, that is a one-line remap in `keys.py`; with a single shared constant, the two meanings would be mixed, and you would have to find and check every place that uses it.
 
 Now the three state classes, replacing the `InventoryUseState`/`InventoryDropState` stubs from earlier.
 
@@ -495,7 +519,7 @@ class InventoryState(GameState):
         height       = min(max(8, number_of_items_in_inventory + 7), max_height)
         visible_rows = min(number_of_items_in_inventory, max(0, height - 7))
 
-        item_width = max((len(item.name) for item in inventory.items), default=0) + 14
+        item_width = max((len(item.name) for item in inventory.items), default=0) + 18
         width = min(
             console.width - 4,
             max(
@@ -634,11 +658,11 @@ class InventoryState(GameState):
         raise NotImplementedError()
 ```
 
-`on_render()` renders the map first via `super()`, dims it with the same `// 2` trick introduced in Part 7 for the game-over screen, and then draws the box with `_draw_panel()` (shadow, fill, frame). Nothing new there: the overlay reuses the exact machinery the game-over panel taught us.
+`on_render()` renders the map first via `super()`, dims it with the same `// 2` trick introduced in Part 7 for the game-over screen, and then draws the box with `_draw_panel()` (shadow, fill, frame). Nothing new there: the overlay reuses the same code as the game-over panel.
 
 The panel layout is fixed at the top and grows downward with the item list. Row `y` carries the frame and the centered title; `y+2` prints the `PROMPT` help text; item rows start at `y+4`. The used-slots counter (`(3 / 10 slots)`) sits on the row above the bottom border, like a status line, and doubles as capacity feedback now that the inventory can fill up.
 
-Each item row is drawn in four pieces: a one-row `draw_rect` with `ROW_BG_COLOR` that makes the row read as a single unit, the selection key as a badge (`[ a ]`, dark text over `ACCENT_COLOR`), the item sprite in its own color at `row_x + 8`, and the name at `row_x + 10`, passed through `_trim_text()` so a long name cannot break the layout. The badge-over-accent style makes the actionable keys pop out from the text around them.
+Each item row is drawn in four pieces: a one-row `draw_rect` with `ROW_BG_COLOR` that makes the row read as a single unit, the selection key as a badge (`[ a ]`, dark text over `ACCENT_COLOR`), the item sprite in its own color at `row_x + 8`, and the name at `row_x + 10`, passed through `_trim_text()` so a long name cannot break the layout. The badge-over-accent style makes the keys the player can press stand out from the text around them.
 
 `width` adapts to the longest content line (title, prompt, counter, or item name plus its prefixes) with a floor of 46 cells, and is clamped to `console.width - 4` so the panel always leaves a margin. `height` follows the item count, with `visible_rows` recomputed from the clamped height so the loop never draws past the bottom border. When the inventory is empty, a single dim row prints `EMPTY_TEXT` instead of the item list.
 
@@ -700,7 +724,7 @@ You will notice that `InventoryUseState` and `InventoryDropState` are referenced
 
 ## Treasure chests
 
-Part 8a defined both consumable types and spawned chests on the floor. The chest template and `auto_activate = True` are already in place. This section adds the three pieces that make chests actually work: the `GameMap` helper, the contact method on `Consumable`, and the HUD element that shows the accumulated gold.
+Part 8a defined both consumable types and spawned chests on the floor. The chest template and `auto_activate = True` are already in place. This section adds the pieces that make chests actually work: a `GameMap` helper, a contact method on `Consumable`, a contact check in `MovementAction`, and the HUD element that shows the accumulated gold.
 
 ### Auto-collect in `MovementAction`
 
@@ -755,7 +779,7 @@ Third, after `entity.move()` in `MovementAction.perform()`, trigger contact for 
 
 The `isinstance(entity, Actor)` check satisfies the type checker: `on_contact` expects an `Actor`, and `entity` in `MovementAction` is annotated as the wider `Entity` type. In practice any entity that moves will be an actor.
 
-`get_items_at()` returns a fresh list, so `activate()` can safely modify `game_map.entities` during iteration. The `MovementAction` wiring has no player check: it fires `on_contact` for every actor that steps on the tile. The decision to react lives in the consumable: `TreasureConsumable` only acts when the consumer is the player (so a wandering monster cannot scoop up a chest), while a different consumable could choose to react to anyone.
+`get_items_at()` returns a fresh list, so `activate()` can safely modify `game_map.entities` during iteration. The `MovementAction` wiring has no player check: it fires `on_contact` for every actor that steps on the tile. The decision to react lives in the consumable: `TreasureConsumable` only acts when the consumer is the player (so a wandering monster cannot take a chest), while a different consumable could choose to react to anyone.
 
 ### `render_gold` in `hud.py`
 
@@ -796,7 +820,6 @@ Run the game and verify the following:
 - Walking over a potion and pressing `G` adds it to the inventory and shows "You picked up the Health Potion!".
 - Pressing `G` on an empty tile shows "There is nothing here to pick up." in yellow.
 - Pressing `I` opens the "Use Item" overlay: the map dims, a framed panel with a drop shadow appears, and carried items are listed as rows with `[ a ]`-style key badges.
-- An item with a long name is shown in full, not cut short with `...`: the panel widens to fit it.
 - The overlay shows the used-slots counter (for example `(2 / 10 slots)`) at the bottom of the panel.
 - Opening either overlay with an empty inventory shows the empty-pack message instead of item rows.
 - Pressing the letter for a potion when injured heals the player and shows a green message.
@@ -815,45 +838,41 @@ Run the game and verify the following:
 
 ## Summary
 
-Items are now a first-class part of the game. Key additions:
+The items from Part 8a are now part of play. Key additions:
 
-- **`game/exceptions.py`**: `Impossible` exception carries a rejection reason; one `except` in `handle_events` covers every case
-- **`ActorComponent` / `ItemComponent`**: narrowed base classes so type annotations match the actual runtime type
-- **`Entity.owner`**: back-reference to whichever collection currently holds an entity, `GameMap.entities` or `Inventory.items`
-- **`Item` / `Inventory`**: new entity subclass and actor component; pickup, use, and drop are modelled as actions
-- **`HealingConsumable`**: first consumable component; knows how to apply its effect independently of the action layer
-- **`TreasureConsumable`**: second consumable; collected on contact rather than through the inventory; `auto_activate = True` triggers pickup on walk
-- **`InventoryState`**: modal overlay base class; subclasses override `TITLE`, `PROMPT`, the four color class variables, and `on_item_selected()`
-- **`Inventory.gold`**: running treasure total stored in the `Inventory` component; read as `player.inventory.gold`; gold is carried state, so it belongs next to the item list rather than as a bare `Actor` attribute
+- **`PickupAction`, `ItemAction`, `DropItem`**: pickup, use, and drop are actions, so they cost a turn like any other action, and they reject impossible requests with `Impossible`
+- **`GameState.handle_events()`**: runs the whole action cycle; one `except Impossible` shows every rejection in the log, and a failed action costs no turn
+- **`InventoryState`**: modal overlay base class; `InventoryUseState` and `InventoryDropState` override `TITLE`, `PROMPT`, the four color class variables, and `on_item_selected()`
+- **`Consumable.get_action()` / `Consumable.on_contact()`**: an item decides which action it produces when used, and whether it reacts when an actor steps on it
+- **`GameMap.get_items_at()` and `hud.render_gold()`**: chests are collected on contact, and the gold counter shows the total
+- **`game/data/keys.py`**: vi keys removed; `KEY_PICKUP`, `KEY_INVENTORY`, `KEY_DROP`, and `KEY_EXIT` added
 
 **Current architecture**:
 
-- `Entity.owner`: set to `GameMap` on spawn, changed to `Inventory` on pickup, back to `GameMap` on drop; never `None` while the entity is active on the map or carried in an inventory
-- `Inventory`: component on `Actor`; holds items up to `capacity`, enforces the limit, and handles drop logic
-- `Consumable.auto_activate`: class-level flag; `Consumable.on_contact()` checks it and activates the item via `ItemAction` when the player steps on the tile
-- `HealingConsumable.activate()`: applies healing and calls `self.consume()` to remove the item from inventory
-- `TreasureConsumable.activate()`: adds gold, logs the message, and removes the item from the map directly; it never enters inventory
-- `Impossible`: raised anywhere in the action chain; `handle_events` catches it and shows the message in the log
-- `InventoryState`: subclasses provide `on_item_selected()` and override the title, prompt, and color class variables; `GameState.handle_events()` automatically switches back to `MainGameState` after an inventory action
-- `ActorComponent` / `ItemComponent`: `entity` annotation narrows from `Entity` to the actual holder type, so type checkers can verify component attribute access correctly
+- `Engine.handle_events()`: passes each event to the current state; it no longer performs actions
+- `GameState.handle_events()`: performs the action, catches `Impossible`, runs the enemy turns, switches to `GameOverState` on death or back to `MainGameState` after an inventory action, and updates the FOV
+- `MainGameState`: `G` returns a `PickupAction`; `I` and `D` open the inventory overlays directly, without an action
+- `InventoryState`: draws over the dimmed map, maps `a` to `z` to items, and closes with `Escape` without spending a turn
+- `Consumable.on_contact()`: activates the item via `ItemAction` when an actor steps on its tile and `auto_activate` is set; `TreasureConsumable` overrides it so only the player collects a chest
+- `Impossible`: raised anywhere in the action chain and caught in one place
 
 **Local Class Diagram**:
 
-![classes](images/classes/part8_local_classes.png)
+![classes](images/classes/part8b_local_classes.png)
 
-**Full Class Diagram**:
+**Full Class Diagram** (all of Part 8):
 
 ![classes](images/classes/part8_classes.png)
 
 **File structure**:
 
 ```text
-main.py                         ← modified
+main.py
 game/
 ├── __init__.py
 ├── actions.py                  ← modified
 ├── engine.py                   ← modified
-├── exceptions.py               ← new
+├── exceptions.py
 ├── hud.py                      ← modified
 ├── game_states.py              ← modified
 ├── message_log.py
@@ -861,29 +880,31 @@ game/
 │   ├── __init__.py
 │   ├── colors.py               ← modified
 │   ├── keys.py                 ← modified
-│   └── sprites.py              ← modified
+│   └── sprites.py
 ├── entities/
 │   ├── __init__.py
-│   ├── entity.py               ← modified
-│   ├── factories.py            ← modified
+│   ├── entity.py
+│   ├── factories.py
 │   ├── render_order.py
 │   └── components/
 │       ├── __init__.py
-│       ├── ai.py               ← modified
-│       ├── base_component.py   ← modified
-│       ├── consumable.py       ← new
-│       ├── fighter.py          ← modified
-│       └── inventory.py        ← new
+│       ├── ai.py
+│       ├── base_component.py
+│       ├── consumable.py       ← modified
+│       ├── fighter.py
+│       └── inventory.py
 └── map/
     ├── __init__.py
     ├── game_map.py             ← modified
     ├── tile_types.py
-    └── map_generator.py        ← modified
+    └── map_generator.py
 ```
 
 ---
 
 ## Exercises
+
+The next parts assume you did these exercises. Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
 
 !!! tip "Exercises 1 and 2 together make the game noticeably more fun"
     Stacking keeps the inventory list clean, and the backpack gives the player a reason to seek scrolls. Exercises 3 and 4 polish the user interface.
@@ -895,7 +916,7 @@ game/
     ??? note "Reference implementation"
         Add two static helpers to `InventoryState`. `stack_items(items) -> list[list[Item]]` groups items by name (`dict.setdefault`); each stack is a `list[Item]` whose first element is used for display and selection (after Exercise 3, also sort the stacks here: `stacks.sort(key=lambda s: s[0].key or 0)`). `stack_name(stack) -> str` returns `"Health Potion (x3)"` when `len(stack) > 1`, else just the name.
 
-        Then `on_render()` calls `stack_items()` and iterates over stacks, computing the panel width from `stack_name()` so the frame fits the longest entry. The alphabetical letter-to-index system is replaced by Exercise 3's key-based selection. (`Inventory.drop_item()` already removes the first matching item, so dropping needs no extra logic.)
+        Then `on_render()` calls `stack_items()` and iterates over stacks, computing the panel width from `stack_name()` so the frame fits the longest entry. `event_keydown()` must use the stacks too: build them with `stack_items()` and select `stacks[index][0]`. If it still indexes `inventory.items`, the letter on a grouped row points to the wrong item. Exercise 3 later replaces this letter-to-index selection with fixed keys. (`Inventory.drop_item()` already removes the first matching item, so dropping needs no extra logic.)
 
 2. **Backpack growing scroll**:
 

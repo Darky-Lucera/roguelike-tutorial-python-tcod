@@ -1,0 +1,56 @@
+@startuml part12_difficulty_flow
+
+!theme mimeograph
+
+top to bottom direction
+
+skinparam roundcorner 10
+skinparam componentBackgroundColor #ece9e8
+skinparam nodesep 20
+skinparam ranksep 30
+
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+
+title Part 12: Floor-scaled spawn flow
+
+component "GameWorld\n<color:#666666>generate_floor()</color>" as game_world
+component "map_generator.py\n<color:#666666>generate_dungeon(..., current_floor)</color>" as generator
+component "place_entities()\n<color:#666666>rolls counts and spawns templates</color>" as placement
+component "Selection helpers\n<color:#666666>get_value_for_floor()\nget_entities_at_random()</color>" as selection
+component "config.py\n<color:#666666>min/max entities by floor</color>" as config
+component "factories.py\n<color:#666666>monster/item chances by floor</color>" as factories
+component "GameMap\n<color:#666666>spawned monsters and items</color>" as game_map
+
+game_world --> generator : current_floor
+generator --> placement : for each room
+placement --> config : read floor limits
+placement --> factories : read spawn tables
+placement --> selection : choose active templates
+selection --> placement : return selected templates
+placement --> game_map : spawn on free tiles
+
+note bottom of config
+  Plain numeric tables live here.
+end note
+
+note bottom of factories
+  Template references and their
+  floor-keyed weights live here.
+end note
+
+note bottom of selection
+  Entries with a weight of 0 are not
+  available on the current floor.
+end note
+
+' Keep the data sources side-by-side and the flow vertical.
+config -[hidden]right- factories
+game_world -[hidden]down- generator
+generator -[hidden]down- placement
+placement -[hidden]down- selection
+selection -[hidden]down- game_map
+
+@enduml
