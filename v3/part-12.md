@@ -10,6 +10,7 @@ In this part we will:
 
 - Replace fixed per-room spawn limits with floor-keyed tables
 - Turn the flat weighted spawn table from Part 5 into a depth-aware encounter table
+- Add the ogre, a heavy monster for the deep floors
 - Make both monster variety and item variety scale with dungeon depth
 - Write a reusable generic helper with Python 3.12 type parameter syntax
 
@@ -20,18 +21,22 @@ In this part we will:
 Right now, every floor draws from the same spawn tables with the same weights. The weighted table from Part 5 Exercise 2 already made some monsters rarer than others, but the weights never change: floor 10 rolls on exactly the same table as floor 1. This makes the game feel flat: depth adds no tension.
 
 !!! info "Where you stand"
-    Two Part 5 exercises built the current spawn system: Exercise 1 added minimum and maximum counts per room, and Exercise 2 replaced the hardcoded monster split with a `monster_chances` table and `rng.choices`. This chapter absorbs both: the counts become floor-keyed tables in `config.py`, and the weight tables gain a floor dimension. If you skipped them, don't worry: Part 8 made the weighted tables part of the main path anyway, and Part 11's listings already carried the per-room limit parameters, so the diffs below match your code. Where a deleted line covers something you never added (an exercise item, for example), there is simply nothing to delete.
+    Two Part 5 exercises built the current spawn system. Exercise 1 added minimum and maximum counts per room, and Exercise 2 replaced the hardcoded monster split with a `monster_chances` table and `rng.choices`. This chapter takes both further: the counts become floor-keyed tables in `config.py`, and the weight tables gain a floor dimension.
+
+    If you skipped those exercises, the diffs below still match your code: Part 8 made the weighted tables part of the main path, and Part 11's listings already carried the per-room limit parameters. Where a deleted line is something you never added (an exercise item, for example), there is nothing to delete.
 
 The fix is an **encounter table**: a mapping from dungeon floor to spawn probabilities. Orcs appear rarely on shallow floors and frequently on deep ones. New items only appear once the player has had time to learn the basics.
 
 !!! info "Out-of-depth monsters"
-    Depth-based spawn tables are as old as the genre. Rogue (1980) already picked monsters from bands tied to the dungeon level, so the alphabet got meaner as you went down. Later games like Angband let those bands blur at the edges, so a deeper monster could occasionally surface early. The floor-keyed tables you are about to write are the same core idea: monsters bound to depth, expressed as data.
+    Spawning by depth is as old as the genre. Rogue (1980) kept its monsters in a list ordered by danger. It picked each new monster from a small window of that list, and the window moved down the list as the dungeon level grew, so monsters got stronger as you went down.
+
+    Later games like Angband added rare *out-of-depth* monsters: once in a while, a monster from much deeper floors appears early. The floor-keyed tables you are about to write use the same core idea: monsters tied to depth, written as data.
 
 ---
 
 ## Weighted selection, floor by floor
 
-You already used weighted random selection in Part 5 Exercise 2: given a list of `(item, weight)` pairs, `rng.choices` picks an item at random, where higher-weight items are more likely. As a refresher, here is how the item weights from this chapter behave on a deep floor, keeping only the four base items to make the example short:
+You already used weighted random selection in Part 5 Exercise 2: given a list of `(item, weight)` pairs, `rng.choices` picks an item at random, where higher-weight items are more likely. As a reminder, here is how the item weights from this chapter work on a deep floor. Only the four base items are shown, to keep the example short:
 
 ```text
 Item              Weight   Cumulative
@@ -62,9 +67,9 @@ A **floor-keyed table** is a list of `(floor, value)` pairs meaning "from this f
 [(3, 15), (5, 30), (7, 60)]
 ```
 
-On floor 1: weight 0 (no entry with floor ≤ 1).
-On floor 4: weight 15 (entry `(3, 15)` is the last one ≤ 4).
-On floor 7: weight 60.
+- On floor 1: weight 0 (no entry with floor ≤ 1).
+- On floor 4: weight 15 (entry `(3, 15)` is the last one ≤ 4).
+- On floor 7: weight 60.
 
 The same format works for things that are not weights at all. A table like `[(1, 2), (4, 3), (6, 5)]` can describe "at most 2 monsters per room on floors 1-3, at most 3 on floors 4-5, at most 5 from floor 6". One format, one helper function, many uses.
 
@@ -79,8 +84,8 @@ The four per-room constants from Part 5 turn into floor-keyed tables. Update `ga
  MAP_WIDTH             = 80
  MAP_HEIGHT            = 44
  MAX_ROOMS             = 30
- ROOM_MIN_SIZE         = 6
- ROOM_MAX_SIZE         = 10
+ ROOM_MIN_SIZE         = 7
+ ROOM_MAX_SIZE         = 12
 -MIN_MONSTERS_PER_ROOM = 0
 -MAX_MONSTERS_PER_ROOM = 2
 -MIN_ITEMS_PER_ROOM    = 0
@@ -93,13 +98,15 @@ The four per-room constants from Part 5 turn into floor-keyed tables. Update `ga
 +MAX_ITEMS_BY_FLOOR    = [(1, 1), (4, 2)]
 ```
 
-The minimum tables keep their old behavior (always 0), but now they can scale too: change `MIN_MONSTERS_BY_FLOOR` to `[(1, 0), (6, 1)]` and every room from floor 6 onward is guaranteed at least one monster. Empty rooms stop being a place to catch your breath exactly when the dungeon turns hostile.
+The minimum tables keep their old behavior (always 0), but now they can scale too: change `MIN_MONSTERS_BY_FLOOR` to `[(1, 0), (6, 1)]` and every room from floor 6 onward is guaranteed at least one monster. Empty rooms, the safe places to rest, disappear just when the dungeon gets dangerous.
 
 ---
 
 ## A new monster: the ogre
 
-Floor-keyed weights only earn their keep if there is something worth saving for the deep floors. The dungeon has two monsters so far; let's add a third that belongs at the bottom. Meet the **ogre**: a slab of muscle that hits twice as hard as an orc and soaks up far more punishment. It has no special trick, and that is the point. By the depth where ogres appear you should already be carrying Lightning, Fireball, and Confusion scrolls, and the ogre is the monster that makes you reach for them: trading blows toe-to-toe is a losing war of attrition, so the smart play is to open from range or stun it before it closes.
+Floor-keyed weights are only useful if some content belongs to the deep floors. The dungeon has two monsters so far; let's add a third that belongs at the bottom. Meet the **ogre**: a big, strong monster that hits almost twice as hard as an orc and has far more hit points. It has no special trick, and that is the point.
+
+Ogres start to appear on floor 6. By then you should already carry Confusion and Lightning scrolls, and the Fireball arrives one floor later. The ogre is the monster that makes you use them: a long melee fight wears you down, so the smart play is to attack from range, or confuse it before it reaches you.
 
 Add its glyph to `game/data/sprites.py`:
 
@@ -119,7 +126,7 @@ And its color to `game/data/colors.py`:
 +OGRE               = Color(130, 110,  70)
 ```
 
-A warm brown sets it apart from the greens of orcs and trolls at a glance. Now add the factory in `game/entities/factories.py`, below `troll`:
+The warm brown makes it easy to tell apart from the green orcs and trolls. Now add the factory in `game/entities/factories.py`, below `troll`:
 
 ```python
 ogre = Actor(
@@ -134,21 +141,25 @@ ogre = Actor(
 ```
 
 !!! note "`max_capacity` is from Part 8 Exercise 2"
-    `max_capacity` is the parameter the Part 8 backpack-scroll exercise added to `Inventory` (required, no default). If you did that exercise, keep `max_capacity=0`; if you skipped it, drop it and write `inventory = Inventory(capacity=0)`. The same choice applies to every new `Inventory(...)` in this chapter, including the ghoul exercise below.
+    `max_capacity` is the parameter the Part 8 backpack-scroll exercise added to `Inventory` (required, no default). If you did that exercise, keep `max_capacity=0`; if you skipped it, remove it and write `inventory = Inventory(capacity=0)`. The same choice applies to every new `Inventory(...)` in this chapter, including the ghoul exercise below.
 
-The ogre is the brave, dim opposite of the troll: no flee, no regeneration, just bulk and a heavy swing. Its defense stays at 1 on purpose, so the threat is hit points and damage, not an armor wall that would punish a low-attack character. Note what adding a whole new monster did *not* require: the generator, `place_entities`, and the helpers are all untouched. A new template plus one line in the weight table is the entire change, which is exactly the payoff this chapter is building toward.
+The ogre is the opposite of the troll: it is brave and simple, with no trick, only many hit points and a heavy hit. Its defense stays at 1 on purpose, the same as the orc's. The threat is its hit points and damage, not a high defense that would punish a character with a low attack.
+
+Notice that the ogre itself needs no code in the map generator. A sprite, a color, a template, and (in the next section) one line in the weight table are the whole change. Once this chapter is done, every new monster works the same way.
 
 ---
 
 ## factories.py: weights become floor-keyed
 
-The entity weight tables stay where Part 5 Exercise 2 put them: in `game/entities/factories.py`, right next to the templates they reference. They could not move to `config.py` even if we wanted: the tables need the templates, and `factories.py` already imports `config.py`, so importing back would create a circular import. Only the plain numeric limits belong in `config.py`; the weight tables live with the data they describe. The format changes from a flat list to a dict of floor-keyed weights. Update `monster_chances`:
+The weight tables stay where Part 5 Exercise 2 put them: in `game/entities/factories.py`, right next to the templates they use. They cannot move to `config.py`: the tables need the templates, and `factories.py` already imports `config.py`, so an import in the other direction would create a circular import. Only the plain numeric limits belong in `config.py`; the weight tables stay with the templates they describe.
+
+The format changes from a flat list to a dict of floor-keyed weights. Update `monster_chances`:
 
 ```diff
 -# Part-5. Exercise 2: Weighted monster table
 -monster_chances = [
--    (orc,   75),
--    (troll, 25),
+-    (orc,   25),
+-    (troll, 75),
 -]
 +# Spawn weights by floor: (floor_minimum, weight), sorted by floor
 +monster_chances = {
@@ -169,9 +180,9 @@ And `item_chances`:
 -    (confusion_scroll, 15),
 -    (fireball_scroll,  15),
 -    (lightning_scroll, 15),
--    (mapping_scroll,   15),
--    (drain_scroll,     15),
--    (teleport_scroll,  15),
+-    (mapping_scroll,   15),  # Part-9. Exercise 1: Scroll of mapping
+-    (drain_scroll,     15),  # Part-9. Exercise 2: Drain scroll
+-    (teleport_scroll,  15),  # Part-9. Exercise 3: Teleport scroll
 -]
 +# Spawn weights by floor: (floor_minimum, weight), sorted by floor
 +item_chances = {
@@ -187,13 +198,15 @@ And `item_chances`:
 +}
 ```
 
-Floor 1 now offers only potions and chests. New scrolls then arrive about one floor at a time, weakest and most general first: utility from floor 2, the first attack scroll on floor 4, and the Fireball saved for floor 7. Some weights shift along the way (the chest drops from 60 to 25, the potion from 40 to 35): with scrolls joining the pool floor by floor, the early-game entries no longer need to dominate the table.
+Floor 1 now offers only potions and chests. New scrolls then arrive about one floor at a time, weakest and most general first: crowd control from floor 2, utility from floor 3, the first attack scroll on floor 4, and the Fireball saved for floor 7. Some weights change too (the chest drops from 60 to 25, the potion from 40 to 35). Scrolls join the pool floor by floor, so the early-game entries no longer need to fill most of the table.
 
 !!! info "Items from earlier exercises"
     The chest comes from Part 5 Exercise 3 (via Part 8), the backpack scroll from Part 8 Exercise 2, and the mapping, drain and teleport scrolls from Part 9 Exercises 1-3. If you skipped any of them, omit that line: the table works with any subset of entries.
 
 !!! question "Can entities be dict keys?"
-    Yes. A dictionary key only has to be *hashable*: something Python can turn into a fixed number to look it up by. By default an object is hashable by its identity (which object it is, not what it holds), and each template in `factories.py` is a single, unique object, so there is exactly one `orc` to use as a key. Keying the table by the template also keeps it honest: a typo like `trol` is an immediate `NameError`, while a misspelled string key would fail silently by never spawning.
+    Yes. A dictionary key only has to be *hashable*: something Python can turn into a fixed number to look it up by. By default an object is hashable by its identity (which object it is, not what it holds), and each template in `factories.py` is a single, unique object, so there is exactly one `orc` to use as a key.
+
+    Using the template as the key also catches typos early. A typo like `trol` raises a `NameError` as soon as the module loads. A misspelled string key would fail silently: that monster would just never spawn.
 
 ---
 
@@ -246,18 +259,22 @@ def get_entities_at_random[T](
     return rng.choices(entities, weights=weights, k=number_of_entities)
 ```
 
-`get_value_for_floor` walks the table in order and remembers the last entry that applies. Older tutorials call this function `get_max_value_for_floor`, but ours also reads the *minimum* tables, so that name would lie; the helper returns whichever value is in force on the given floor, whatever it represents.
+`get_value_for_floor` walks the table in order and remembers the last entry that applies. Older tutorials call this function `get_max_value_for_floor`, but ours also reads the *minimum* tables, so that name would be wrong. The helper returns the value that applies on the given floor, whatever that value means.
 
-`get_entities_at_random` builds the weight list for the requested floor and drops every entry whose weight is 0 (not available yet). Then `rng.choices` does the selection, and its `k` argument is the one to watch: `k=number_of_entities` sets how many picks come back, so the count rolled earlier in `place_entities` becomes the length of the returned list. Selection is with replacement, so the same template can be picked more than once: that is what lets one room hold two orcs. Both keys and values come from the same dict, so the two lists stay aligned: dicts preserve insertion order.
+`get_entities_at_random` builds the weight list for the requested floor and removes every entry whose weight is 0 (not available yet). Then `rng.choices` does the selection. Watch its `k` argument: `k=number_of_entities` sets how many picks come back, so the count rolled earlier in `place_entities` becomes the length of the returned list.
+
+The selection is *with replacement*: the same template can be picked more than once, which is how one room can hold two orcs. The keys and the weights come from the same dict, so the two lists stay aligned, because dicts keep insertion order.
 
 !!! tip "Generic functions: `def f[T](...)`"
-    The `[T]` after the function name declares a **type parameter** (Python 3.12, PEP 695). It ties the input to the output: pass a `dict[Actor, ...]` and the checker knows you get a `list[Actor]` back; pass a `dict[Item, ...]` and you get `list[Item]`. Without it we would have to type the function with a common base class and lose precision, or repeat ourselves with two nearly identical functions. Before Python 3.12 this required declaring a separate `TypeVar` object from the `typing` module; the new syntax does the same job inline.
+    The `[T]` after the function name declares a **type parameter** (Python 3.12, PEP 695). It ties the input to the output: pass a `dict[Actor, ...]` and the type checker knows you get a `list[Actor]` back; pass a `dict[Item, ...]` and you get `list[Item]`.
+
+    Without it, we would have to type the function with a common base class and lose precision, or write two nearly identical functions. Before Python 3.12 this needed a separate `TypeVar` object from the `typing` module; the new syntax does the same job inline.
 
 ---
 
 ## A smaller place_entities()
 
-With the tables and helpers in place, `place_entities` shrinks. Replace it entirely:
+With the tables and helpers in place, `place_entities` gets much shorter. Replace the whole function:
 
 ```python
 def place_entities(
@@ -302,7 +319,7 @@ The min/max parameters are gone: counts now come from the config tables, scaled 
 
 ## generate_dungeon() loses four parameters
 
-`generate_dungeon` no longer needs to carry the per-room limits around. Note what does *not* change: `current_floor` already arrives here since Part 11 (the up stairs need it), the first room still spawns nothing (your starting room stays safe), and the stairs placement at the end is untouched.
+`generate_dungeon` no longer needs the per-room limit parameters. Note what does *not* change: `current_floor` has arrived here since Part 11 (the up stairs need it), the first room still spawns nothing (your starting room stays safe), and the stairs placement at the end is untouched.
 
 ```diff
  def generate_dungeon(
@@ -387,44 +404,61 @@ Remove the four limits from `game/game_world.py`:
      def generate_floor(self) -> None:
          self.current_floor += 1
          self.engine.game_map = generate_dungeon(
-             max_rooms     = self.max_rooms,
-             room_min_size = self.room_min_size,
-             room_max_size = self.room_max_size,
-             map_width     = self.map_width,
-             map_height    = self.map_height,
+-            max_rooms             = self.max_rooms,
+-            room_min_size         = self.room_min_size,
+-            room_max_size         = self.room_max_size,
+-            map_width             = self.map_width,
+-            map_height            = self.map_height,
 -            min_monsters_per_room = self.min_monsters_per_room,
 -            max_monsters_per_room = self.max_monsters_per_room,
 -            min_items_per_room    = self.min_items_per_room,
 -            max_items_per_room    = self.max_items_per_room,
-             player        = self.engine.player,
-             seed          = self.seed + self.current_floor,
-             current_floor = self.current_floor,
+-            player                = self.engine.player,
+-            seed                  = self.seed + self.current_floor,
+-            current_floor         = self.current_floor,
++            max_rooms     = self.max_rooms,
++            room_min_size = self.room_min_size,
++            room_max_size = self.room_max_size,
++            map_width     = self.map_width,
++            map_height    = self.map_height,
++            player        = self.engine.player,
++            seed          = self.seed + self.current_floor,
++            current_floor = self.current_floor,
          )
          self.floors.append(self.engine.game_map)
 ```
 
-The `self.floors.append(...)` line stays exactly where it is: floor persistence from Part 11 is not affected by any of this.
+The other arguments keep their values; only their `=` signs move to the new, shorter column. The `self.floors.append(...)` line stays exactly where it is: floor persistence from Part 11 is not affected by any of this.
 
-Finally, remove the four arguments from `new_game()` in `game/setup_game.py`:
+Finally, remove the four arguments from `new_game()` in `game/setup_game.py`, and realign the rest in the same way. The Part 5 Exercise 1 comment goes with them, because that exercise's per-room limits now live in `config.py`:
 
 ```diff
      engine.game_world = GameWorld(
-         engine        = engine,
-         max_rooms     = config.MAX_ROOMS,
-         room_min_size = config.ROOM_MIN_SIZE,
-         room_max_size = config.ROOM_MAX_SIZE,
-         map_width     = config.MAP_WIDTH,
-         map_height    = config.MAP_HEIGHT,
--        min_monsters_per_room = config.MIN_MONSTERS_PER_ROOM,
+-        engine                = engine,
+-        max_rooms             = config.MAX_ROOMS,
+-        room_min_size         = config.ROOM_MIN_SIZE,
+-        room_max_size         = config.ROOM_MAX_SIZE,
+-        map_width             = config.MAP_WIDTH,
+-        map_height            = config.MAP_HEIGHT,
+-        min_monsters_per_room = config.MIN_MONSTERS_PER_ROOM,  # Part-5. Exercise 1: Minimum monsters per room
 -        max_monsters_per_room = config.MAX_MONSTERS_PER_ROOM,
 -        min_items_per_room    = config.MIN_ITEMS_PER_ROOM,
 -        max_items_per_room    = config.MAX_ITEMS_PER_ROOM,
-         seed          = seed,
+-        seed                  = seed,    # Part-3. Exercise 1: Reproducible dungeons
++        engine        = engine,
++        max_rooms     = config.MAX_ROOMS,
++        room_min_size = config.ROOM_MIN_SIZE,
++        room_max_size = config.ROOM_MAX_SIZE,
++        map_width     = config.MAP_WIDTH,
++        map_height    = config.MAP_HEIGHT,
++        seed          = seed,  # Part-3. Exercise 1: Reproducible dungeons
      )
 ```
 
 !!! info "Old saves keep working this time"
-    Part 11 warned that adding the Level component broke old save files. This chapter does the opposite kind of change, and it is harmless: pickle restores whatever attributes the saved object had, so an old `GameWorld` loads with its now-unused `min_monsters_per_room` and friends still attached. The new code simply never reads them. As a general rule: *adding* required state breaks old saves, *removing* reads does not.
+    Part 11b warned that adding the Level component broke old save files. This chapter makes the opposite kind of change, and it is harmless. Pickle restores whatever attributes the saved object had, so an old `GameWorld` loads with `min_monsters_per_room` and the other three limits still attached. The new code never reads them.
+
+    As a general rule: *adding* required state breaks old saves, *removing* reads does not.
 
 ---
 
@@ -434,9 +468,9 @@ Here is how the monster mix changes across floors with the tables above:
 
 ![Monster Chances](images/monster_chances.png)
 
-By floor 7, rooms can hold up to 5 monsters, and the early calm is gone: orcs now make up just over half of encounters, trolls have dropped below half, and ogres can appear as rare heavy threats.
+From floor 6, rooms can hold up to 5 monsters. By floor 7 the early calm is gone: orcs make up just over half of the monsters, trolls have dropped below half, and ogres appear now and then as a rare, heavy threat.
 
-Items follow their own schedule. What matters for them is not a per-floor mix but *when* each one unlocks, and *why*. The table carries a reason for every floor:
+Items follow their own schedule. What matters for them is not a per-floor mix but *when* each one unlocks, and *why*. The table gives a reason for each one:
 
 | Item | Unlocks at floor | Weight | Why |
 | --- | --- | --- | --- |
@@ -444,18 +478,18 @@ Items follow their own schedule. What matters for them is not a per-floor mix bu
 | Chest | 1 | 25 | A plain reward, available from the start |
 | Confusion Scroll | 2 | 10 | First crowd-control tool |
 | Mapping Scroll | 3 | 10 | Utility, never urgent |
-| Backpack Scroll | 3 | 10 | Quality of life, can wait |
+| Backpack Scroll | 3 | 10 | Convenience, can wait |
 | Drain Scroll | 4 | 10 | First offensive scroll, modest damage |
 | Lightning Scroll | 5 | 25 | Strong single-target burst |
 | Teleport Scroll | 6 | 10 | Escape, as crowds start to form |
 | Fireball Scroll | 7 | 25 | Strongest tool, AoE, saved for last |
 
-The maximum items per room also steps up, from 1 to 2 at floor 4. The ordering is the real lesson here: not a theme dumped all at once, but a steady drip of one new tool at a time, the weakest and most general first and the strongest, most situational last. Tools arrive roughly as the fights that need them do.
+The maximum items per room also goes up, from 1 to 2 at floor 4. The order is the real lesson here. New tools do not arrive all at once, but one at a time: the weakest and most general first, the strongest and most situational last. Each tool arrives at about the same time as the fights that need it.
 
 ![Item Chances](images/item_chances.png)
 
 !!! example "Tuning the tables"
-    Adjust the numbers until the game feels balanced. Run the game 10 times at each floor depth. If you consistently clear floor 6 without taking damage, orcs need more weight or higher stats. If you die on floor 2, tone down the monster limits. The table format makes this iteration fast: every knob is one number in one place.
+    Adjust the numbers until the game feels balanced. Run the game 10 times at each floor depth. If you consistently clear floor 6 without taking damage, orcs need more weight or higher stats. If you die on floor 2, lower the monster limits. The table format makes each try fast: every setting is one number in one place.
 
 ---
 
@@ -481,6 +515,7 @@ Spawn rates now scale with dungeon depth. Key additions:
 - **`get_value_for_floor`**: reads a floor-keyed table and returns the value currently in force
 - **`get_entities_at_random`**: weighted random selection using the weights of the current floor
 - **Floor-keyed tables**: `MIN/MAX_MONSTERS_BY_FLOOR` and `MIN/MAX_ITEMS_BY_FLOOR` in `config.py`; `monster_chances` and `item_chances` in `factories.py`
+- **The ogre**: a third monster, kept for the deep floors
 
 **Current architecture**:
 
@@ -505,10 +540,10 @@ game/
 ├── setup_game.py               ← modified
 ├── data/
 │   ├── __init__.py
-│   ├── colors.py
+│   ├── colors.py               ← modified
 │   ├── config.py               ← modified
 │   ├── keys.py
-│   └── sprites.py
+│   └── sprites.py              ← modified
 ├── entities/
 │   ├── __init__.py
 │   ├── entity.py
@@ -540,9 +575,9 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
 1. **Stairs guardian**:
 
-    Every floor, post a guardian: spawn the strongest monster available on this floor right next to the down stairs, regardless of the RNG roll. Because "strongest" is read from the data, the guardian scales on its own: an orc early, an ogre once they appear, whatever you add to the roster later. It stands *next to* the stairs, not on them, so a player who cannot win the fight can still slip past and descend; even a tough guardian stays fair.
+    On every floor, place a guardian: spawn the strongest monster available on this floor right next to the down stairs, whatever the random rolls say. Because "strongest" is read from the data, the guardian scales on its own: an orc early, an ogre once they appear, and whatever you add to the roster later. It stands *next to* the stairs, not on them, so a player who cannot win the fight can still get past it and go down. Even a tough guardian stays fair.
 
-    Three things to work out in `generate_dungeon`, after the stairs spawn:
+    Three questions to answer in `generate_dungeon`, after the stairs spawn:
 
     - **How strong is a monster?** You already ranked them: `xp_given` is the number you assigned to say how dangerous each one is.
     - **Which monsters count on this floor?** Those with a non-zero weight here (`get_value_for_floor`), so the guardian is always something that could legitimately appear on this floor.
@@ -589,9 +624,11 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
 2. **New monster: Ghoul**:
 
-    Add a deep-floor monster that is the **opposite of the ogre**: a frail glass cannon with low HP and low defense, but a hungry **lifesteal** that heals it for most of the damage it lands. A slow trade drags on as it claws back your damage, so the lesson is to burst it down or strike from range before it leeches.
+    Add a deep-floor monster that is the **opposite of the ogre**. It is frail, with low HP and no defense, but it has a strong **lifesteal**: every hit it lands heals it for most of the damage. In a slow exchange of hits it keeps healing and the fight drags on, so the lesson is to kill it fast, or attack from range before it can drain you.
 
-    The design question is *where* the lifesteal belongs. Attacks resolve in `Fighter.melee_attack`, not in the AI, so that is where the attacker should heal, and only when the hit actually deals damage. The heal is capped by the ghoul's own `max_hp` (`heal()` already clamps the result to `max_hp`), so it cannot snowball its own pool; the real threat is the life it drains from *you*. Spawn it around the ogre's depth but a little earlier and rarer, so the player meets the drainer and learns to burst it before the heavier wall arrives.
+    The design question is *where* the lifesteal belongs. Attacks resolve in `Fighter.melee_attack`, not in the AI, so that is where the attacker should heal, and only when the hit actually deals damage. The heal is capped by the ghoul's own `max_hp` (`heal()` already limits the result to `max_hp`), so the ghoul never grows past its starting health. The danger is that your damage does not last: each bite takes back part of it, from *you*.
+
+    Spawn it around the ogre's depth, but a little earlier and rarer. The player meets the ghoul and learns to kill it fast before the heavier ogre arrives.
 
     ??? note "Reference implementation"
         `Fighter` (`game/entities/components/fighter.py`): add a `lifesteal: float = 0.0` parameter, store it as `self.lifesteal`, and heal the attacker at the end of `melee_attack`:
@@ -649,19 +686,21 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
         ![Monster Chances](images/monster_chances_ex.png)
 
-        Low HP and zero defense keep it fragile; `attack=5` with `lifesteal=0.75` means each bite heals it for most of the hit, so a slow trade drags on while a quick burst drops it first. The ghoul arrives a floor before the ogre (floor 6 versus floor 7) and rare at first. Its `xp_given` of 75 sits between the orc's and the ogre's, so on floor 6 the ghoul is briefly the floor's strongest, which makes the Exercise 1 guardian a ghoul until the ogre takes over from floor 7.
+        Low HP and zero defense keep it fragile. With `attack=5` and `lifesteal=0.75`, each bite heals it for three quarters of the damage, so a slow fight drags on, while a quick attack kills it before it can recover. The ghoul arrives a floor before the ogre (floor 6 versus floor 7) and rare at first. Its `xp_given` of 75 sits between the orc's and the ogre's, so on floor 6 the ghoul is briefly the floor's strongest, which makes the Exercise 1 guardian a ghoul until the ogre takes over from floor 7.
 
 3. **The regenerating troll**:
 
     This builds on the flee behavior from Part 6 Exercise 3. If you skipped it, add `CowardEnemy` and `flee_threshold` first, or skip this exercise.
 
-    In folklore the troll's signature power is regeneration, and it pairs beautifully with cowardice: a troll that flees, heals in a corner, and returns at full strength turns "just chase it down" into a real decision. The catch is *when* it heals. It must not regenerate while fighting (it would never die) nor while fleeing (the chase would be pointless): only when it stands still, cornered against a wall or out of your sight in another room. And it must be able to come back, or the regeneration is wasted, a coward that flees forever never threatens you again.
+    In fantasy games, the troll's best-known power is regeneration. Folklore trolls did not have it: Dungeons & Dragons took the idea from Poul Anderson's 1961 novel *Three Hearts and Three Lions*, and many games copied it from there.
+
+    Regeneration works well with cowardice. A troll that flees, heals in a corner, and returns at full strength turns "just chase it" into a real decision. The hard part is *when* it heals. It must not regenerate while fighting (it would never die) nor while fleeing (the chase would be pointless): only when it stands still, cornered against a wall or out of your sight in another room. And it must be able to come back, or the regeneration is wasted: a coward that flees forever never threatens you again.
 
     Three problems to solve:
 
     - **A regeneration trait.** Give `Fighter` an optional `regeneration` amount (a `float`, not a flag, so a future potion or spell can reuse it) and a small `regenerate()` method, then give the troll `regeneration=1.0`.
-    - **Tick it only when idle.** "Standing still" means the troll neither moved nor attacked this turn, and you need no extra state on the entity: compare its position right before and right after the AI acts. Also require it to be non-adjacent to the player, because attacking does not change position, so "did not move" alone would let it heal mid-melee.
-    - **Let it come back.** Make `CowardEnemy` reversible, the way `ConfusedEnemy` restores the previous AI: store the prior AI when fear takes over, then revert once it is **fully healed**, or once it is **cornered** (player adjacent) and has clawed back above its flee threshold, so it turns and fights instead of taking free hits.
+    - **Heal only when idle.** "Standing still" means the troll neither moved nor attacked this turn, and you need no extra state on the entity: compare its position right before and right after the AI acts. Also require it to be non-adjacent to the player, because attacking does not change position, so "did not move" alone would let it heal mid-melee.
+    - **Let it come back.** Make `CowardEnemy` reversible, the way `ConfusedEnemy` restores the previous AI: store the prior AI when fear takes over, then revert once it is **fully healed**, or once it is **cornered** (player adjacent) and has healed back above its flee threshold, so it turns and fights instead of taking free hits.
 
     ??? note "Reference implementation"
         `Fighter` (`game/entities/components/fighter.py`): add `regeneration: float = 0.0`, store it, and add a method:
@@ -675,18 +714,14 @@ The next parts assume you did these exercises. Try each one on your own first. I
         Give the troll the trait in `game/entities/factories.py`:
 
         ```diff
-        -    fighter   = Fighter(
-        -        hp            = 12.0,
-        -        defense       = 0.0,
-        -        attack        = 3.0,
-        -        flee_threshold = 0.3,
-        -    ),
+            # Part-6. Exercise 3: Flee behavior
+        -    fighter   = Fighter(hp=12.0, defense=0.0, attack=3.0, flee_threshold=0.3),
         +    fighter   = Fighter(
-        +        hp            = 12.0,
-        +        defense       = 0.0,
-        +        attack        = 3.0,
+        +        hp             = 12.0,
+        +        defense        = 0.0,
+        +        attack         = 3.0,
         +        flee_threshold = 0.3,
-        +        regeneration  = 1.0,
+        +        regeneration   = 1.0,  # Part-12. Exercise 3: The regenerating troll
         +    ),
         ```
 
@@ -748,7 +783,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
             ...
         ```
 
-        The result is a coward that is also treacherous: you think it is easy prey, you break off the chase, and it heals up and comes back; or you corner it and it bites. Tune `regeneration` and `flee_threshold` until the chase feels tense rather than tedious.
+        The result is a coward that is also treacherous: you think it is easy prey, you stop chasing it, and it heals and comes back; or you corner it and it bites. Tune `regeneration` and `flee_threshold` until the chase feels tense rather than tedious.
 
 4. **Monsters that remember**:
 
@@ -759,13 +794,13 @@ The next parts assume you did these exercises. Try each one on your own first. I
         return
     ```
 
-    Step out of a monster's sight and it freezes mid-room, forever, as if it had never seen you. It is the simplest rule that works and the right place to start, but a monster that just watched you round a corner should at least walk to where you were.
+    Step out of a monster's sight and it stops in the middle of the room, forever, as if it had never seen you. It is the simplest rule that works and the right place to start, but a monster that just watched you walk around a corner should at least go to where you were.
 
-    Give `HostileEnemy` a `target_position`: update it every turn the player is in sight, and when sight is lost, head for that tile instead of stopping. Think about when the trail should go cold: the monster is standing on the remembered tile and *still* cannot see the player. Detect that, clear the memory, and let the monster idle.
+    Give `HostileEnemy` a `target_position`: update it every turn the player is in sight, and when sight is lost, head for that tile instead of stopping. Think about when the monster should give up the search: it is standing on the remembered tile and *still* cannot see the player. Detect that, clear the memory, and let the monster idle.
 
-    **The decision it creates.** "Out of sight" stops being an off switch and becomes a tool: let a monster catch a glimpse of you and you can walk it out of a room you would rather not fight in.
+    **The decision it creates.** "Out of sight" is no longer an off switch; it becomes a tool. Let a monster see you for a moment, and you can lead it out of a room where you do not want to fight.
 
-    **Extension: a guardian that holds its post.** Make some monsters the exception. Add a `home: tuple[int, int] | None` to the AI. A monster with a `home` chases to your last known position like any other, but once the trail goes cold it walks *back* to `home` instead of idling in the wrong room, so it cannot be lured away for good. The wiring is the part worth thinking about:
+    **Extension: a guardian that holds its post.** Make some monsters the exception. Add a `home: tuple[int, int] | None` to the AI. A monster with a `home` chases you to your last known position like any other, but once it gives up the search it walks *back* to `home` instead of idling in the wrong room, so you cannot lead it away for good. The part worth thinking about is where `home` gets set:
 
     - If you completed the **Stairs guardian** (Exercise 1), that is exactly the monster that wants this: right after spawning the guardian, set the placed copy's `ai.home` to its tile.
 
@@ -829,9 +864,9 @@ The next parts assume you did these exercises. Try each one on your own first. I
                 ).perform(engine, entity)
         ```
 
-        The `# Part-6. Exercise 3: Flee behavior` block above belongs here only if you completed that exercise; omit it otherwise.
+        The `# Part-6. Exercise 3: Flee behavior` block above belongs here only if you completed that exercise; omit it otherwise. `CowardEnemy(previous_ai=self)` needs the reversible `CowardEnemy` from Exercise 3; if you did not do Exercise 3, write `CowardEnemy()` instead.
 
-        Then in `generate_dungeon()` (`game/map/map_generator.py`), give the guardian from Exercise 1 a `home`. This only applies if you did Exercise 1: the `guardian` and `guardian_pos` variables come from its code, and the diff below replaces its `guardian.spawn(...)` line. It also needs `Actor` and `HostileEnemy` imported in `map_generator.py` (`from game.entities.entity import Actor`, `from game.entities.components.ai import HostileEnemy`):
+        Then in `place_stairs_guardian()` (`game/map/map_generator.py`), give the guardian from Exercise 1 a `home`. This only applies if you did Exercise 1: the `guardian` and `guardian_pos` variables come from its code, and the diff below replaces its `guardian.spawn(...)` line. It also needs `Actor` and `HostileEnemy` imported in `map_generator.py` (`from game.entities.entity import Actor`, `from game.entities.components.ai import HostileEnemy`):
 
         ```diff
         guardian = max(monsters_available, key=lambda monster: monster.level.xp_given)
@@ -851,20 +886,26 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
 ## A cast, not a difficulty curve
 
-There is an easy way to make a dungeon harder as it descends, and this chapter quietly avoided it. The lazy lever is **numbers**: take the same monsters down to the deep floors with more hit points, more damage, and a little more defense, and call it difficulty. It works, in the narrow sense that the player dies more often. But it is shallow. A floor-10 orc with triple the hit points is still an orc: you fight it exactly the way you fought the first one, only for longer. Bigger numbers stretch a fight; they do not change it. Stack enough of them and every encounter becomes the same encounter with a longer health bar, and the player stops paying attention, because there is nothing new to read.
+There is an easy way to make a dungeon harder as it goes down, and this chapter did not use it. The lazy option is **numbers**: take the same monsters down to the deep floors with more hit points, more damage, and a little more defense, and call it difficulty. It works, in the narrow sense that the player dies more often. But it is shallow. A floor-10 orc with triple the hit points is still an orc: you fight it exactly the way you fought the first one, only for longer.
 
-The alternative costs almost nothing and is where the game finds its depth: give each monster a **personality**, a different question it forces the player to answer.
+Bigger numbers make a fight longer; they do not change it. Add enough of them and every encounter becomes the same encounter with a longer health bar. The player stops paying attention, because there is nothing new to read.
 
-- The **orc** is the question with no twist: plain attack-minus-defense combat, the honest fight everything else is measured against.
-- The **troll** asks *chase or let go?* It is weak, but it flees and heals, so finishing it means committing, and committing drags you into the next room.
-- The **ogre** asks *can you avoid trading blows?* Toe-to-toe it grinds you down, so it pushes you toward Lightning, Fireball, or Confusion scrolls.
-- The **ghoul** asks *can you burst it down?* Frail but draining, it punishes the slow trade and rewards focus and range.
+The alternative costs almost nothing, and it is what gives the game depth: give each monster a **personality**, a different question it forces the player to answer.
 
-Notice how they pair off. The troll and the ghoul both heal, but one does it by *running and waiting* and the other by *closing and biting*, so they pull the player in opposite directions. The ogre and the ghoul are both deep-floor threats, yet one is a wall you cannot out-damage and the other a fight you must end fast. None of this is a higher number; each is a different *shape*. And because the personality lives in behavior rather than stats, a room with two trolls and an ogre is a genuinely different problem from a room with two ghouls, even when the raw "difficulty" is the same.
+- The **orc** is the question with no twist: a plain melee fight, the honest fight everything else is measured against.
+- The **troll** asks *chase or let go?* It is weak, but it flees and heals, so finishing it means committing, and committing pulls you into the next room.
+- The **ogre** asks *can you avoid a long melee fight?* Up close it wears you down, so it pushes you toward Lightning, Fireball, or Confusion scrolls.
+- The **ghoul** asks *can you kill it fast?* It is frail but drains life, so it punishes a slow fight and rewards focus and attacks from range.
 
-That is what the spawn table is really for. It is not a knob for how *strong* a floor is; it is a knob for *which questions* the player has to answer, and how often. The numbers still matter, of course, but they are the floor of good enemy design, not the ceiling. Depth comes from the variety of decisions a dungeon asks for, not from the size of its health bars.
+Notice how they form pairs. The troll and the ghoul both heal, but one does it by *running and waiting* and the other by *coming close and biting*, so they pull the player in opposite directions. The ogre and the ghoul are both deep-floor threats, yet one is a wall you cannot out-damage and the other a fight you must end fast.
+
+None of this is a higher number; each one is a different *kind* of fight. And because the personality lives in behavior rather than stats, a room with two trolls and an ogre is a really different problem from a room with two ghouls, even when the raw "difficulty" is the same.
+
+That is what the spawn table is really for. It does not set how *strong* a floor is; it sets *which questions* the player has to answer, and how often. The numbers still matter, of course, but they are only the starting point of good enemy design. Depth comes from the variety of decisions a dungeon asks for, not from the size of its health bars.
 
 !!! tip "Design takeaway"
-    "Harder" is the boring axis. The one that creates depth is *what decision does this enemy force?* A good bestiary is a set of distinct questions; the spawn table just sets how often each one comes up.
+    Making enemies "harder" is the boring option. What creates depth is the question *what decision does this enemy force?*
 
-And the cast is not closed: the most interesting monster is the one you have not written yet. What would a thief that snatches an item and bolts force you to do? A creature that is harmless until you turn your back? One that splits in two every time you hit it, or one that does nothing but heal the monsters around it? Each of those is a sentence, not a stat block. So before you reach for *the next enemy needs more hit points*, try finishing the other sentence instead, *this enemy makes the player...*, and follow where it leads.
+    A good bestiary (the full set of monsters in a game) is a set of distinct questions; the spawn table only sets how often each one comes up.
+
+And the list of monsters is not closed: the most interesting monster is the one you have not written yet. What would a thief that grabs an item and runs away force you to do? A creature that is harmless until you turn your back? One that splits in two every time you hit it, or one that does nothing but heal the monsters around it? Each of those is a sentence, not a list of stats. So before you decide that *the next enemy needs more hit points*, try to finish a different sentence: *this enemy makes the player...*, and see where it leads.
