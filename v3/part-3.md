@@ -443,7 +443,7 @@ Run the game a few times with `uv run main.py` (or `python main.py`):
 - [ ] All rooms are connected by corridors (you can reach every room)
 - [ ] Walls block movement as expected
 - [ ] The dungeon fits within the map bounds
-- [ ] There is no exit yet; descending stairs come in Part 11
+- [ ] There is no exit yet; descending stairs come in Part 11a
 
 !!! bug "What if some rooms are unreachable?"
     Our algorithm connects each room to the *previous* room in the list with a tunnel. Digging only turns wall into floor, so a later room can never block an earlier corridor. That is what makes every room reachable.

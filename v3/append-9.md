@@ -152,7 +152,7 @@ One assumption to keep in mind: `follow` and `view` expect the map to be at leas
 
 The tile half is the same `np.select` as always; the only change is that every input array is sliced through the same window before the comparison happens. If you carried exercise code in your condition list (the fading memory from Part 4, the mapping scroll from Part 9), slice those arrays the same way; the fading memory also replaces `self.explored` in the `stays_visible` line.
 
-The entity half gains a guard, and it is not paranoia. For *visible* entities you could argue it away: the camera follows the player, the FOV radius is 8, and half a viewport is at least 22 tiles, so anything in view of the player is comfortably on screen. But the loop has drawn `stays_visible` entities in explored tiles since Part 6, and the moment something has that flag ([Part 11](part-11.md) gives it to the stairs), an entity can be explored, far outside the viewport, and still asked to draw.
+The entity half gains a guard, and it is not paranoia. For *visible* entities you could argue it away: the camera follows the player, the FOV radius is 8, and half a viewport is at least 22 tiles, so anything in view of the player is comfortably on screen. But the loop has drawn `stays_visible` entities in explored tiles since Part 6, and the moment something has that flag ([Part 11a](part-11a.md) gives it to the stairs), an entity can be explored, far outside the viewport, and still asked to draw.
 
 !!! warning "Clamp it yourself"
 

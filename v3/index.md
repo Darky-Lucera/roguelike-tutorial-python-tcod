@@ -88,7 +88,9 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 - [Part 10b: Save and Load](part-10b.md): Save the game with pickle, continue it from the menu, and delete the save on death.
 
-- [Part 11: Dungeon Levels and Experience](part-11.md): Add dungeon floors, stairs, XP, and character level-ups.
+- [Part 11a: Dungeon Levels](part-11a.md): Add stairs, new dungeon floors, and floors that stay as you left them.
+
+- [Part 11b: Experience](part-11b.md): Earn XP from kills, level up with a stat choice, and show an XP bar.
 
 - [Part 12: Procedural Difficulty](part-12.md): Scale encounter difficulty with floor-keyed weighted spawn tables.
 

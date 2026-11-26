@@ -768,7 +768,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
         +        attacker.fighter.kill_count += 1
         ```
 
-        This changes `take_damage`'s signature, so every call site must pass `attacker`: `melee_attack` in `fighter.py`, plus the lightning, fireball, and drain consumables in `consumable.py`. That threading is exactly the change Part 11 makes in its "Award XP on kill" section, which then notes it is already in place if you did this exercise.
+        This changes `take_damage`'s signature, so every call site must pass `attacker`: `melee_attack` in `fighter.py`, plus the lightning, fireball, and drain consumables in `consumable.py`. That threading is exactly the change Part 11b makes in its "Award XP on kill" section, which then notes it is already in place if you did this exercise.
 
         Show the tally. Add the row color in `game/data/colors.py`:
 
@@ -887,4 +887,4 @@ The next parts assume you did these exercises. Try each one on your own first. I
     ---
 
     !!! warning "Delete your save before starting Part 11"
-        These exercises intentionally create incompatible save files. Delete `savegames/savegame.sav` before continuing. Part 11 adds a `Level` component to every actor; a save written now has no `level` attribute, so any leftover save will fail after you load it.
+        These exercises intentionally create incompatible save files. Delete `savegames/savegame.sav` before continuing. Part 11a adds a `game_world` to the engine and Part 11b a `Level` component to every actor; a save written now has neither, so any leftover save will fail after you load it.
