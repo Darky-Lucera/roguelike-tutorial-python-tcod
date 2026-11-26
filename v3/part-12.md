@@ -16,14 +16,13 @@ In this part we will:
 
 ---
 
-## The problem with flat spawn rates
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [Floor-keyed weight tables](#floor-keyed-weight-tables). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### The problem with flat spawn rates
 
 Right now, every floor draws from the same spawn tables with the same weights. The weighted table from Part 5 Exercise 2 already made some monsters rarer than others, but the weights never change: floor 10 rolls on exactly the same table as floor 1. This makes the game feel flat: depth adds no tension.
-
-!!! info "Where you stand"
-    Two Part 5 exercises built the current spawn system. Exercise 1 added minimum and maximum counts per room, and Exercise 2 replaced the hardcoded monster split with a `monster_chances` table and `rng.choices`. This chapter takes both further: the counts become floor-keyed tables in `config.py`, and the weight tables gain a floor dimension.
-
-    If you skipped those exercises, the diffs below still match your code: Part 8 made the weighted tables part of the main path, and Part 11's listings already carried the per-room limit parameters. Where a deleted line is something you never added (an exercise item, for example), there is nothing to delete.
 
 The fix is an **encounter table**: a mapping from dungeon floor to spawn probabilities. Orcs appear rarely on shallow floors and frequently on deep ones. New items only appear once the player has had time to learn the basics.
 
@@ -32,9 +31,7 @@ The fix is an **encounter table**: a mapping from dungeon floor to spawn probabi
 
     Later games like Angband added rare *out-of-depth* monsters: once in a while, a monster from much deeper floors appears early. The floor-keyed tables you are about to write use the same core idea: monsters tied to depth, written as data.
 
----
-
-## Weighted selection, floor by floor
+### Weighted selection, floor by floor
 
 You already used weighted random selection in Part 5 Exercise 2: given a list of `(item, weight)` pairs, `rng.choices` picks an item at random, where higher-weight items are more likely. As a reminder, here is how the item weights from this chapter work on a deep floor. Only the four base items are shown, to keep the example short:
 
@@ -59,6 +56,11 @@ What is new in this part is the floor dimension: the weight of each entry now de
 ---
 
 ## Floor-keyed weight tables
+
+!!! info "Where you stand"
+    Two Part 5 exercises built the current spawn system. Exercise 1 added minimum and maximum counts per room, and Exercise 2 replaced the hardcoded monster split with a `monster_chances` table and `rng.choices`. This chapter takes both further: the counts become floor-keyed tables in `config.py`, and the weight tables gain a floor dimension.
+
+    If you skipped those exercises, the diffs below still match your code: Part 8 made the weighted tables part of the main path, and Part 11's listings already carried the per-room limit parameters. Where a deleted line is something you never added (an exercise item, for example), there is nothing to delete.
 
 A **floor-keyed table** is a list of `(floor, value)` pairs meaning "from this floor onward, the value is this". To find the value for floor N, take the last entry whose floor is less than or equal to N. Entries must be sorted by floor.
 
@@ -143,17 +145,18 @@ ogre = Actor(
 !!! note "`max_capacity` is from Part 8 Exercise 2"
     `max_capacity` is the parameter the Part 8 backpack-scroll exercise added to `Inventory` (required, no default). If you did that exercise, keep `max_capacity=0`; if you skipped it, remove it and write `inventory = Inventory(capacity=0)`. The same choice applies to every new `Inventory(...)` in this chapter, including the ghoul exercise below.
 
-The ogre is the opposite of the troll: it is brave and simple, with no trick, only many hit points and a heavy hit. Its defense stays at 1 on purpose, the same as the orc's. The threat is its hit points and damage, not a high defense that would punish a character with a low attack.
-
 Notice that the ogre itself needs no code in the map generator. A sprite, a color, a template, and (in the next section) one line in the weight table are the whole change. Once this chapter is done, every new monster works the same way.
+
+!!! info "Why the ogre has no trick"
+    The ogre is the opposite of the troll: it is brave and simple, with no trick, only many hit points and a heavy hit.
+
+    Its defense stays at 1 on purpose, the same as the orc's. The threat is its hit points and damage, not a high defense that would punish a character with a low attack.
 
 ---
 
 ## factories.py: weights become floor-keyed
 
-The weight tables stay where Part 5 Exercise 2 put them: in `game/entities/factories.py`, right next to the templates they use. They cannot move to `config.py`: the tables need the templates, and `factories.py` already imports `config.py`, so an import in the other direction would create a circular import. Only the plain numeric limits belong in `config.py`; the weight tables stay with the templates they describe.
-
-The format changes from a flat list to a dict of floor-keyed weights. Update `monster_chances`:
+The weight tables stay where Part 5 Exercise 2 put them: in `game/entities/factories.py`, right next to the templates they use. The format changes from a flat list to a dict of floor-keyed weights. Update `monster_chances`:
 
 ```diff
 -# Part-5. Exercise 2: Weighted monster table
@@ -202,6 +205,11 @@ Floor 1 now offers only potions and chests. New scrolls then arrive about one fl
 
 !!! info "Items from earlier exercises"
     The chest comes from Part 5 Exercise 3 (via Part 8), the backpack scroll from Part 8 Exercise 2, and the mapping, drain and teleport scrolls from Part 9 Exercises 1-3. If you skipped any of them, omit that line: the table works with any subset of entries.
+
+!!! question "Why not put the weight tables in `config.py`?"
+    They cannot move there. The tables need the templates, and `factories.py` already imports `config.py`, so an import in the other direction would create a circular import.
+
+    Only the plain numeric limits belong in `config.py`; the weight tables stay with the templates they describe.
 
 !!! question "Can entities be dict keys?"
     Yes. A dictionary key only has to be *hashable*: something Python can turn into a fixed number to look it up by. By default an object is hashable by its identity (which object it is, not what it holds), and each template in `factories.py` is a single, unique object, so there is exactly one `orc` to use as a key.
@@ -573,6 +581,11 @@ The next parts assume you did these exercises. Try each one on your own first. I
 !!! tip "Don't skip the ending"
     These exercises are a bit long. Even if you skip them, read the closing section, [A cast, not a difficulty curve](#a-cast-not-a-difficulty-curve), right after: it is the design lesson this whole chapter has been building toward.
 
+!!! warning "Exercises 2 to 4 break old save files"
+    Unlike the main part of this chapter, Exercises 2, 3 and 4 *add* attributes: `lifesteal` and `regeneration` on `Fighter`, `previous_ai` on `CowardEnemy`, and `target_position` and `home` on `HostileEnemy`. The actors in an older save file, the player included, do not have them. The save still loads, but the game crashes with an `AttributeError` as soon as the code reads one of them, usually on the first turn or the first attack.
+
+    Delete `savegames/savegame.sav` after each of these exercises, as in Part 11b. For the new `Fighter` fields, a `__getattr__` fallback that returns `0.0` (Part 10b Exercise 3) is another fix.
+
 1. **Stairs guardian**:
 
     On every floor, place a guardian: spawn the strongest monster available on this floor right next to the down stairs, whatever the random rolls say. Because "strongest" is read from the data, the guardian scales on its own: an orc early, an ogre once they appear, and whatever you add to the roster later. It stands *next to* the stairs, not on them, so a player who cannot win the fight can still get past it and go down. Even a tough guardian stays fair.
@@ -581,7 +594,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
     - **How strong is a monster?** You already ranked them: `xp_given` is the number you assigned to say how dangerous each one is.
     - **Which monsters count on this floor?** Those with a non-zero weight here (`get_value_for_floor`), so the guardian is always something that could legitimately appear on this floor.
-    - **Where does it stand?** A free tile next to the stairs. The `free` list from the stairs placement is the starting point, but it was built before the stairs spawned, so remove the stairs tile first; then keep only the tiles within a tile or two of the stairs, with a fallback for when none are free.
+    - **Where does it stand?** A free tile next to the stairs. The `free` list from the stairs placement is the starting point, but it was built before the stairs spawned, so remove the stairs tile first; then keep only the tiles within a tile or two of the stairs. If none is free, use the free tile closest to the stairs.
 
     ??? note "Reference implementation"
         Add a helper near the other map-generation helpers (`game/map/map_generator.py`). Keeping this out of `generate_dungeon()` keeps that function small enough for the project linters:
@@ -593,7 +606,6 @@ The next parts assume you did these exercises. Try each one on your own first. I
             current_floor: int,
             free: list[tuple[int, int]],
             stair_pos: tuple[int, int],
-            fallback_pos: tuple[int, int],
         ) -> None:
             # Part-12. Exercise 1: Stairs guardian
             if stair_pos in free:
@@ -610,7 +622,15 @@ The next parts assume you did these exercises. Try each one on your own first. I
                 for x, y in free
                 if max(abs(x - stair_pos[0]), abs(y - stair_pos[1])) <= 2
             ]
-            guardian_pos = rng.choice(near_stairs) if near_stairs else fallback_pos
+            if near_stairs:
+                guardian_pos = rng.choice(near_stairs)
+            elif free:
+                guardian_pos = min(
+                    free,
+                    key=lambda tile: max(abs(tile[0] - stair_pos[0]), abs(tile[1] - stair_pos[1])),
+                )
+            else:
+                return  # the room is full: there is no tile to stand on
 
             guardian = max(monsters_available, key=lambda monster: monster.level.xp_given)
             guardian.spawn(dungeon, *guardian_pos)
@@ -619,7 +639,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
         Then call it in `generate_dungeon()`, right after the down stairs spawn:
 
         ```python
-        place_stairs_guardian(rng, dungeon, current_floor, free, stair_pos, last_room.center)
+        place_stairs_guardian(rng, dungeon, current_floor, free, stair_pos)
         ```
 
 2. **New monster: Ghoul**:
@@ -673,13 +693,13 @@ The next parts assume you did these exercises. Try each one on your own first. I
         ...and in `monster_chances` (same file), make room for it on the deep floors:
 
         ```diff
-        monster_chances = {
-            troll: [(1, 80), (6, 50), (10, 40)],
-            orc:   [(1, 10), (3, 20), (5, 40), (7, 60), (9, 80)],
+         monster_chances = {
+             troll: [(1, 80), (6, 50), (10, 40)],
+             orc:   [(1, 10), (3, 20), (5, 40), (7, 60), (9, 80)],
         -    ogre:  [(6,  5), (8, 15), (10, 30)],
         +    ogre:  [(7,  15), (9,  30)],
         +    ghoul: [(6,  5), (8, 15), (10, 30)],  # Part-12. Exercise 2: New monster: Ghoul
-        }
+         }
         ```
 
         Here is how the monster mix changes across floors with these tables:
@@ -714,7 +734,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
         Give the troll the trait in `game/entities/factories.py`:
 
         ```diff
-            # Part-6. Exercise 3: Flee behavior
+             # Part-6. Exercise 3: Flee behavior
         -    fighter   = Fighter(hp=12.0, defense=0.0, attack=3.0, flee_threshold=0.3),
         +    fighter   = Fighter(
         +        hp             = 12.0,
@@ -728,10 +748,10 @@ The next parts assume you did these exercises. Try each one on your own first. I
         Tick it in `handle_enemy_turns()` (`game/engine.py`), around the AI's turn:
 
         ```diff
-        for actor in set(self.game_map.actors) - {self.player}:
-            if actor.ai:
+         for actor in set(self.game_map.actors) - {self.player}:
+             if actor.ai:
         +        last_position = (actor.x, actor.y)  # Part-12. Exercise 3: The regenerating troll
-                actor.ai.perform(self, actor)
+                 actor.ai.perform(self, actor)
         +
         +        # Part-12. Exercise 3: The regenerating troll
         +        if actor.fighter.regeneration and actor.is_alive:
@@ -744,11 +764,11 @@ The next parts assume you did these exercises. Try each one on your own first. I
         Finally, make `CowardEnemy` (`game/entities/components/ai.py`) reversible. `HostileEnemy.perform` passes itself as the AI to return to:
 
         ```diff
-            # Part-6. Exercise 3: Flee behavior
-            if entity.fighter.should_flee():
+             # Part-6. Exercise 3: Flee behavior
+             if entity.fighter.should_flee():
         -        entity.ai = CowardEnemy()
         +        entity.ai = CowardEnemy(previous_ai=self)
-                entity.ai.entity = entity
+                 entity.ai.entity = entity
         ```
 
         `CowardEnemy` stores it. Only a `HostileEnemy` creates a `CowardEnemy`, so unlike in `ConfusedEnemy`, `previous_ai` is never `None`:
@@ -763,7 +783,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
         Then `perform` checks, before it flees, whether it should turn back:
 
         ```diff
-        def perform(self, engine: Engine, entity: Actor) -> None:
+         def perform(self, engine: Engine, entity: Actor) -> None:
         +    # Part-12. Exercise 3: The regenerating troll
         +    fighter  = entity.fighter
         +    adjacent = max(
@@ -777,10 +797,10 @@ The next parts assume you did these exercises. Try each one on your own first. I
         +        return
         +
         +    # Otherwise, keep fleeing
-            if not engine.game_map.visible[entity.x, entity.y]:
-                return  # Out of player FOV; cannot act
+             if not engine.game_map.visible[entity.x, entity.y]:
+                 return  # Out of player FOV; cannot act
 
-            ...
+             ...
         ```
 
         The result is a coward that is also treacherous: you think it is easy prey, you stop chasing it, and it heals and comes back; or you corner it and it bites. Tune `regeneration` and `flee_threshold` until the chase feels tense rather than tedious.
@@ -869,7 +889,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
         Then in `place_stairs_guardian()` (`game/map/map_generator.py`), give the guardian from Exercise 1 a `home`. This only applies if you did Exercise 1: the `guardian` and `guardian_pos` variables come from its code, and the diff below replaces its `guardian.spawn(...)` line. It also needs `Actor` and `HostileEnemy` imported in `map_generator.py` (`from game.entities.entity import Actor`, `from game.entities.components.ai import HostileEnemy`):
 
         ```diff
-        guardian = max(monsters_available, key=lambda monster: monster.level.xp_given)
+         guardian = max(monsters_available, key=lambda monster: monster.level.xp_given)
         -guardian.spawn(dungeon, *guardian_pos)
         +
         +# Part-12. Exercise 4: Monsters that remember
