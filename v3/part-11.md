@@ -9,14 +9,19 @@ By the end of this part, the player will gain experience from defeating enemies,
 In this part we will:
 
 - Track experience points and character level on a `Level` component
-- Show a level-up modal when the player gains enough XP
-- Add descending stairs that generate a new dungeon floor
-- Introduce `GameWorld` to separate "how to generate maps" from the current map
 - Award XP to the killer when an enemy dies
+- Introduce `GameWorld` to separate "how to generate maps" from the current map
+- Add stairs that go down to a new floor and back up to the previous one
+- Show a level-up modal when the player gains enough XP
+- Show the floor number and an XP bar in the HUD
 
 ---
 
-## Experience and character progression
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [config.py additions](#configpy-additions). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### Experience curves
 
 Classic roguelikes use an XP curve where each level requires more XP than the last.
 The two most common designs are a flat cost per level and an accelerating one.
@@ -24,13 +29,13 @@ The two most common designs are a flat cost per level and an accelerating one.
 ![Linear XP: each level costs roughly the same](images/xp_cost_level_lin.png)
 
 A **flat (linear) cost** means the player always knows how many fights to expect before
-leveling up. Progress feels steady and predictable, but leveling stops feeling like an
-event; it becomes background noise.
+leveling up. Progress feels steady and predictable, but a new level stops feeling
+special.
 
 ![Accelerating XP: later levels cost progressively more](images/xp_cost_level_exp.png)
 
-An **accelerating cost** makes early levels fast and generous, hooking the player
-quickly. Later levels require real investment, which makes reaching them feel earned.
+An **accelerating cost** makes early levels fast, so the player gets the first rewards
+quickly. Later levels take much more effort, which makes reaching them feel earned.
 The risk is a curve so steep that high levels become practically unreachable.
 
 We use a quadratic formula: each threshold grows by `level * factor`, so early levels
@@ -44,7 +49,21 @@ are fast and later ones demand progressively more effort.
 | 5     | 1200    | +400     |
 | ...   | ...     | +100 * previous level |
 
-The first level-up costs `level_up_base + current_level * level_up_factor` XP (300 at level 1). Each time you level up, the next cost increases by `new_level * level_up_factor`. This matches the growth rate used by games like Diablo from level 8 onwards.
+The first level-up costs `level_up_base + current_level * level_up_factor` XP (300 at level 1). Each time you level up, the next cost increases by `new_level * level_up_factor`. Many games use an accelerating curve of this kind. In Diablo II, for example, each level also costs more than the one before, although its experience table does not follow a simple formula like ours.
+
+### Who earns the XP, and when
+
+When an enemy dies, someone has to receive its XP. One option is to give `die()` access to the `Engine` and always reward the player. We do something else: `take_damage()` receives the `attacker`, and `die()` gives the XP to that actor. `Fighter` does not need to know about `Engine`, and XP works for any actor that deals damage: melee attacks, spells, or summoned allies added later.
+
+A level-up heals the player to full HP. In a difficult roguelike, this makes a level-up a real survival tool: a player with low health has a reason to fight one more enemy instead of retreating.
+
+That raises a timing question. The game checks for a level-up after the enemies have taken their turns, not right after the killing blow. So if your attack crosses the XP threshold, you still have to survive the enemies' turns before the level-up screen appears. This is on purpose: the healing is a reward for choosing your fights well, not a last-second escape from death.
+
+### Floors that stay
+
+Every roguelike with stairs must decide what happens to a floor when the player leaves it. Rogue, and Angband by default, create a new level every time you take the stairs: if you go back up, you find a different floor. NetHack keeps every level you visit, with the items you dropped and the corpses you left.
+
+We keep the floors. A new class, `GameWorld`, holds the settings used to generate a map and a list of every floor generated so far. Going down to a new depth generates a floor and adds it to the list; going back up only switches to a floor that already exists. Each floor gets its own seed (the run's seed plus the floor number), so the same run always produces the same dungeon.
 
 ---
 
@@ -63,7 +82,7 @@ LEVEL_STAT_ATTACK  = 1.0
 LEVEL_STAT_DEFENSE = 1.0
 ```
 
-`DEFAULT_LEVEL_UP_BASE` and `DEFAULT_LEVEL_UP_FACTOR` name the numbers that drive the XP curve explained above. `LEVEL_STAT_*` name the per-choice bonuses awarded in the level-up modal; adjusting them in one place changes the feel of every stat option at once.
+`DEFAULT_LEVEL_UP_BASE` and `DEFAULT_LEVEL_UP_FACTOR` name the numbers that drive the XP curve explained above. `LEVEL_STAT_*` name the bonus for each choice in the level-up modal. The `Level` methods use them as default amounts, and the modal reads them for its labels, so changing a value here changes both the bonus and the text the player sees.
 
 The exploration-reward constants (`EXPLORATION_MILESTONES`, `EXPLORATION_XP_BASE`, etc.) belong to Exercise 2 and are listed there.
 
@@ -82,20 +101,26 @@ directly, while the existing combat code continues to use the same public attrib
     `base_defense *= 1.1`) without losing precision. Keeping `attack` and `defense` as
     properties means later changes will not require edits at every combat call site.
 
-Update `Fighter.__init__` in `game/entities/components/fighter.py` and add the two
-properties:
+In `Fighter.__init__` (`game/entities/components/fighter.py`), rename the two stored
+values:
+
+```diff
+-        self.defense             = float(defense)
+-        self.attack              = float(attack)
++        self.base_defense        = float(defense)
++        self.base_attack         = float(attack)
+```
+
+Then add the two properties to the `Fighter` class, next to the `hp` property:
 
 ```python
-self.base_defense = float(defense)
-self.base_attack  = float(attack)
+    @property
+    def defense(self) -> float:
+        return self.base_defense
 
-@property
-def defense(self) -> float:
-    return self.base_defense
-
-@property
-def attack(self) -> float:
-    return self.base_attack
+    @property
+    def attack(self) -> float:
+        return self.base_attack
 ```
 
 With those base stats ready, create `game/entities/components/level.py`:
@@ -161,19 +186,22 @@ class Level(ActorComponent):
 
 `add_xp` returns `True` only when this specific gain crosses the level-up threshold: `was_ready` captures the state before the increment, and the method returns `True` only if the threshold is now met and was not met before. Without this check, a fireball that kills two enemies in one action could trigger the message twice if the first kill already pushed XP past the threshold.
 
-The two early-return guards cover two distinct cases. `if xp == 0` handles enemies (or any entity) with `xp_given=0`: they give no XP when killed and the call returns immediately. `if self.level_up_base == 0` is a defensive opt-out for any entity explicitly constructed with `level_up_base=0`; nothing in the current code triggers it, but it makes it easy to add a deliberately non-leveling entity in the future without modifying `add_xp`.
+The two early returns cover two different cases:
 
-`increase_level` heals the player to full HP on every level-up. In a difficult roguelike, this makes level-up a meaningful survival tool: a player on low health has a reason to push through one more fight rather than retreat. `increase_max_hp` no longer needs to heal separately because `increase_level` already does it.
+- `if xp == 0` handles enemies (or any entity) with `xp_given=0`: they give no XP when killed, so the call returns immediately.
+- `if self.level_up_base == 0` is a safety check for an entity created with `level_up_base=0`. Nothing in the current code does that, but it lets you add an entity that never levels up later, without changing `add_xp`.
+
+`increase_level` heals the player to full HP on every level-up (the Background explains why). Because `increase_level` already heals, `increase_max_hp` does not need to heal on its own.
 
 ---
 
 ## Award XP on kill
 
-Rather than passing `engine` into `die()`, we add an `attacker` parameter to `take_damage()` and route XP through that actor. This keeps `Fighter` decoupled from `Engine` and makes XP work for any Actor that deals damage: melee attacks, spells, or summoned allies added later.
+We add an `attacker` parameter to `take_damage()`, and `die()` gives the XP to that actor.
 
-We also take this opportunity to clean up how `_hp` is accessed. The `hp` setter existed only to clamp the value and call `die()`. Since `die()` is now triggered from `take_damage`, the setter has no remaining purpose. Removing it means `_hp` is only ever written in two places: `heal` and `take_damage`. A comment on each marks them as the sole mutators, so future readers know exactly where to look.
+We also clean up how `_hp` is accessed. The `hp` setter existed only to clamp the value and call `die()`. Now `take_damage` calls `die()`, so the setter has no job left. Without it, after `__init__` only two methods write `_hp`: `heal` and `take_damage`. A comment on each one says so, so future readers know exactly where to look.
 
-All other reads, including inside `heal` and `take_damage` themselves, go through the `self.hp` property. This makes `_hp =` a reliable grep target for writes.
+All reads, including the ones inside `heal` and `take_damage`, go through the `self.hp` property. If you search the code for `_hp =`, you find every place that changes HP.
 
 Update `game/entities/components/fighter.py`. Remove the `hp` setter entirely, then update `heal` and `take_damage`:
 
@@ -217,7 +245,7 @@ In `Fighter.melee_attack()`, pass the actor that is making the attack:
 +        target.fighter.take_damage(damage, attacker=self.entity)
 ```
 
-Update the spell damage in `game/entities/components/consumable.py` too. The player is the `consumer`, so they are the attacker for lightning, fireball, and drain:
+Update the spell damage in `game/entities/components/consumable.py` too. The player is the `consumer`, so they are the attacker for lightning, fireball, and drain. `FireballDamageConsumable.activate` did not use its consumer until now, so its parameter was named `_consumer`; rename it to `consumer`:
 
 ```diff
  class LightningDamageConsumable(Consumable):
@@ -227,6 +255,9 @@ Update the spell damage in `game/entities/components/consumable.py` too. The pla
 
  class FireballDamageConsumable(Consumable):
      ...
+-    def activate(self, action: ItemAction, engine: Engine, _consumer: Actor) -> None:
++    def activate(self, action: ItemAction, engine: Engine, consumer: Actor) -> None:
+         ...
 -                actor.fighter.take_damage(damage)
 +                actor.fighter.take_damage(damage, attacker=consumer)
 
@@ -236,21 +267,25 @@ Update the spell damage in `game/entities/components/consumable.py` too. The pla
 +        target.fighter.take_damage(amount_drained, attacker=consumer)
 ```
 
+`DrainConsumable` comes from Part 9 Exercise 2; if you skipped that exercise, ignore its lines.
+
 Replace the existing `die()` method:
 
 ```python
     def die(self, attacker: Actor | None) -> None:
+        leveled_up = False
         if self.entity.ai is None:
             death_message = "You died!"
             death_message_color = colors.PLAYER_DEATH
         else:
             death_message = f"The {self.entity.name} is dead!"
             death_message_color = colors.ENEMY_DEATH
-            if attacker is not None and hasattr(attacker, "level"):
-                if attacker.level.add_xp(self.entity.level.xp_given):
-                    MessageLog.add_message("You feel your experience grow!", colors.LEVEL_UP)
+            if attacker is not None:
+                leveled_up = attacker.level.add_xp(self.entity.level.xp_given)
 
         MessageLog.add_message(death_message, death_message_color)
+        if leveled_up:
+            MessageLog.add_message("You feel your experience grow!", colors.LEVEL_UP)
 
         self.entity.char  = sprites.CORPSE
         self.entity.color = colors.CORPSE
@@ -260,10 +295,9 @@ Replace the existing `die()` method:
         self.entity.render_order    = RenderOrder.CORPSE
 ```
 
-!!! tip "Duck typing with `hasattr`"
-    `hasattr(attacker, "level")` checks for the presence of one specific attribute at runtime. `isinstance(attacker, Actor)` would also work here since all current attackers are `Actor` instances, but `hasattr` is more targeted: it handles future `Actor` subclasses or variants that may not carry a `Level` component, without requiring changes to `die()`. Note that the check is narrow on purpose: `take_damage` is already typed as `attacker: Actor` and accesses `attacker.fighter` earlier, so the attacker must still be a full Actor; `hasattr` does not make this work for arbitrary objects.
+Only enemies award XP: when the player dies, nobody gains anything. `leveled_up` remembers whether this kill crossed the threshold, so the XP message can come after the death message and the log reads in order: first the enemy dies, then you feel your experience grow.
 
-The level-up check (`requires_level_up`) runs in `GameState.handle_events()` after `handle_enemy_turns()` completes. This means if the killing blow crosses the XP threshold, the player still has to survive enemy turns before the level-up screen appears. It is intentional roguelike design: level-up healing is a strategic reward for timing fights well, not a last-second escape from death.
+`die()` only adds the XP. The level-up screen appears later, after the enemy turns; we add that check in the LevelUpState section.
 
 Add to `game/data/colors.py`:
 
@@ -278,11 +312,12 @@ LEVEL_UP = Color(0xFF, 0xFF, 0x00)
 Update `game/entities/factories.py` imports, then attach `Level` to every actor:
 
 ```diff
-+from game.data import config
+-from game.data import colors, keys, sprites
++from game.data import colors, config, keys, sprites
+ ...
+ from game.entities.components.inventory import Inventory
 +from game.entities.components.level import Level
--from game.entities.entity import Actor, Item
-+from game.entities.entity import Actor, Entity, Item
-+from game.entities.render_order import RenderOrder
+ from game.entities.entity import Actor, Item
 
  player = Actor(
      ...
@@ -303,7 +338,7 @@ Update `game/entities/factories.py` imports, then attach `Level` to every actor:
  )
 ```
 
-The player passes `level_up_base=config.DEFAULT_LEVEL_UP_BASE` and leaves `xp_given` at 0 (the player does not award XP to anything). Enemies pass only `xp_given` and use the default thresholds (which are never triggered because nothing calls `add_xp` on them). Because `Level.__init__` now defaults to `config.DEFAULT_LEVEL_UP_BASE`, passing it explicitly here is redundant, but leaving it makes the per-entity configuration explicit and searchable.
+The player passes `level_up_base=config.DEFAULT_LEVEL_UP_BASE` and leaves `xp_given` at 0 (the player does not award XP to anything). Enemies pass only `xp_given` and use the default thresholds (which never matter, because nothing calls `add_xp` on them). `Level.__init__` already defaults to `config.DEFAULT_LEVEL_UP_BASE`, so passing it for the player is redundant; we keep it so that each entity's settings are visible and easy to search for.
 
 Update `Actor.__init__` in `game/entities/entity.py` to accept and wire up the `level` component:
 
@@ -322,13 +357,15 @@ Update `Actor.__init__` in `game/entities/entity.py` to accept and wire up the `
 ```
 
 !!! warning "Save file compatibility"
-    Adding `level` to `Actor` changes the structure of pickled objects. Any save file from Part 10 will fail to load correctly. Delete `savegames/savegame.sav` before testing this part.
+    Adding `level` to `Actor` (and, in the next section, `game_world` to `Engine`) changes the structure of the pickled objects. A save file from Part 10 still loads, but the game crashes as soon as it draws the screen: the saved player has no `level` and the saved engine has no `game_world`.
+
+    Delete `savegames/savegame.sav` before testing this part.
 
 ---
 
 ## GameWorld: separating map params from the live map
 
-`Engine` currently holds `game_map` directly. When the player descends stairs, we need to generate a new map with the same parameters but a higher floor number. We extract those parameters into a `GameWorld` class.
+`Engine` currently holds `game_map` directly. When the player goes down the stairs, we need to generate a new map with the same parameters but a higher floor number. We move those parameters into a `GameWorld` class.
 
 Create `game/game_world.py`:
 
@@ -336,6 +373,8 @@ Create `game/game_world.py`:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from game.map.map_generator import generate_dungeon
 
 if TYPE_CHECKING:
     from game.engine import Engine
@@ -376,8 +415,6 @@ class GameWorld:
         self.floors: list[GameMap] = []
 
     def generate_floor(self) -> None:
-        from game.map.map_generator import generate_dungeon
-
         self.current_floor += 1
         self.engine.game_map = generate_dungeon(
             max_rooms             = self.max_rooms,
@@ -396,8 +433,12 @@ class GameWorld:
 
 `seed + self.current_floor` keeps the run reproducible while still giving each dungeon floor a different layout. Using the exact same seed for every floor would generate the same dungeon again.
 
+The seed comes from Part 3 Exercise 1 (reproducible dungeons). If you skipped that exercise, your `generate_dungeon` has no `seed` parameter: omit the `seed` parameter and attribute from `GameWorld`, the `seed = ...` argument in `generate_floor`, and the `seed = seed` argument in `new_game` below. Each floor is then fully random.
+
 !!! info "Keyword-only arguments"
-    `def __init__(self, *, engine, ...)`: the bare `*` forces every argument after it to be passed by name: `GameWorld(engine=engine, map_width=80, ...)`. Positional calls like `GameWorld(engine, 80, 48, ...)` raise a `TypeError` immediately. This is a useful safeguard for constructors with many parameters of the same type: swapping two `int` arguments positionally is a silent bug, but swapping keyword arguments is obvious from the call site.
+    In `def __init__(self, *, engine, ...)`, the bare `*` forces every argument after it to be passed by name: `GameWorld(engine=engine, map_width=80, ...)`. A positional call like `GameWorld(engine, 80, 48, ...)` raises a `TypeError` at once.
+
+    This protects constructors with many parameters of the same type. If you swap two `int` arguments in a positional call, nothing warns you and the bug stays hidden. With keyword arguments, the call site shows which value goes where.
 
 Update `Engine` in `game/engine.py`. The engine will no longer receive `game_map` through its constructor: the map is created later by `GameWorld.generate_floor()`, which assigns it directly to `engine.game_map`. Add class-level annotations so the type checker knows both attributes will exist even though neither is set in `__init__`, and remove `self.update_fov()` from the constructor (it will be called from `new_game()` after the first floor is generated):
 
@@ -417,48 +458,58 @@ Update `Engine` in `game/engine.py`. The engine will no longer receive `game_map
 -        self.update_fov()
 ```
 
-If you completed exercises from previous parts, keep `fov_radius`, `fading_memory`, `memory_duration`, and `turn_count` as optional parameters in `__init__`. They stay on the engine and are not affected by this change.
+If you completed exercises from previous parts, keep `fov_radius`, `fading_memory`, and `memory_duration` as optional parameters in `__init__`, and keep the `turn_count` attribute. They stay on the engine and this change does not affect them.
 
-Update `game/setup_game.py`, replace the direct `generate_dungeon` call with `GameWorld`:
+Update `game/setup_game.py` to replace the direct `generate_dungeon` call with `GameWorld`:
 
 ```diff
+ from game.entities import factories
 -from game.map.map_generator import generate_dungeon
 +from game.game_world import GameWorld
 
  def new_game() -> Engine:
      ...
 -    game_map = generate_dungeon(
--        max_rooms             = config.MAX_ROOMS,
--        room_min_size         = config.ROOM_MIN_SIZE,
--        room_max_size         = config.ROOM_MAX_SIZE,
--        map_width             = config.MAP_WIDTH,
--        map_height            = config.MAP_HEIGHT,
--        min_monsters_per_room = config.MIN_MONSTERS_PER_ROOM,
--        max_monsters_per_room = config.MAX_MONSTERS_PER_ROOM,
--        min_items_per_room    = config.MIN_ITEMS_PER_ROOM,
--        max_items_per_room    = config.MAX_ITEMS_PER_ROOM,
--        player                = player,
--        seed                  = seed,
--    )
--
--    engine = Engine(game_map=game_map, player=player)
-+    engine = Engine(player=player)
++    engine = Engine(
++        player          = player,
++
++        # Part-4. Exercise 4: Fading memory
++        fading_memory   = config.FADING_MEMORY,
++        memory_duration = config.MEMORY_DURATION,
++    )
 +    engine.game_world = GameWorld(
 +        engine                = engine,
-+        max_rooms             = config.MAX_ROOMS,
-+        room_min_size         = config.ROOM_MIN_SIZE,
-+        room_max_size         = config.ROOM_MAX_SIZE,
-+        map_width             = config.MAP_WIDTH,
-+        map_height            = config.MAP_HEIGHT,
-+        min_monsters_per_room = config.MIN_MONSTERS_PER_ROOM,
-+        max_monsters_per_room = config.MAX_MONSTERS_PER_ROOM,
-+        min_items_per_room    = config.MIN_ITEMS_PER_ROOM,
-+        max_items_per_room    = config.MAX_ITEMS_PER_ROOM,
-+        seed                  = seed,
-+    )
+         max_rooms             = config.MAX_ROOMS,
+         room_min_size         = config.ROOM_MIN_SIZE,
+         room_max_size         = config.ROOM_MAX_SIZE,
+         map_width             = config.MAP_WIDTH,
+         map_height            = config.MAP_HEIGHT,
+         min_monsters_per_room = config.MIN_MONSTERS_PER_ROOM,  # Part-5. Exercise 1: Minimum monsters per room
+         max_monsters_per_room = config.MAX_MONSTERS_PER_ROOM,
+         min_items_per_room    = config.MIN_ITEMS_PER_ROOM,
+         max_items_per_room    = config.MAX_ITEMS_PER_ROOM,
+-        player                = player,
+         seed                  = seed,    # Part-3. Exercise 1: Reproducible dungeons
+     )
+-
+-    engine = Engine(
+-        game_map        = game_map,
+-        player          = player,
+-
+-        # Part-4. Exercise 4: Fading memory
+-        fading_memory   = config.FADING_MEMORY,
+-        memory_duration = config.MEMORY_DURATION,
+-    )
 +    engine.game_world.generate_floor()
 +    engine.update_fov()
 ```
+
+The engine is now created first, because `GameWorld` needs it, and `GameWorld` gets the player from the engine instead of a `player` argument. If you skipped Part 4 Exercise 4, create the engine with `Engine(player=player)`.
+
+!!! tip "Run it now"
+    If you run the game now with `uv run main.py` (or `python main.py`), you can check that nothing broke: start a new game and it plays as in Part 10. Kill a few enemies (six orcs are enough to pass 300 XP) and "You feel your experience grow!" appears in the message log. Nothing else happens yet: the level-up screen comes later in this part.
+
+    Running the game after a refactor like this one is a good habit: if something broke, you know it was one of the last few changes.
 
 ---
 
@@ -466,7 +517,7 @@ Update `game/setup_game.py`, replace the direct `generate_dungeon` call with `Ga
 
 ### The Stairs entity
 
-Using a plain `Entity` for stairs works on a single-staircase map, but as soon as there are two sets of stairs (up and down) the code must compare tile positions to decide which type was triggered. A dedicated class carries that information directly.
+Each floor has stairs going down and, from floor 2 on, stairs going up. A plain `Entity` could draw them, but then the code would have to compare tile positions to know which stairs the player is standing on. A dedicated `Stairs` class stores its direction, so the stairs themselves carry that information.
 
 Add to `game/entities/entity.py`:
 
@@ -502,7 +553,7 @@ class Stairs(Entity):
 ```
 
 !!! tip "Keep the stairs on the map (optional)"
-    If you completed Part 4's Exercise 3, stairs are an ideal use of `stays_visible`: pass `stays_visible=True` to the `super().__init__()` call in `Stairs` and they will remain drawn once discovered, even outside your FOV, a small but real quality-of-life improvement. If you skipped that exercise, this is a good reason to go back and add the flag.
+    If you completed Part 4's Exercise 3, stairs are an ideal use of `stays_visible`: pass `stays_visible=True` to the `super().__init__()` call in `Stairs`, and the stairs stay drawn once discovered, even outside your FOV. It is a small change, but it makes the stairs much easier to find again. If you skipped that exercise, this is a good reason to go back and add the flag.
 
 Add to `game/data/sprites.py`:
 
@@ -518,16 +569,19 @@ DOWN_STAIRS = Color(255, 255, 100)
 UP_STAIRS   = Color(200, 200, 255)
 ```
 
-Update `game/entities/factories.py` to use `Stairs` instead of bare `Entity`, and add the up-stairs factory:
+In `game/entities/factories.py`, import the two new names and add the templates for both kinds of stairs at the end of the file:
+
+```diff
+-from game.entities.entity import Actor, Item
++from game.entities.entity import (
++    Actor,
++    Item,
++    Stairs,
++    StairsDirection,
++)
+```
 
 ```python
-from game.entities.entity import (
-    Actor,
-    Item,
-    Stairs,
-    StairsDirection,
-)
-
 down_stairs = Stairs(
     char      = sprites.DOWN_STAIRS,
     color     = colors.DOWN_STAIRS,
@@ -543,16 +597,20 @@ up_stairs = Stairs(
 
 ### Updating GameMap
 
-Add both stair locations as class-level attributes and a helper that finds a `Stairs` entity at a given position:
+In `game/map/game_map.py`, import `Stairs`:
+
+```diff
+-from game.entities.entity import Actor, Item
++from game.entities.entity import (
++    Actor,
++    Item,
++    Stairs,
++)
+```
+
+Then add both stair locations as class-level attributes, and a helper that finds a `Stairs` entity at a given position:
 
 ```python
-from game.entities.entity import (
-    Actor,
-    Entity,
-    Item,
-    Stairs,
-)
-
 class GameMap:
     downstairs_location: tuple[int, int] = (0, 0)
     upstairs_location:   tuple[int, int] = (0, 0)
@@ -560,7 +618,6 @@ class GameMap:
     ...
 
     def get_stairs_at_location(self, x: int, y: int) -> Stairs | None:
-        from game.entities.entity import Stairs
         for entity in self.entities:
             if isinstance(entity, Stairs) and entity.x == x and entity.y == y:
                 return entity
@@ -583,11 +640,12 @@ class GameMap:
 In the first-room block, place up-stairs on floors 2 and deeper (floor 1 has no previous floor to return to):
 
 ```diff
-     if not rooms:
-         player.place(*new_room.center, dungeon)
-+        if current_floor > 1:
-+            dungeon.upstairs_location = new_room.center
-+            factories.up_stairs.spawn(dungeon, *new_room.center)
+         if not rooms:
+             # First room: place the player here
+             player.place(*new_room.center, dungeon)
++            if current_floor > 1:
++                dungeon.upstairs_location = new_room.center
++                factories.up_stairs.spawn(dungeon, *new_room.center)
 ```
 
 After all rooms are generated, place down-stairs in the last room. Pick a free cell so the stairs do not overwrite an item or monster:
@@ -616,7 +674,6 @@ Update `GameWorld.generate_floor` to pass the new parameter:
 
 ```diff
  def generate_floor(self) -> None:
-     from game.map.map_generator import generate_dungeon
      self.current_floor += 1
      self.engine.game_map = generate_dungeon(
          ...,
@@ -639,7 +696,7 @@ DESCEND = Color(0x9F, 0x3F, 0xFF)
 ASCEND  = Color(0x9F, 0x9F, 0xFF)
 ```
 
-`TakeStairsAction` now queries the map for a `Stairs` entity at the player's position rather than comparing coordinates. This lets a single action handle both directions:
+Add `TakeStairsAction` to `game/actions.py`. It asks the map for the `Stairs` entity at the player's position instead of comparing coordinates, so a single action handles both directions:
 
 ```python
 from game.entities.entity import Actor, Item, StairsDirection
@@ -688,20 +745,23 @@ def ascend_floor(self) -> None:
     self.engine.game_map = previous_floor
 ```
 
-`descend_floor` checks whether the next floor already exists in `self.floors`. If it does (the player has been there before), it restores that map. Otherwise it generates a new one. `ascend_floor` always restores an existing map. You cannot ascend above floor 1, and the check `current_floor > 1` in `TakeStairsAction` enforces that.
+`descend_floor` checks whether the next floor already exists in `self.floors`. If it does (the player has been there before), it restores that map. Otherwise it generates a new one. `ascend_floor` always restores an existing map. You cannot go above floor 1: the check `current_floor > 1` in `TakeStairsAction` prevents it.
 
-Add `KEY_DESCEND` to `game/data/keys.py` (Enter or numpad Enter triggers both up and down stairs, since the action decides based on which stairs entity is underfoot):
+Add `KEY_STAIRS` to `game/data/keys.py`. Enter (or numpad Enter) takes both up and down stairs, because the action decides from the stairs under the player:
 
 ```python
-KEY_DESCEND = {tcod.event.KeySym.RETURN, tcod.event.KeySym.KP_ENTER}
+KEY_STAIRS = {tcod.event.KeySym.RETURN, tcod.event.KeySym.KP_ENTER}
 ```
 
 Add `TakeStairsAction` to the imports in `game/game_states.py` and wire it up in `MainGameState`:
 
 ```python
-        if key in keys.KEY_DESCEND:
+        if key in keys.KEY_STAIRS:
             return TakeStairsAction()
 ```
+
+!!! tip "Run it now"
+    If you run the game now, you can try the stairs. The `>` is somewhere in the last room the generator dug. Stand on it and press Enter: a new floor appears, and you start on its `<`. Press Enter again and you are back on floor 1, with the same layout and the same enemies you left. Go down and up a few times; each floor keeps its state. The HUD does not show the floor number yet; that comes at the end of this part.
 
 ---
 
@@ -726,7 +786,7 @@ LEVEL_UP_MENU_KEY      = BLACK
 
 ### on_render
 
-The modal dims the scene behind it, draws a drop shadow, and centers itself, all with the tools built in earlier parts (`// 2` dimming and `_draw_panel` from Part 7). Each stat option gets its own colored row with the key badge, stat name, bonus, and current value separated into columns:
+Add `LevelUpState` at the end of `game/game_states.py`. The modal dims the scene behind it, draws a drop shadow, and centers itself, all with the tools built in earlier parts (`// 2` dimming and `_draw_panel` from Part 7). Each stat option gets its own colored row with the key badge, stat name, bonus, and current value separated into columns:
 
 ```python
 class LevelUpState(GameState):
@@ -739,11 +799,14 @@ class LevelUpState(GameState):
         console.fg[:] = console.fg // 2
         console.bg[:] = console.bg // 2
 
-        fighter = self.engine.player.fighter
+        fighter       = self.engine.player.fighter
+        hp_bonus      = f"+{config.LEVEL_STAT_HP:g} HP"
+        attack_bonus  = f"+{config.LEVEL_STAT_ATTACK:g} attack"
+        defense_bonus = f"+{config.LEVEL_STAT_DEFENSE:g} defense"
         options = [
-            ("a", "Constitution", "+20 HP",     f"from {fighter.max_hp:g}"),
-            ("b", "Strength",     "+1 attack",  f"from {fighter.base_attack:g}"),
-            ("c", "Agility",      "+1 defense", f"from {fighter.base_defense:g}"),
+            ("a", "Constitution", hp_bonus,      f"from {fighter.max_hp:g}"),
+            ("b", "Strength",     attack_bonus,  f"from {fighter.base_attack:g}"),
+            ("c", "Agility",      defense_bonus, f"from {fighter.base_defense:g}"),
         ]
 
         width  = 52
@@ -884,27 +947,32 @@ Trigger the modal from `GameState.handle_events()` after `update_fov()`:
              if isinstance(self, ActionModalState):
 ```
 
+This point in `handle_events()` comes after `handle_enemy_turns()`, so the enemies act before the level-up screen opens. The Background section ("Who earns the XP, and when") explains why.
+
 ---
 
 ## Show floor and gold in the UI
 
-Redesign the top two rows of the HUD panel:
+Redesign the top two rows of the HUD panel: the floor number on the left of the first row, the gold on its right, and the HP bar below, all 24 columns wide:
 
 ```text
-Floor: 1         $ 0
-[   HP: 30/30      ]
+Floor: 1             $ 0
+[      HP: 30/30       ]
 ```
 
-**Step 1.** Add the config import and a contrast-aware text helper to `game/hud.py`.
+**Step 1.** Add the `config` and `Color` imports and a contrast-aware text helper to `game/hud.py`.
 
-`config.BAR_WIDTH` is set to 24 (wider than the previous 20) so the HUD has room for the XP bar and the exercise version can embed the level number. `BAR_TEXT_DARK` is used when the bar's fill color is light enough that white text would be hard to read.
+Part 10a already set `config.BAR_WIDTH` to 24 (wider than the old 20), so the HUD has room for the XP bar and Exercise 1 can show the level number inside it. `BAR_TEXT_DARK` (added in Step 2) is used when the bar's fill color is so light that white text would be hard to read.
 
-`_print_bar_text` renders a string character by character. For each character it checks whether that column falls inside the filled portion of the bar, picks the matching fill or empty color, then chooses the fg color (light or dark) by luminance contrast. This keeps text legible regardless of where the bar boundary sits:
+`_print_bar_text` draws a string one character at a time. For each character it checks whether that column is inside the filled part of the bar, picks the matching fill or empty color, and then chooses a light or dark text color by contrast. The text stays readable wherever the edge of the bar is:
+
+```diff
+-from game.data import colors
++from game.data import colors, config
++from game.data.colors import Color
+```
 
 ```python
-from game.data import config
-from game.data.colors import Color
-
 def _contrast_text_color(background: Color, light: Color, dark: Color) -> Color:
     return dark if background.grey.r > 128 else light
 
@@ -959,14 +1027,13 @@ Also give `render_bar` a default width:
 BAR_TEXT_DARK = BLACK
 ```
 
-Replace the final `console.print` in `render_bar`:
+Replace the final `console.print` in `render_bar`. The HP text is now centered in the bar instead of starting at `x=1`:
 
 ```diff
--    hp_text = f"HP: {int(current_value)}/{int(maximum_value)}"
 -    console.print(
--        x    = (total_width - len(hp_text)) // 2,
+-        x    = 1,
 -        y    = y,
--        text = hp_text,
+-        text = f"HP: {int(current_value)}/{int(maximum_value)}",
 -        fg   = colors.BAR_TEXT,
 -    )
 +    hp_text = f"HP: {int(current_value)}/{int(maximum_value)}"
@@ -982,6 +1049,8 @@ Replace the final `console.print` in `render_bar`:
 +        dark_text_color  = colors.BAR_TEXT_DARK,
 +    )
 ```
+
+`bar_color_fg` and `bar_color_bg` come from Part 7 Exercise 1 (colored HP bar). If you skipped that exercise, pass `filled_color = colors.HP_BAR_FILLED` and `empty_color = colors.HP_BAR_EMPTY` instead.
 
 **Step 3.** Add `FLOOR` to `game/data/colors.py`:
 
@@ -1061,7 +1130,7 @@ def render_xp_bar(
     )
 ```
 
-**Step 6.** Update `Engine.render()`: drop the now-redundant `total_width` from the bar call, add the floor and XP displays, and move the message log and mouse-hover x-position to `config.BAR_WIDTH + 1`:
+**Step 6.** Update `Engine.render()`: remove the `total_width` argument from the HP bar call (it now has a default), add the XP bar and the floor display, and move the message log and the names under the mouse to `x = config.BAR_WIDTH + 1`:
 
 ```diff
          hud.render_bar(
@@ -1082,10 +1151,11 @@ def render_xp_bar(
              gold    = self.player.inventory.gold,
          )
 
-         hud.render_dungeon_level(
-             console       = console,
-             dungeon_floor = self.game_world.current_floor,
-         )
++
++        hud.render_dungeon_level(
++            console       = console,
++            dungeon_floor = self.game_world.current_floor,
++        )
 
          MessageLog.render(
              console = console,
@@ -1106,8 +1176,8 @@ The HUD now shows:
 
 ```text
 Floor: 1             $ 0
-[       HP: 30/30      ]
-[       XP: 0/300      ]
+[      HP: 30/30       ]
+[      XP: 0/300       ]
 ```
 
 ---
@@ -1137,7 +1207,7 @@ Character progression and dungeon depth are now linked. Key additions:
 - **`GameWorld`**: owns generation parameters, floor list, and navigation methods
 - **`TakeStairsAction`**: queries map for stairs entity and delegates to `descend_floor` / `ascend_floor`
 - **`LevelUpState`**: centered modal with dimmed background and colored stat rows
-- **XP on kill**: `Fighter.die()` awards XP to the player
+- **XP on kill**: `Fighter.die()` awards XP to the attacker
 
 **Current architecture**:
 
@@ -1190,7 +1260,7 @@ game/
 │       └── level.py            ← new
 └── map/
     ├── __init__.py
-    ├── game_map.py
+    ├── game_map.py             ← modified
     ├── tile_types.py
     └── map_generator.py        ← modified
 ```
@@ -1234,7 +1304,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
     Reward the player for exploring each floor, scaled by depth so the reward stays relevant at every level. There are two sources, and the design is in how they balance:
 
-    - **Milestones** at 25%, 50%, 75% and 100% of a floor revealed. Make the payoff *escalate* (later milestones worth more) and *scale with the current floor*, so deep, thorough exploration pays best. Track which milestones a floor has already paid, and store that on the **map**, not the engine: floors now persist (Part 11), and a return visit must not re-award them.
+    - **Milestones** at 25%, 50%, 75% and 100% of a floor revealed. Make the payoff *escalate* (later milestones worth more) and *scale with the current floor*, so deep, thorough exploration pays best. Track which milestones a floor has already paid, and store that on the **map**, not the engine: floors now persist (this part made them so), and a return visit must not award them again.
     - A **descent** reward when the player takes the down stairs, scaled by the floor being left. Guard it the same way, so walking up and down one staircase cannot farm XP.
 
     Aim for exploration being clearly worth more than rushing. With the numbers below, exploration alone gives double the descent reward at every depth, and fully exploring a floor before descending gives triple the XP of descending immediately.
@@ -1256,7 +1326,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
         DESCENT_XP_PER_FLOOR = 100
         ```
 
-        Per-floor state in `GameMap.__init__` (`game/map/game_map.py`); the count is filled in later, once the map is carved:
+        Per-floor state in `GameMap.__init__` (`game/map/game_map.py`); the count is filled in later, once the map is dug:
 
         ```python
         self.explorable_tiles: int = 0
@@ -1332,4 +1402,4 @@ The next parts assume you did these exercises. Try each one on your own first. I
         | 50% | 42 | 210 | 420 |
         | 75% | 58 | 290 | 580 |
         | 100% | 74 | 370 | 740 |
-        | **Total** | **200** | **1 000** | **2 000** |
+        | **Total** | **200** | **1,000** | **2,000** |

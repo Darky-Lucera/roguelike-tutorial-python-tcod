@@ -787,7 +787,8 @@ The bands encode the difficulty curve. The dagger is always on floor 1; the swor
  from typing import TYPE_CHECKING
 
 +from game.entities import factories
-+
+ from game.map.map_generator import generate_dungeon
+
  if TYPE_CHECKING:
      from game.engine import Engine
 +    from game.entities.entity import Item

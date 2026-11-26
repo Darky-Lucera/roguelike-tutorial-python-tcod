@@ -385,8 +385,6 @@ Remove the four limits from `game/game_world.py`:
 
 ```diff
      def generate_floor(self) -> None:
-         from game.map.map_generator import generate_dungeon
-
          self.current_floor += 1
          self.engine.game_map = generate_dungeon(
              max_rooms     = self.max_rooms,
