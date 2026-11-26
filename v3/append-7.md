@@ -1,6 +1,6 @@
 # Appendix 7: Using Graphics Instead of Characters
 
-Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2), the `game/data/` package (Part 5), and the centralized `RES_DIR` (Part 10). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
+Part 1 links here early, but the code below assumes pieces that do not exist yet at that point: the `Entity`/`GameMap` split (Part 2), the `game/data/` package (Part 5), and the centralized `RES_DIR` (Part 10a). Read it then as a preview of where the Part 1 trick leads, and come back to implement it once those chapters are behind you.
 
 Part 1 ends with a quick trick: point a free codepoint at a tile in the sheet and draw `chr(0xE000)` instead of `"@"`. That is enough to see a sprite, but it does not scale to a full game with dozens of entities, monsters that face left and right, and a switch to flip the whole game back to ASCII.
 
@@ -287,9 +287,9 @@ and update `__init__`:
 Passing both `char` and `graphic` is not an error, `graphic` simply wins: `char` is only consulted to build the fallback `StaticGraphic` when `graphic` is `None`.
 
 !!! warning "Old saves and `graphic`"
-    [Part 10](part-10.md) pickles every entity, and this section replaces `Entity.char` with `Entity.graphic`. A save written before this change unpickles into an entity that has `char` but no `graphic`, and the first render raises `AttributeError`.
+    [Part 10b](part-10b.md) pickles every entity, and this section replaces `Entity.char` with `Entity.graphic`. A save written before this change unpickles into an entity that has `char` but no `graphic`, and the first render raises `AttributeError`.
 
-    Either delete old saves, as Part 11 and Part 13 already made you do, or adapt the `__setstate__` migration trick from Part 10: translate the old `char` key into `graphic = StaticGraphic(char)` before the rest of `__dict__` loads.
+    Either delete old saves, as Part 11 and Part 13 already made you do, or adapt the `__setstate__` migration trick from Part 10b: translate the old `char` key into `graphic = StaticGraphic(char)` before the rest of `__dict__` loads.
 
 This also retires the tinting rule from the previous section. `isinstance(char, int)` read `self.char`, which no longer exists: an entity built with `graphic=` directly never had a meaningful `char` to inspect, it keeps whatever default the parameter has, unrelated to what actually gets drawn. Fall back to the mode flag instead:
 

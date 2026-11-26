@@ -1,4 +1,4 @@
-@startuml part10_local_classes
+@startuml part10b_local_classes
 
 !theme mimeograph
 
@@ -25,10 +25,13 @@ set namespaceSeparator none
 class "Engine" as game.engine.Engine #cce9c7 {
 }
 
-class "BaseGameState" as game.game_states.BaseGameState #ccc9e8 {
+class "BaseGameState" as game.game_states.BaseGameState {
 }
 
 class "GameState" as game.game_states.GameState #cce9c7 {
+}
+
+class "MainGameState" as game.game_states.MainGameState #cce9c7 {
 }
 
 class "ActionModalState" as game.game_states.ActionModalState {
@@ -37,7 +40,7 @@ class "ActionModalState" as game.game_states.ActionModalState {
 class "GameOverState" as game.game_states.GameOverState #cce9c7 {
 }
 
-class "MainMenuState" as game.game_states.MainMenuState #ccc9e8 {
+class "MainMenuState" as game.game_states.MainMenuState #cce9c7 {
 }
 
 class "PopupMessageState" as game.game_states.PopupMessageState #ccc9e8 {
@@ -51,13 +54,15 @@ class "PopupMessageState" as game.game_states.PopupMessageState #ccc9e8 {
 game.game_states.BaseGameState <|-- game.game_states.GameState
 game.game_states.BaseGameState <|-- game.game_states.MainMenuState
 game.game_states.BaseGameState <|-- game.game_states.PopupMessageState
+game.game_states.GameState <|-- game.game_states.MainGameState
 game.game_states.GameState <|-- game.game_states.ActionModalState
 game.game_states.GameState <|-- game.game_states.GameOverState
 
 ' New state relationships introduced by save/load and the menu.
 game.game_states.GameState -up-> game.engine.Engine : engine
 game.game_states.PopupMessageState -up-> game.game_states.BaseGameState : parent
-game.game_states.MainMenuState --> game.engine.Engine : starts or loads
+game.game_states.MainGameState --> game.engine.Engine : saves
+game.game_states.MainMenuState --> game.engine.Engine : loads
 game.game_states.GameOverState --> game.game_states.MainMenuState : returns to menu
 
 ' Engine serializes the active state when saving and restores one when loading.
@@ -72,6 +77,7 @@ game.game_states.BaseGameState -[hidden]down- game.game_states.MainMenuState
 game.game_states.MainMenuState -[hidden]right- game.game_states.PopupMessageState
 
 game.game_states.GameState -[hidden]down- game.game_states.ActionModalState
+game.game_states.GameState -[hidden]down- game.game_states.MainGameState
 game.game_states.ActionModalState -[hidden]right- game.game_states.GameOverState
 game.game_states.MainMenuState -[hidden]down- game.engine.Engine
 

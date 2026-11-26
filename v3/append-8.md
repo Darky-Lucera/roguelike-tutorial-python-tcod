@@ -4,7 +4,7 @@
 
     This document is a parking place for future ideas. It is not part of the main tutorial flow yet, and the details below should be revisited and balanced before being turned into a finished appendix.
 
-    It builds directly on [Appendix 7](append-7.md) (sprite codepoints, the `Graphic` strategy) and edits the main loop as [Part 10](part-10.md) leaves it. The trigger examples assume the consumables of [Part 9](part-9.md). All code below is concept level: checked against the current game layout, but not implemented in the reference repository yet.
+    It builds directly on [Appendix 7](append-7.md) (sprite codepoints, the `Graphic` strategy) and edits the main loop as [Part 10b](part-10b.md) leaves it. The trigger examples assume the consumables of [Part 9](part-9.md). All code below is concept level: checked against the current game layout, but not implemented in the reference repository yet.
 
 Appendix 7 gave every entity its art, and the whole dungeon still stands perfectly still. Nothing blinks, nothing flies, an exploding fireball is a log line and some instant hit point math. This appendix maps what it takes to add motion: a flash when lightning strikes, an arrow that crosses the room, sprites with an idle animation.
 

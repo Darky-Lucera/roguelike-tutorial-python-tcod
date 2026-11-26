@@ -84,7 +84,9 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 - [Part 9: Spells and Targeting](part-9.md): Implement a targeting cursor and three scroll types with spell effects.
 
-- [Part 10: Save and Load](part-10.md): Serialize game state with pickle; add a main menu with background art.
+- [Part 10a: The Main Menu](part-10a.md): Add a main menu with background art, and make game states return the next state.
+
+- [Part 10b: Save and Load](part-10b.md): Save the game with pickle, continue it from the menu, and delete the save on death.
 
 - [Part 11: Dungeon Levels and Experience](part-11.md): Add dungeon floors, stairs, XP, and character level-ups.
 

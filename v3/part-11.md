@@ -1205,7 +1205,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
     The HUD already renders an XP bar via `render_xp_bar` (added in the main tutorial). Extend it with the full color gradient and the level number embedded on the left.
 
-    `XP_LEVEL_WIDTH = 4` is already defined in `game/data/config.py` (added in Part 10). `hud.py` reads it as `config.XP_LEVEL_WIDTH`.
+    `XP_LEVEL_WIDTH = 4` is already defined in `game/data/config.py` (added in Part 10a). `hud.py` reads it as `config.XP_LEVEL_WIDTH`.
 
     Add `current_level` to the `render_xp_bar` parameters and pass `self.player.level.current_level` from `Engine.render()`.
 

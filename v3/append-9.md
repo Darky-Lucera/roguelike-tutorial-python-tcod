@@ -210,9 +210,9 @@ Because `follow` runs at the start of every frame, there is nothing to update an
 
 !!! warning "Old saves and the new attributes"
 
-    [Part 10](part-10.md) pickles the whole `Engine`, and this appendix adds attributes to it: the camera here, and a raw mouse position in the next section. A save written before this change unpickles into an `Engine` without them, and the first render raises `AttributeError`.
+    [Part 10b](part-10b.md) pickles the whole `Engine`, and this appendix adds attributes to it: the camera here, and a raw mouse position in the next section. A save written before this change unpickles into an `Engine` without them, and the first render raises `AttributeError`.
 
-    Either delete old saves, as Part 11 and Part 13 already made you do, or supply the missing attributes with the `__getattr__` migration trick from Part 10.
+    Either delete old saves, as Part 11 and Part 13 already made you do, or supply the missing attributes with the `__getattr__` migration trick from Part 10b.
 
 Finally, the payoff. Grow the map in `game/data/config.py`:
 
