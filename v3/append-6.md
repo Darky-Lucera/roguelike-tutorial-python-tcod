@@ -4,7 +4,7 @@
 
     This document is a parking place for future ideas. It is not part of the main tutorial flow yet, and the details below should be revisited and balanced before being turned into a finished appendix.
 
-[Part 13](part-13.md) closes with a claim that mirrors Part 12's: the boring way to grow the player's power is to scale numbers (a sword that is a bigger dagger), and the interesting way is to give each piece a *personality*, a distinct decision it changes for the player. Part 13 proves the point by *not* doing it: it ships a clean stat ladder on purpose, because its real subject is the equipment *system*, not the arsenal.
+[Part 13](part-13b.md#a-toolkit-not-a-power-ladder) closes with a claim that mirrors Part 12's: the boring way to grow the player's power is to scale numbers (a sword that is a bigger dagger), and the interesting way is to give each piece a *personality*, a distinct decision it changes for the player. Part 13 proves the point by *not* doing it: it ships a clean stat ladder on purpose, because its real subject is the equipment *system*, not the arsenal.
 
 This appendix is where that arsenal can grow without bloating the chapter. The main tutorial stays a thin trunk that teaches the *system* (`Equippable` data, two slots, bonuses through the `Fighter` properties); here we collect *content*: weapons and armor whose value is a behavior, not a number. These cross the line the chapter drew deliberately: a piece earns its own code when it needs different *behavior*, not different *numbers*.
 

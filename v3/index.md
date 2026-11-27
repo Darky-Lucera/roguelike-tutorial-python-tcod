@@ -94,7 +94,9 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 - [Part 12: Procedural Difficulty](part-12.md): Scale encounter difficulty with floor-keyed weighted spawn tables.
 
-- [Part 13: Equipment](part-13.md): Add weapons and armor with attack and defense bonuses.
+- [Part 13a: Weapons and Armor](part-13a.md): Add weapons and armor with attack and defense bonuses, each piece placed once per run.
+
+- [Part 13b: The Inventory Screen](part-13b.md): Group the inventory into equipped gear, spare gear, and items, with number keys for gear.
 
 ---
 

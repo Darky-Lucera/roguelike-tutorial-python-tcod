@@ -2,7 +2,7 @@
 
 **Part 8** is the longest and densest chapter in this tutorial. It adds more new pieces at once than any earlier chapter: a new entity subclass (`Item`), two specialized component bases (`ActorComponent` and `ItemComponent`), and two consumable components (`HealingConsumable` and `TreasureConsumable`). It also adds an ownership model that lets an item move between the map and an inventory, and a way for an action that cannot succeed to say why.
 
-**Part 8a** builds the data model: items appear in the dungeon and can be inspected, but cannot yet be picked up, used, dropped, or auto-collected.
+**Part 8a** builds the data model: items appear in the dungeon and can be inspected, and the player collects a chest by walking over it. Nothing can be picked up, used, or dropped yet.
 
 **Part 8b** adds the player-facing side: actions, keyboard bindings, and the inventory overlay.
 
@@ -10,7 +10,7 @@
 
 ## What You Will Build
 
-By the end of Part 8a, health potions and chests appear in the dungeon as instances of the new `Item` entity, spawned from a weighted table. Hovering the mouse over either already shows its name: that is the generic lookup Part 7 built, working here with no changes. Walking over a chest does nothing yet, like any other non-blocking entity; the auto-collect mechanic will be added in Part 8b. There are no other keyboard interactions with items yet either.
+By the end of Part 8a, health potions and chests appear in the dungeon as instances of the new `Item` entity, spawned from a weighted table. Hovering the mouse over either already shows its name: that is the generic lookup Part 7 built, working here with no changes. At the end of the part, walking over a chest collects its gold, and a gold counter appears above the HP bar. There are no keyboard interactions with items yet.
 
 ## Learning goals
 
@@ -22,6 +22,7 @@ In this part we will:
 - Implement `Inventory`, `HealingConsumable`, and `TreasureConsumable` as components
 - Narrow base component types so annotations match the actual runtime type
 - Spawn health potions and chests using a weighted item table
+- Collect chests on contact through a new `ItemAction`, and show the gold in the HUD
 
 ---
 
@@ -337,11 +338,11 @@ class TreasureConsumable(Consumable):
         self.entity.owner = None
 ```
 
-The file defines three classes: `Consumable` as the base for all item effects, `HealingConsumable` for HP recovery, and `TreasureConsumable` for treasure that will be collected automatically on contact, once Part 8b adds the collection logic.
+The file defines three classes: `Consumable` as the base for all item effects, `HealingConsumable` for HP recovery, and `TreasureConsumable` for treasure that will be collected automatically on contact, once the last section of this part adds the collection logic.
 
-`activate()` is declared with `_action: Action` rather than the more specific `ItemAction`, because `ItemAction` does not exist until Part 8b, so Part 8a temporarily accepts the broader `Action` type.
+`activate()` is declared with `_action: Action` rather than the more specific `ItemAction`, because `ItemAction` does not exist yet. The last section of this part creates it and tightens the annotation.
 
-`auto_activate: bool = False` is a class-level flag. `TreasureConsumable` overrides it to `True`. The flag exists but nothing reads it yet: chests spawn on the floor and stay there until Part 8b adds the collection logic.
+`auto_activate: bool = False` is a class-level flag. `TreasureConsumable` overrides it to `True`. The flag exists but nothing reads it yet: chests spawn on the floor and stay there until the last section of this part adds the collection logic.
 
 `Inventory` is a regular import here, outside `TYPE_CHECKING`, unlike `Action`, `Engine`, and `Actor` above. `consume()` needs it at runtime for the `isinstance` check. The import is safe because `inventory.py` imports `Item` only inside its own `TYPE_CHECKING` block (the pattern from Part 2), so there is no import cycle.
 
@@ -801,18 +802,163 @@ Pass them to `generate_dungeon`:
 
 ---
 
+## Treasure chests
+
+Chests already spawn, and `TreasureConsumable.activate()` already knows how to add their gold. What is missing is the trigger: nothing happens when the player steps on a chest. This section adds that trigger and a gold counter, so Part 8a ends with something you can play.
+
+### `ItemAction`
+
+Using an item is an action, like moving or attacking. Add `ItemAction` to the end of `game/actions.py`, and import `Item` next to `Actor` at the top of the file:
+
+```diff
+-from game.entities.entity import Actor
++from game.entities.entity import Actor, Item
+ from game.message_log import MessageLog
+```
+
+```python
+class ItemAction(Action):
+
+    def __init__(self, item: Item) -> None:
+        super().__init__()
+        self.item = item
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        assert isinstance(entity, Actor)
+        self.item.consumable.activate(self, engine, entity)
+```
+
+`ItemAction` stores the item and passes the work to its consumable. The `assert isinstance(entity, Actor)` line makes a rule explicit. `Action.perform` accepts any `Entity`, but `activate()` needs an `Actor`. The assert checks this at runtime. It also tells the type checker that `entity` is an `Actor` from that line on, so the call after it needs no cast.
+
+Now that `ItemAction` exists, tighten the `_action` annotations in `game/entities/components/consumable.py`. `ItemAction` is imported at module level, because `on_contact()` below creates one at runtime. `Action` is no longer used in this file, so remove it from the `TYPE_CHECKING` block:
+
+```diff
++from game.actions import ItemAction
+ from game.data import colors
+ ...
+
+ if TYPE_CHECKING:
+-    from game.actions import Action
+     from game.engine import Engine
+```
+
+```diff
+-    def activate(self, _action: Action, _engine: Engine, _consumer: Actor) -> None:
++    def activate(self, _action: ItemAction, _engine: Engine, _consumer: Actor) -> None:
+```
+
+```diff
+-    def activate(self, _action: Action, _engine: Engine, consumer: Actor) -> None:
++    def activate(self, _action: ItemAction, _engine: Engine, consumer: Actor) -> None:
+```
+
+```diff
+-    def activate(self, _action: Action, engine: Engine, consumer: Actor) -> None:
++    def activate(self, _action: ItemAction, engine: Engine, consumer: Actor) -> None:
+```
+
+Importing `ItemAction` at module level is safe for the same reason as the `TYPE_CHECKING` imports earlier in this part: `entity.py` only refers to `Consumable` under `TYPE_CHECKING`, so nothing on the `actions.py` → `entity.py` path imports `consumable.py` back.
+
+### Auto-collect in `MovementAction`
+
+Treasure should be collected automatically when the player steps on it. This requires three additions.
+
+First, add a `GameMap.get_items_at(x, y)` helper that returns all items at a given position, matching the `get_actor_at` naming from Part 6. Reuse the module-level `Item` import added earlier in this part:
+
+```python
+def get_items_at(self, x: int, y: int) -> list[Item]:
+    return [
+        entity for entity in self.entities
+        if isinstance(entity, Item) and entity.x == x and entity.y == y
+    ]
+```
+
+Second, add an `on_contact` method to `Consumable`. It activates the item if `auto_activate` is set, using the standard `ItemAction` path:
+
+```diff
+ class Consumable(ItemComponent):
+     auto_activate: bool = False
+
++    def on_contact(self, engine: Engine, consumer: Actor) -> None:
++        if self.auto_activate:
++            ItemAction(item=self.entity).perform(engine, consumer)
+```
+
+`TreasureConsumable` overrides `on_contact` so that only the player collects a chest; a wandering monster that steps on it leaves it untouched. Add the override in `game/entities/components/consumable.py`:
+
+```diff
+ class TreasureConsumable(Consumable):
+     auto_activate = True
+
+     def __init__(self, value: int) -> None:
+         self.value = value
+
++    def on_contact(self, engine: Engine, consumer: Actor) -> None:
++        if consumer is engine.player:
++            super().on_contact(engine, consumer)
++
+     def activate(self, _action: ItemAction, engine: Engine, consumer: Actor) -> None:
+```
+
+Third, after `entity.move()` in `MovementAction.perform()`, trigger contact for every item on the new tile:
+
+```diff
+         entity.move(self.dx, self.dy)
++
++        if isinstance(entity, Actor):
++            for item in engine.game_map.get_items_at(entity.x, entity.y):
++                item.consumable.on_contact(engine=engine, consumer=entity)
+```
+
+The `isinstance(entity, Actor)` check satisfies the type checker: `on_contact` expects an `Actor`, and `entity` in `MovementAction` is annotated as the wider `Entity` type. In practice any entity that moves will be an actor.
+
+`get_items_at()` returns a fresh list, so `activate()` can safely modify `game_map.entities` during iteration. The `MovementAction` wiring has no player check: it fires `on_contact` for every actor that steps on the tile. The decision to react lives in the consumable: `TreasureConsumable` only acts when the consumer is the player (so a wandering monster cannot take a chest), while a different consumable could choose to react to anyone.
+
+### `render_gold` in `hud.py`
+
+Add a one-line gold display above the HP bar:
+
+```python
+def render_gold(
+    console: Console,
+    gold: int,
+    y: int = 44,
+) -> None:
+    console.print(
+        x    = 0,
+        y    = y,
+        text = f"$ {gold}",
+        fg   = colors.GOLD,
+    )
+```
+
+Call it from `Engine.render()`:
+
+```diff
+     hud.render_bar(...)
++
++    hud.render_gold(
++        console = console,
++        gold    = self.player.inventory.gold,
++    )
+```
+
+---
+
 ## Testing Part 8a
 
 Run the game and verify the following:
 
 - Health potions (`!`) and chests (`$`) appear on the dungeon floor.
 - Moving the mouse over a potion shows "Health Potion" on the panel's top row; moving it over a chest shows "Chest".
-- Walking over a chest does nothing yet. Auto-collect will be added in Part 8b.
+- Walking over a chest shows "You found 10 gold!" and the `$` symbol disappears.
+- A monster that steps on a chest leaves it in place; only the player collects it.
+- The gold counter above the HP bar increments each time a chest is collected.
 - No keyboard interactions with items exist yet. The `G`, `I`, and `D` keys will be added in Part 8b.
 
 As with monsters in Part 5, occupied positions are skipped rather than retried, so `max_items_per_room` is an upper bound, not a guarantee. If your first few rooms only show one item type, that is normal randomness, not a bug. To check both types reliably while testing, you can temporarily raise the floor with `min_items_per_room = max_items_per_room = 2`, then restore the tutorial values once you have confirmed both appear.
 
-If both item types appear and hover names work, Part 8a is complete.
+If both item types appear, hover names work, and chests add to your gold, Part 8a is complete.
 
 ---
 
@@ -820,7 +966,9 @@ If both item types appear and hover names work, Part 8a is complete.
 
 - `Entity.owner` is a back-reference to whichever collection currently holds an entity, `GameMap.entities` or `Inventory.items`, not the sole record of its location.
 - `Item` is a new entity subclass with a required `Consumable`. `ActorComponent` and `ItemComponent` narrow `entity` to the correct runtime type on every component.
-- `Inventory`, `HealingConsumable`, and `TreasureConsumable` exist and hold real data, but nothing calls them yet: no key picks up an item, and no contact check collects a chest.
+- `Inventory` and `HealingConsumable` exist and hold real data, but nothing calls them yet: no key picks up an item.
+- `ItemAction` performs an item's effect. `Consumable.on_contact()` uses it when an actor steps on an item with `auto_activate` set, and `TreasureConsumable` only reacts to the player.
+- `GameMap.get_items_at()` and `hud.render_gold()` complete the chest: it is collected on contact, and the gold counter shows the total.
 - Health potions and chests spawn on the floor from a weighted table, and their names already show on hover, reusing the lookup Part 7 built.
 
 **Local Class Diagram**:
@@ -833,10 +981,10 @@ If both item types appear and hover names work, Part 8a is complete.
 main.py                         ← modified
 game/
 ├── __init__.py
-├── actions.py
-├── engine.py
+├── actions.py                  ← modified
+├── engine.py                   ← modified
 ├── exceptions.py               ← new
-├── hud.py
+├── hud.py                      ← modified
 ├── game_states.py
 ├── message_log.py
 ├── data/
@@ -863,6 +1011,6 @@ game/
     └── map_generator.py        ← modified
 ```
 
-Continue to [Part 8b: Inventory](part-8b.md) to pick up, use, drop, and auto-collect these items.
+Continue to [Part 8b: Inventory](part-8b.md) to pick up, use, and drop these items.
 
 ---

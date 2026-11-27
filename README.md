@@ -50,7 +50,8 @@ A complete, playable roguelike featuring:
 | 10 | [Save and Load](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-10.html) |
 | 11 | [Dungeon Levels and Experience](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-11.html) |
 | 12 | [Procedural Difficulty](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-12.html) |
-| 13 | [Equipment](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-13.html) |
+| 13a | [Weapons and Armor](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-13a.html) |
+| 13b | [The Inventory Screen](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-13b.html) |
 
 Plus six appendices on damage formulas, combat effects, consumable scaling, advanced dungeon generation, and designing enemies and equipment with personality.
 
@@ -98,7 +99,7 @@ Every push to `master` triggers a [GitHub Actions workflow](.github/workflows/pa
 roguelike-tutorial-python-tcod/
 ├── v3/                   # tutorial source (Markdown, images, assets)
 │   ├── index.md          # landing page
-│   ├── part-0.md … part-13.md
+│   ├── part-0.md … part-13b.md
 │   ├── append-1.md … append-6.md
 │   └── images/
 ├── mkdocs.yml            # MkDocs Material configuration and navigation

@@ -99,7 +99,8 @@ nav:
   - "Part 11a: Dungeon Levels": part-11a.md
   - "Part 11b: Experience": part-11b.md
   - "Part 12: Procedural Difficulty": part-12.md
-  - "Part 13: Equipment": part-13.md
+  - "Part 13a: Weapons and Armor": part-13a.md
+  - "Part 13b: The Inventory Screen": part-13b.md
   - Appendices:
     - "Appendix 1: Damage Formulas": append-1.md
     - "Appendix 2: Combat Effects": append-2.md

@@ -58,6 +58,15 @@ class "TreasureConsumable" as game.entities.components.consumable.TreasureConsum
 class "<color:#b57674>Impossible</color>" as game.exceptions.Impossible #ccc9e8 {
 }
 
+class "Action" as game.actions.Action {
+}
+
+class "ItemAction" as game.actions.ItemAction #ccc9e8 {
+}
+
+class "MovementAction" as game.actions.MovementAction #cce9c7 {
+}
+
 '--------------------------------------
 ' Relations
 '--------------------------------------
@@ -83,6 +92,13 @@ game.entities.entity.Entity ..> game.entities.components.inventory.Inventory : o
 
 game.entities.components.consumable.HealingConsumable --> game.exceptions.Impossible : raises
 
+' Chests: stepping on an item triggers its consumable through an ItemAction.
+game.actions.Action <|-- game.actions.ItemAction
+game.actions.ItemAction --> game.entities.entity.Item : item
+game.actions.MovementAction --> game.map.game_map.GameMap : get_items_at
+game.actions.MovementAction --> game.entities.components.consumable.Consumable : on_contact
+game.entities.components.consumable.Consumable --> game.actions.ItemAction : creates
+
 '--------------------------------------
 ' Layout hints
 '--------------------------------------
@@ -96,6 +112,9 @@ game.entities.components.base_component.ActorComponent -[hidden]right- game.enti
 game.entities.components.base_component.ItemComponent -[hidden]down- game.entities.components.consumable.Consumable
 game.entities.components.consumable.Consumable -[hidden]down- game.entities.components.consumable.HealingConsumable
 game.entities.components.consumable.HealingConsumable -[hidden]right- game.entities.components.consumable.TreasureConsumable
+
+game.actions.Action -[hidden]down- game.actions.ItemAction
+game.actions.ItemAction -[hidden]right- game.actions.MovementAction
 
 legend top right
 <size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>

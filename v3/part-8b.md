@@ -1,19 +1,18 @@
 # Part 8b: Inventory
 
-In **Part 8a** we built the item data model: items exist in the dungeon, and can be seen but not touched. This part adds the player-facing side: actions, keyboard bindings, and the inventory overlay.
+In **Part 8a** we built the item data model: items exist in the dungeon, and chests are collected on contact, but nothing else can be touched yet. This part adds the player-facing side: actions, keyboard bindings, and the inventory overlay.
 
 ## What You Will Build
 
-By the end of **Part 8b**, the player can pick up health potions with `G`, browse the inventory with `I`, use items by letter, drop items with `D`, and collect treasure chests by walking over them. A gold counter appears above the HP bar.
+By the end of **Part 8b**, the player can pick up health potions with `G`, browse the inventory with `I`, use items by letter, and drop items with `D`.
 
 ## Learning goals
 
 In this part we will:
 
-- Implement `PickupAction`, `ItemAction`, and `DropItem`
+- Implement `PickupAction` and `DropItem`, and let each consumable choose its action with `get_action()`
 - Refactor `GameState` so each state controls its own post-action flow
 - Build the inventory overlay using the modal state pattern
-- Add treasure chests as auto-collected items with a gold counter
 - Remove the vi movement keys so their letters are free for actions and items
 
 ---
@@ -45,11 +44,10 @@ Any state can open any other state. The current state is simply `self.engine.gam
 
 ## Update `game/actions.py`
 
-Add the three new action classes and two new imports at the top of the file:
+Add two new action classes, and import `Impossible` at the top of the file:
 
 ```diff
--from game.entities.entity import Actor
-+from game.entities.entity import Actor, Item
+ from game.entities.entity import Actor, Item
 +from game.exceptions import Impossible
  from game.message_log import MessageLog
 ```
@@ -72,17 +70,6 @@ class PickupAction(Action):
         raise Impossible("There is nothing here to pick up.")
 
 
-class ItemAction(Action):
-
-    def __init__(self, item: Item) -> None:
-        super().__init__()
-        self.item = item
-
-    def perform(self, engine: Engine, entity: Entity) -> None:
-        assert isinstance(entity, Actor)
-        self.item.consumable.activate(self, engine, entity)
-
-
 class DropItem(ItemAction):
 
     def perform(self, engine: Engine, entity: Entity) -> None:
@@ -95,9 +82,9 @@ class DropItem(ItemAction):
 
 `PickupAction` iterates `engine.game_map.items` (the new property) looking for an item at the player's position. If found, it delegates to `inventory.add_item()`, which removes the item from the map's entity set, transfers ownership to the inventory, and appends it to `inventory.items`. Both trailing `raise Impossible` statements ensure the player always gets feedback.
 
-`ItemAction` delegates to `consumable.activate()`. `DropItem` extends `ItemAction` because dropping also needs the item reference, but calls `inventory.drop_item()` instead, raising `Impossible` on the `False` case the same way `PickupAction` does for a full inventory.
+`DropItem` extends the `ItemAction` from Part 8a because dropping also needs the item reference, but calls `inventory.drop_item()` instead, raising `Impossible` on the `False` case the same way `PickupAction` does for a full inventory.
 
-The `assert isinstance(entity, Actor)` lines make a rule explicit. `Action.perform` accepts any `Entity`, but these three actions need an `Actor`, because only actors have an `inventory`. The assert checks this at runtime. It also tells the type checker that `entity` is an `Actor` from that line on, so the attribute accesses after it need no cast.
+Both actions start with `assert isinstance(entity, Actor)`, as `ItemAction` does: only actors have an `inventory`.
 
 Also add `DropItem` and `PickupAction` to the import list at the top of `game/game_states.py`:
 
@@ -118,41 +105,30 @@ Also add `DropItem` and `PickupAction` to the import list at the top of `game/ga
 +)
 ```
 
-Now that `ItemAction` exists, import it at module level, add `get_action()` to `Consumable` in `game/entities/components/consumable.py`, and tighten the `_action` annotations to `ItemAction`:
+Add `get_action()` to `Consumable` in `game/entities/components/consumable.py`. Its return type uses `Action`, so import it again under `TYPE_CHECKING`:
 
 ```diff
-+from game.actions import ItemAction
- from game.data import colors
- ...
-
  if TYPE_CHECKING:
-     from game.actions import Action
++    from game.actions import Action
+     from game.engine import Engine
 ```
 
 ```diff
  class Consumable(ItemComponent):
-+
+     auto_activate: bool = False
+
+     def on_contact(self, engine: Engine, consumer: Actor) -> None:
+         if self.auto_activate:
+             ItemAction(item=self.entity).perform(engine, consumer)
+
 +    def get_action(self, _consumer: Actor, _engine: Engine) -> Action | None:
 +        """Return the action this consumable produces when used."""
 +        return ItemAction(item=self.entity)
 +
--    def activate(self, _action: Action, _engine: Engine, _consumer: Actor) -> None:
-+    def activate(self, _action: ItemAction, _engine: Engine, _consumer: Actor) -> None:
-```
-
-```diff
--    def activate(self, _action: Action, _engine: Engine, consumer: Actor) -> None:
-+    def activate(self, _action: ItemAction, _engine: Engine, consumer: Actor) -> None:
-```
-
-```diff
--    def activate(self, _action: Action, engine: Engine, consumer: Actor) -> None:
-+    def activate(self, _action: ItemAction, engine: Engine, consumer: Actor) -> None:
+     def activate(self, _action: ItemAction, _engine: Engine, _consumer: Actor) -> None:
 ```
 
 `get_action()` returns the action produced by using this item. The base implementation returns a plain `ItemAction`, but future consumable types can override it to request additional input before acting, for example a targeting scroll that needs a destination tile.
-
-Moving `ItemAction`'s import to module level is safe for the same reason as the `TYPE_CHECKING` imports in Part 8a: `entity.py` only refers to `Consumable` under `TYPE_CHECKING`, so nothing on the `actions.py` → `entity.py` path imports `consumable.py` back.
 
 ---
 
@@ -721,96 +697,6 @@ You will notice that `InventoryUseState` and `InventoryDropState` are referenced
 
 ---
 
-## Treasure chests
-
-Part 8a defined both consumable types and spawned chests on the floor. The chest template and `auto_activate = True` are already in place. This section adds the pieces that make chests actually work: a `GameMap` helper, a contact method on `Consumable`, a contact check in `MovementAction`, and the HUD element that shows the accumulated gold.
-
-### Auto-collect in `MovementAction`
-
-`PickupAction` is triggered by the `G` key. But treasure should be collected automatically when the player steps on it. This requires three additions.
-
-First, add a `GameMap.get_items_at(x, y)` helper that returns all items at a given position, matching the `get_actor_at` naming from Part 6. Reuse the module-level `Item` import added in Part 8a:
-
-```python
-def get_items_at(self, x: int, y: int) -> list[Item]:
-    return [
-        entity for entity in self.entities
-        if isinstance(entity, Item) and entity.x == x and entity.y == y
-    ]
-```
-
-Second, add an `on_contact` method to `Consumable`. It activates the item if `auto_activate` is set, using the standard `ItemAction` path:
-
-```diff
- class Consumable(ItemComponent):
-     auto_activate: bool = False
-
-+    def on_contact(self, engine: Engine, consumer: Actor) -> None:
-+        if self.auto_activate:
-+            ItemAction(item=self.entity).perform(engine, consumer)
-```
-
-`TreasureConsumable` overrides `on_contact` so that only the player collects a chest; a wandering monster that steps on it leaves it untouched. Add the override in `game/entities/components/consumable.py`:
-
-```diff
- class TreasureConsumable(Consumable):
-     auto_activate = True
-
-     def __init__(self, value: int) -> None:
-         self.value = value
-
-+    def on_contact(self, engine: Engine, consumer: Actor) -> None:
-+        if consumer is engine.player:
-+            super().on_contact(engine, consumer)
-+
-     def activate(self, _action: ItemAction, engine: Engine, consumer: Actor) -> None:
-```
-
-Third, after `entity.move()` in `MovementAction.perform()`, trigger contact for every item on the new tile:
-
-```diff
-         entity.move(self.dx, self.dy)
-+
-+        if isinstance(entity, Actor):
-+            for item in engine.game_map.get_items_at(entity.x, entity.y):
-+                item.consumable.on_contact(engine=engine, consumer=entity)
-```
-
-The `isinstance(entity, Actor)` check satisfies the type checker: `on_contact` expects an `Actor`, and `entity` in `MovementAction` is annotated as the wider `Entity` type. In practice any entity that moves will be an actor.
-
-`get_items_at()` returns a fresh list, so `activate()` can safely modify `game_map.entities` during iteration. The `MovementAction` wiring has no player check: it fires `on_contact` for every actor that steps on the tile. The decision to react lives in the consumable: `TreasureConsumable` only acts when the consumer is the player (so a wandering monster cannot take a chest), while a different consumable could choose to react to anyone.
-
-### `render_gold` in `hud.py`
-
-Add a one-line gold display above the HP bar:
-
-```python
-def render_gold(
-    console: Console,
-    gold: int,
-    y: int = 44,
-) -> None:
-    console.print(
-        x    = 0,
-        y    = y,
-        text = f"$ {gold}",
-        fg   = colors.GOLD,
-    )
-```
-
-Call it from `Engine.render()`:
-
-```diff
-     hud.render_bar(...)
-+
-+    hud.render_gold(
-+        console = console,
-+        gold    = self.player.inventory.gold,
-+    )
-```
-
----
-
 ## Testing Part 8b
 
 Run the game and verify the following:
@@ -829,9 +715,6 @@ Run the game and verify the following:
 - Pressing `Escape` in either overlay returns to the map without an enemy turn (no action was performed).
 - Enemies still act on their turn after the player successfully uses or drops an item.
 - Enemies do *not* act when the player tries to pick up from an empty tile (a failed action costs no turn).
-- Chests (`$`) appear on the dungeon floor. Walking over one shows "You found 10 gold!" and the `$` symbol disappears.
-- A monster that steps on a chest leaves it in place; only the player collects it.
-- The gold counter above the HP bar increments each time a chest is collected.
 
 ---
 
@@ -839,11 +722,10 @@ Run the game and verify the following:
 
 The items from Part 8a are now part of play. Key additions:
 
-- **`PickupAction`, `ItemAction`, `DropItem`**: pickup, use, and drop are actions, so they cost a turn like any other action, and they reject impossible requests with `Impossible`
+- **`PickupAction`, `DropItem`**: pickup and drop are actions, like using an item, so they cost a turn like any other action, and they reject impossible requests with `Impossible`
 - **`GameState.handle_events()`**: runs the whole action cycle; one `except Impossible` shows every rejection in the log, and a failed action costs no turn
 - **`InventoryState`**: modal overlay base class; `InventoryUseState` and `InventoryDropState` override `TITLE`, `PROMPT`, the four color class variables, and `on_item_selected()`
-- **`Consumable.get_action()` / `Consumable.on_contact()`**: an item decides which action it produces when used, and whether it reacts when an actor steps on it
-- **`GameMap.get_items_at()` and `hud.render_gold()`**: chests are collected on contact, and the gold counter shows the total
+- **`Consumable.get_action()`**: an item decides which action it produces when used
 - **`game/data/keys.py`**: vi keys removed; `KEY_PICKUP`, `KEY_INVENTORY`, `KEY_DROP`, and `KEY_EXIT` added
 
 **Current architecture**:
@@ -852,7 +734,6 @@ The items from Part 8a are now part of play. Key additions:
 - `GameState.handle_events()`: performs the action, catches `Impossible`, runs the enemy turns, switches to `GameOverState` on death or back to `MainGameState` after an inventory action, and updates the FOV
 - `MainGameState`: `G` returns a `PickupAction`; `I` and `D` open the inventory overlays directly, without an action
 - `InventoryState`: draws over the dimmed map, maps `a` to `z` to items, and closes with `Escape` without spending a turn
-- `Consumable.on_contact()`: activates the item via `ItemAction` when an actor steps on its tile and `auto_activate` is set; `TreasureConsumable` overrides it so only the player collects a chest
 - `Impossible`: raised anywhere in the action chain and caught in one place
 
 **Local Class Diagram**:
@@ -872,7 +753,7 @@ game/
 ├── actions.py                  ← modified
 ├── engine.py                   ← modified
 ├── exceptions.py
-├── hud.py                      ← modified
+├── hud.py
 ├── game_states.py              ← modified
 ├── message_log.py
 ├── data/
@@ -894,7 +775,7 @@ game/
 │       └── inventory.py
 └── map/
     ├── __init__.py
-    ├── game_map.py             ← modified
+    ├── game_map.py
     ├── tile_types.py
     └── map_generator.py
 ```

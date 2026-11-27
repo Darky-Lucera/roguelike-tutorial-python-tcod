@@ -25,9 +25,6 @@ set namespaceSeparator none
 class "Engine" as game.engine.Engine #cce9c7 {
 }
 
-class "GameMap" as game.map.game_map.GameMap #cce9c7 {
-}
-
 class "Item" as game.entities.entity.Item {
 }
 
@@ -37,22 +34,16 @@ class "Inventory" as game.entities.components.inventory.Inventory {
 class "Consumable" as game.entities.components.consumable.Consumable #cce9c7 {
 }
 
-class "TreasureConsumable" as game.entities.components.consumable.TreasureConsumable #cce9c7 {
-}
-
 class "Action" as game.actions.Action {
 }
 
 class "PickupAction" as game.actions.PickupAction #ccc9e8 {
 }
 
-class "ItemAction" as game.actions.ItemAction #ccc9e8 {
+class "ItemAction" as game.actions.ItemAction {
 }
 
 class "DropItem" as game.actions.DropItem #ccc9e8 {
-}
-
-class "MovementAction" as game.actions.MovementAction #cce9c7 {
 }
 
 class "GameState" as game.game_states.GameState #cce9c7 {
@@ -78,8 +69,6 @@ class "<color:#b57674>Impossible</color>" as game.exceptions.Impossible {
 '--------------------------------------
 
 ' Inheritance: base class first, derived class second.
-game.entities.components.consumable.Consumable <|-- game.entities.components.consumable.TreasureConsumable
-
 game.actions.Action <|-- game.actions.PickupAction
 game.actions.Action <|-- game.actions.ItemAction
 game.actions.ItemAction <|-- game.actions.DropItem
@@ -101,9 +90,7 @@ game.game_states.InventoryDropState --> game.actions.DropItem : creates
 
 game.actions.ItemAction -up-> game.entities.entity.Item : item
 game.actions.PickupAction --> game.entities.components.inventory.Inventory : adds item
-game.actions.MovementAction --> game.map.game_map.GameMap : get_items_at
-game.actions.MovementAction --> game.entities.components.consumable.Consumable : on_contact
-game.entities.components.consumable.Consumable --> game.actions.ItemAction : creates
+game.entities.components.consumable.Consumable --> game.actions.ItemAction : get_action
 
 '--------------------------------------
 ' Layout hints
@@ -117,7 +104,6 @@ game.game_states.InventoryUseState -[hidden]right- game.game_states.InventoryDro
 game.actions.Action -[hidden]down- game.actions.PickupAction
 game.actions.PickupAction -[hidden]right- game.actions.ItemAction
 game.actions.ItemAction -[hidden]down- game.actions.DropItem
-game.actions.DropItem -[hidden]right- game.actions.MovementAction
 
 legend top right
 <size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>

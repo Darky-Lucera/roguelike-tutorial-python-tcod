@@ -1,0 +1,68 @@
+@startuml part13b_local_classes
+
+!theme mimeograph
+
+top to bottom direction
+
+hide members
+hide circle
+
+skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+skinparam nodesep 20
+skinparam ranksep 35
+
+set namespaceSeparator none
+
+'--------------------------------------
+' Classes
+'--------------------------------------
+
+class "InventoryState" as game.game_states.InventoryState #cce9c7 {
+}
+
+class "InventoryUseState" as game.game_states.InventoryUseState {
+}
+
+class "InventoryDropState" as game.game_states.InventoryDropState {
+}
+
+class "Inventory" as game.entities.components.inventory.Inventory {
+}
+
+class "Equipment" as game.entities.components.equipment.Equipment {
+}
+
+class "Item" as game.entities.entity.Item {
+}
+
+'--------------------------------------
+' Relations
+'--------------------------------------
+
+' Inheritance: base class first, derived class second.
+game.game_states.InventoryState <|-- game.game_states.InventoryUseState
+game.game_states.InventoryState <|-- game.game_states.InventoryDropState
+
+' The grouped overlay reads both components to sort the rows.
+game.game_states.InventoryState --> game.entities.components.inventory.Inventory : items
+game.game_states.InventoryState --> game.entities.components.equipment.Equipment : item_is_equipped
+game.entities.components.inventory.Inventory o-- game.entities.entity.Item : items
+game.entities.components.equipment.Equipment --> game.entities.entity.Item : weapon, armor
+
+'--------------------------------------
+' Layout hints
+'--------------------------------------
+
+game.game_states.InventoryUseState -[hidden]right- game.game_states.InventoryDropState
+game.entities.components.inventory.Inventory -[hidden]right- game.entities.components.equipment.Equipment
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
+
+@enduml
