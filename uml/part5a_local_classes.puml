@@ -1,0 +1,78 @@
+@startuml part5a_local_classes
+
+!theme mimeograph
+
+top to bottom direction
+
+hide members
+hide circle
+
+skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+skinparam nodesep 20
+skinparam ranksep 35
+
+set namespaceSeparator none
+
+'--------------------------------------
+' Classes
+'--------------------------------------
+
+class "Action" as game.actions.Action #cce9c7 {
+}
+
+class "ActionWithDirection" as game.actions.ActionWithDirection #ccc9e8 {
+}
+
+class "MovementAction" as game.actions.MovementAction #cce9c7 {
+}
+
+class "MeleeAction" as game.actions.MeleeAction #ccc9e8 {
+}
+
+class "BumpAction" as game.actions.BumpAction #ccc9e8 {
+}
+
+class "EventHandler" as game.input_handlers.EventHandler #cce9c7 {
+}
+
+class "Entity" as game.entity.Entity #cce9c7 {
+}
+
+class "GameMap" as game.map.game_map.GameMap #cce9c7 {
+}
+
+'--------------------------------------
+' Relations
+'--------------------------------------
+
+' Inheritance: base class first, derived class second.
+game.actions.Action <|-- game.actions.ActionWithDirection
+game.actions.ActionWithDirection <|-- game.actions.MovementAction
+game.actions.ActionWithDirection <|-- game.actions.MeleeAction
+game.actions.ActionWithDirection <|-- game.actions.BumpAction
+
+' The input handler only knows directions; BumpAction decides at perform time.
+game.input_handlers.EventHandler --> game.actions.BumpAction : creates
+game.actions.BumpAction --> game.actions.MeleeAction : blocked tile
+game.actions.BumpAction --> game.actions.MovementAction : free tile
+
+game.map.game_map.GameMap *-- game.entity.Entity : entities
+game.entity.Entity ..> game.map.game_map.GameMap : spawn()
+
+'--------------------------------------
+' Layout hints
+'--------------------------------------
+
+game.actions.Action -[hidden]down- game.actions.ActionWithDirection
+game.map.game_map.GameMap -[hidden]down- game.entity.Entity
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
+
+@enduml

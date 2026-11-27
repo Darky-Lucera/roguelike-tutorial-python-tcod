@@ -34,6 +34,7 @@ class "ActionWithDirection" as game.actions.ActionWithDirection #ccc9e8 {
 }
 
 class "BaseAI" as game.components.ai.BaseAI #ccc9e8 {
+  get_path_to(engine: Engine, entity: Entity, dest_x: int, dest_y: int) -> list[tuple[int, int]]
   {abstract}perform(engine: Engine, entity: Entity) -> None
 }
 

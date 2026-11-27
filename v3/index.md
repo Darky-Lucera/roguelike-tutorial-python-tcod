@@ -72,9 +72,11 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 - [Part 4: Field of View](part-4.md): Show only what the player can see; remember explored tiles.
 
-- [Part 5: Enemies and the Turn System](part-5.md): Spawn enemies, give them AI, and build the alternating turn loop.
+- [Part 5a: Monsters](part-5a.md): Define monsters as data, place them in the dungeon, and bump into them.
 
-- [Part 6: Combat](part-6.md): Add HP, attack stats, A* pathfinding, and player death.
+- [Part 5b: Enemies That Hunt](part-5b.md): Give enemies an AI and a turn after the player's, and let them find a path to you with A*.
+
+- [Part 6: Combat](part-6.md): Add HP, attack stats, corpses, and player death.
 
 - [Part 7: The User Interface](part-7.md): Build the HUD: health bar, message log, and mouse-hover entity names.
 

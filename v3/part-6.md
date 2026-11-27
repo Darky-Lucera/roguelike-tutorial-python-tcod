@@ -14,7 +14,6 @@ In this part we will:
 - Calculate damage and print combat messages
 - Handle death: change appearance, remove blocking, disable AI
 - Choose which entity is drawn on top when several share a tile
-- Add proper A* pathfinding so enemies navigate around obstacles
 - Lock input after the player dies
 
 ---
@@ -65,16 +64,6 @@ With this chapter's numbers, the two formulas mostly agree, but the difference a
 | Troll → Player | `3 - 2 = 1` | `9 / 5 = 1.8` |
 
 If you want the full comparison (a third, simpler-to-tune variant, plus rounding rules, minimum damage, critical hits, and more), see [Appendix 1: Damage Formulas](append-1.md).
-
-### Finding paths with A*
-
-In Part 5, enemies step straight toward the player. That works in an open room, but a wall between them and the player stops them: the straight step is blocked, and they never try another direction.
-
-A pathfinding algorithm solves this by treating the map as a graph. Each walkable tile is a node, and each step to a neighbor tile is an edge with a cost. The algorithm searches for the cheapest chain of steps from the start to the goal.
-
-A* (said "A star", published in 1968) is the classic choice for games. It explores tiles in order of "cost so far plus an estimate of the distance left". The estimate makes it try the tiles that point toward the goal first, so it usually visits far fewer tiles than a blind search, and it still finds the shortest path.
-
-Costs also make the search flexible. A tile with a higher cost is not forbidden, only less attractive, so we can make enemies prefer to go around each other without ever leaving them stuck. `tcod` includes A*, so our code only has to describe those costs.
 
 ---
 
@@ -184,12 +173,15 @@ This is a small base class. Its only purpose is to give type checkers a common p
 
 ## Updating BaseAI
 
-In Part 5, `BaseAI` was a plain class. Now that AI is a component with an owner, make it inherit from `BaseComponent` before we wire it into `Actor`.
+In Part 5b, `BaseAI` was a plain class. Now that AI is a component with an owner, make it inherit from `BaseComponent` before we wire it into `Actor`.
 
 Update `game/entities/components/ai.py`:
 
 ```diff
  from typing import TYPE_CHECKING
+
+ import numpy as np
+ import tcod
 
  from game.actions import BumpAction
 +from game.entities.components.base_component import BaseComponent
@@ -590,13 +582,13 @@ class MeleeAction(ActionWithDirection):
 We check `isinstance` for **both** sides. In practice today only `Actor` instances can fight, so bumping into a blocking-but-not-fighting entity (a chest, a door) does nothing instead of crashing. If you kept the Part 5 chest exercise, this changes its behavior: the chest still blocks movement, but it no longer triggers a melee attack because it is not combat-capable. Later, those entities can get their own interaction action.
 
 !!! tip "Run it now"
-    This is a good moment to run the game. Combat already works: bumping into an enemy deals real damage (watch the messages in the terminal) and an enemy reduced to 0 HP turns into a red `%`. The enemies still chase you in a greedy straight line and get stuck on corners; proper A* pathfinding is coming up next.
+    This is a good moment to run the game. Combat already works: bumping into an enemy deals real damage (watch the messages in the terminal), enemies that reach you hit back, and an enemy reduced to 0 HP turns into a red `%`. If you die, though, your corpse can still walk around; the end of this part fixes that.
 
 ---
 
 ## GameMap: the actors property
 
-Before adding the pathfinding, `GameMap` needs to expose which tiles are taken by living actors, so the pathfinder can route around them. Add an `actors` property that yields every living `Actor`.
+Enemy turns still loop over every entity on the map, but only living actors can act, and the AI is about to expect an `Actor`. So `GameMap` needs a way to list them. Add an `actors` property that yields every living `Actor`.
 
 Update `game/map/game_map.py`:
 
@@ -623,9 +615,9 @@ Update `game/map/game_map.py`:
 +        )
 ```
 
-`actors` filters `self.entities` down to the `Actor` instances that are still alive (`is_alive` comes from the `Actor` class). The AI uses it next for pathfinding, and the engine uses it right away for enemy turns.
+`actors` filters `self.entities` down to the `Actor` instances that are still alive (`is_alive` comes from the `Actor` class). The engine uses it right away for enemy turns, and later parts use it whenever they need the living actors on the map.
 
-Wire it into `Engine` now, so `handle_enemy_turns` iterates the same `Actor` instances that the pathfinding coming up next expects, instead of the raw `entities` set:
+Wire it into `Engine` now, so `handle_enemy_turns` gives each AI an `Actor` (the type the AI expects from the next section) instead of any entity from the raw `entities` set:
 
 ```diff
 -from game.entities.entity import Entity
@@ -657,103 +649,44 @@ If you completed the variable torch radius or fading memory exercises in Part 4,
 
 ---
 
-## Proper pathfinding for enemies
+## BaseAI works with actors
 
-The Part 5 AI moved enemies in a straight line, so they got stuck on corners. A* (said "A star") is a classic algorithm that finds the shortest path between two points on a grid, going around walls; [Background](#finding-paths-with-a) explains how it works. `tcod` includes it, so we only have to describe the map to it. Replace the movement in `game/entities/components/ai.py` with this pathfinding:
+Only actors carry AI: `Actor.__init__` is the one place that wires `ai.entity`, and from now on the engine passes an `Actor` to every `perform` call. So the AI can promise the same type. Update the type hints in `game/entities/components/ai.py`:
 
-!!! info "`BaseAI` uses the same component convention as `Fighter`"
-    We already made `BaseAI` inherit from `BaseComponent` earlier in this chapter. In this version, the `perform` signature also tightens its type hint from `Entity` to `Actor`, since by definition only actors carry AI.
-
-```python
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-import numpy as np
-import tcod
-
-from game.actions import BumpAction
-from game.entities.components.base_component import BaseComponent
-
-if TYPE_CHECKING:
-    from game.engine import Engine
-    from game.entities.entity import Actor
+```diff
+ if TYPE_CHECKING:
+     from game.engine import Engine
+-    from game.entities.entity import Entity
++    from game.entities.entity import Actor
 
 
-class BaseAI(BaseComponent):
+ class BaseAI(BaseComponent):
 
-    def perform(self, engine: Engine, entity: Actor) -> None:
-        raise NotImplementedError()
+-    def perform(self, engine: Engine, entity: Entity) -> None:
++    def perform(self, engine: Engine, entity: Actor) -> None:
+         raise NotImplementedError()
 
-    def get_path_to(
-        self,
-        engine: Engine,
-        entity: Actor,
-        dest_x: int,
-        dest_y: int,
-    ) -> list[tuple[int, int]]:
-        """Compute an A* path from entity to (dest_x, dest_y)."""
-        cost = np.array(engine.game_map.tiles["walkable"], dtype=np.int8)
+     def get_path_to(
+         self,
+         engine: Engine,
+-        entity: Entity,
++        entity: Actor,
+         dest_x: int,
+         dest_y: int,
+     ) -> list[tuple[int, int]]:
+         ...
 
-        # Increase cost of tiles occupied by other entities so the pathfinder
-        # routes around them rather than through them
-        for other in engine.game_map.actors:
-            if other is not entity and cost[other.x, other.y]:
-                cost[other.x, other.y] += 10
 
-        graph = tcod.path.SimpleGraph(cost=cost, cardinal=2, diagonal=3)
-        pathfinder = tcod.path.Pathfinder(graph)
-        pathfinder.add_root((entity.x, entity.y))
+ class HostileEnemy(BaseAI):
+     """Chases the player when visible; waits otherwise."""
 
-        # [1:] drops the starting position (current tile)
-        path: list[list[int]] = pathfinder.path_to((dest_x, dest_y))[1:].tolist()
-
-        # pylint: disable=unnecessary-comprehension
-        return [(x, y) for x, y in path]
+-    def perform(self, engine: Engine, entity: Entity) -> None:
++    def perform(self, engine: Engine, entity: Actor) -> None:
 ```
 
-The cost array tells the pathfinder how expensive each tile is to enter: `0` means blocked, and walkable tiles start at `1`. Adding `10` to the cost of an occupied tile is high enough that the pathfinder prefers to go around another entity, but it still goes through when there is no other way.
+Nothing changes at run time. The gain is for the type checker: AI code can now read `entity.fighter` without an `isinstance` check, because every `Actor` has a `Fighter`. Exercise 3 below uses exactly that, to decide when a monster should flee.
 
-`tcod.path.SimpleGraph` creates a weighted graph from the cost array. Cardinal moves cost 2, diagonal moves cost 3 (this is close to the real distance ratio without using floating point). `pathfinder.path_to` returns the full path including the start; we drop the first element (`[1:]`) since that is the entity's current position. If the entity is already standing on the destination, that leaves an empty list and the caller simply does nothing.
-
-!!! note "Why the `# pylint: disable` comment?"
-    If you run `pylint`, it flags the final line as `unnecessary-comprehension`, assuming `[(x, y) for x, y in path]` is just a roundabout copy of `path` you could replace with `list(path)`.
-
-    That is a false positive: `path` holds `list[int]` pairs, and the comprehension turns each pair into a `tuple[int, int]`, which is what the return type promises. `list(path)` would keep the inner lists instead and break that promise without any error.
-
-    The comment turns off the check on this one line, so you do not search for a "fix" that would make the code worse.
-
-`HostileEnemy` puts `get_path_to` to work, falling back to it only when the player is not already adjacent:
-
-```python
-class HostileEnemy(BaseAI):
-
-    def perform(self, engine: Engine, entity: Actor) -> None:
-        if not engine.game_map.visible[entity.x, entity.y]:
-            return  # Out of player FOV; cannot act
-
-        target = engine.player
-        dx = target.x - entity.x
-        dy = target.y - entity.y
-        distance = max(abs(dx), abs(dy))
-
-        if distance <= 1:
-            BumpAction(dx, dy).perform(engine, entity)
-            return
-
-        path = self.get_path_to(engine, entity, target.x, target.y)
-        if path:
-            dest_x, dest_y = path[0]
-            BumpAction(
-                dx = dest_x - entity.x,
-                dy = dest_y - entity.y,
-            ).perform(engine, entity)
-```
-
-!!! note "Enemies forget you the instant you leave their sight"
-    The opening `if not engine.game_map.visible[entity.x, entity.y]: return` means a monster stops the moment it loses sight of you, even if it was chasing you a tile ago. This keeps the AI as simple as possible while you learn the pattern, but it is not very convincing: a monster that just saw you turn a corner should at least walk to where you were.
-
-    Part 12 fixes this in its Exercise 4, *Monsters that remember*, by giving each enemy a `target_position` to walk toward. That one change also makes breaking line of sight a tactic: you can lead monsters out of a room you do not want to fight in.
+The pathfinding from Part 5b does not need to change. Corpses stop blocking movement when they die, so the `blocks_movement` check in `get_path_to` already ignores them: enemies walk over the remains of their friends.
 
 ---
 
@@ -854,7 +787,6 @@ Run the game with `uv run main.py` (or `python main.py`):
 - [ ] Orcs attack back when adjacent: `"Orc attacks Player for 2.7 hit points."`
 - [ ] When an enemy's HP reaches zero, it prints `"The Orc is dead!"` and its tile changes to a red `%`
 - [ ] Dead enemies no longer block movement: you can walk through corpses
-- [ ] Enemies navigate around corners and other entities (A* pathfinding)
 - [ ] When the player's HP reaches zero, `"You died!"` appears, the `@` becomes a red `%`, and movement stops
 - [ ] Corpses (`%`) render under living actors when on the same tile
 - [ ] If you kept the chest exercise, walking into a chest blocks movement but does not print a combat message
@@ -873,7 +805,6 @@ Combat is now fully functional. Key additions:
 - **Fighter component**: owns HP, defense, attack, and triggers death at 0 HP
 - **Actor**: an `Entity` subclass that always has a Fighter and optionally AI
 - **Damage formula**: `attack² / (attack + defense)`, scales with the attacker so defense never blocks a hit outright
-- **A* pathfinding**: enemies route around obstacles via `tcod.path`
 - **RenderOrder**: enum that controls draw order on shared tiles
 - **GameOverEventHandler**: locks input after player death
 
@@ -882,7 +813,7 @@ Combat is now fully functional. Key additions:
 - `Actor`: specialized entity for anything alive and combat-capable
 - `Fighter`: component that owns combat stats and death behavior
 - `BaseComponent`: shared base for components with an entity back-reference
-- `BaseAI` / `HostileEnemy`: enemy behavior with pathfinding
+- `BaseAI` / `HostileEnemy`: enemy behavior, now an actor component
 - `RenderOrder`: controls entity draw order
 - `GameOverEventHandler`: replaces normal input after player death
 
@@ -1069,7 +1000,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
         ```diff
                  if not engine.game_map.visible[entity.x, entity.y]:
-                     return  # Out of player FOV; cannot act
+                     return  # Enemy is not in player's FOV; it cannot see the player either
 
         +        # Part-6. Exercise 3: Flee behavior
         +        if entity.fighter.should_flee():

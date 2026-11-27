@@ -41,7 +41,8 @@ A complete, playable roguelike featuring:
 | 2 | [Entities, the Map, and the Engine](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-2.html) |
 | 3 | [Generating a Dungeon](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-3.html) |
 | 4 | [Field of View](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-4.html) |
-| 5 | [Enemies and the Turn System](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-5.html) |
+| 5a | [Monsters](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-5a.html) |
+| 5b | [Enemies That Hunt](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-5b.html) |
 | 6 | [Combat](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-6.html) |
 | 7 | [The User Interface](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-7.html) |
 | 8a | [The Item System](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-8a.html) |

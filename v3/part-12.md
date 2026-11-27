@@ -808,7 +808,7 @@ The next parts assume you did these exercises. Try each one on your own first. I
 
 4. **Monsters that remember**:
 
-    Back in Part 6, the first thing `HostileEnemy.perform` does is give up:
+    Back in Part 5b, the first thing `HostileEnemy.perform` does is give up:
 
     ```python
     if not engine.game_map.visible[entity.x, entity.y]:

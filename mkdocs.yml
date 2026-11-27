@@ -88,7 +88,8 @@ nav:
   - "Part 2: Entities, the Map, and the Engine": part-2.md
   - "Part 3: Generating a Dungeon": part-3.md
   - "Part 4: Field of View": part-4.md
-  - "Part 5: Enemies and the Turn System": part-5.md
+  - "Part 5a: Monsters": part-5a.md
+  - "Part 5b: Enemies That Hunt": part-5b.md
   - "Part 6: Combat": part-6.md
   - "Part 7: The User Interface": part-7.md
   - "Part 8a: The Item System": part-8a.md

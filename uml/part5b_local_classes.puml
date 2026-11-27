@@ -1,0 +1,68 @@
+@startuml part5b_local_classes
+
+!theme mimeograph
+
+top to bottom direction
+
+hide members
+hide circle
+
+skinparam roundcorner 10
+skinparam classBackgroundColor #ece9e8
+skinparam noteFontSize 10
+skinparam noteBorderThickness 1
+skinparam noteMargin 2
+skinparam notePadding 2
+skinparam nodesep 20
+skinparam ranksep 35
+
+set namespaceSeparator none
+
+'--------------------------------------
+' Classes
+'--------------------------------------
+
+class "Engine" as game.engine.Engine #cce9c7 {
+}
+
+class "Entity" as game.entity.Entity #cce9c7 {
+}
+
+class "BaseAI" as game.components.ai.BaseAI #ccc9e8 {
+}
+
+class "HostileEnemy" as game.components.ai.HostileEnemy #ccc9e8 {
+}
+
+class "BumpAction" as game.actions.BumpAction {
+}
+
+class "GameMap" as game.map.game_map.GameMap {
+}
+
+'--------------------------------------
+' Relations
+'--------------------------------------
+
+' Inheritance: base class first, derived class second.
+game.components.ai.BaseAI <|-- game.components.ai.HostileEnemy
+
+game.entity.Entity o-- game.components.ai.BaseAI : ai
+game.engine.Engine --> game.components.ai.BaseAI : handle_enemy_turns()
+
+' Enemies move with the same action as the player.
+game.components.ai.HostileEnemy --> game.actions.BumpAction : performs
+game.components.ai.BaseAI --> game.map.game_map.GameMap : get_path_to() reads tiles
+
+'--------------------------------------
+' Layout hints
+'--------------------------------------
+
+game.engine.Engine -[hidden]down- game.entity.Entity
+game.components.ai.BaseAI -[hidden]down- game.components.ai.HostileEnemy
+
+legend top right
+<size:11><back:#ece9e8>   </back> Unchanged - <back:#ccc9e8>   </back> New - <back:#cce9c7>   </back> Modified - <back:#ecdac7>   </back> Exercise</size>
+endlegend
+
+@enduml
