@@ -46,7 +46,8 @@ A complete, playable roguelike featuring:
 | 7 | [The User Interface](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-7.html) |
 | 8a | [The Item System](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-8a.html) |
 | 8b | [Inventory](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-8b.html) |
-| 9 | [Spells and Targeting](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-9.html) |
+| 9a | [Targeting](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-9a.html) |
+| 9b | [Area of Effect](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-9b.html) |
 | 10 | [Save and Load](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-10.html) |
 | 11 | [Dungeon Levels and Experience](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-11.html) |
 | 12 | [Procedural Difficulty](https://darky-lucera.github.io/roguelike-tutorial-python-tcod/part-12.html) |

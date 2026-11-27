@@ -82,7 +82,9 @@ Lines starting with `-` are removed. Lines starting with `+` are added.
 
 - [Part 8b: Inventory](part-8b.md): Let the player pick up, use, and drop items through a letter-keyed inventory overlay.
 
-- [Part 9: Spells and Targeting](part-9.md): Implement a targeting cursor and three scroll types with spell effects.
+- [Part 9a: Targeting](part-9a.md): Add a targeting cursor, a lightning scroll, and a confusion scroll.
+
+- [Part 9b: Area of Effect](part-9b.md): Add a fireball whose preview stops at walls and fades at the edge, like its damage.
 
 - [Part 10a: The Main Menu](part-10a.md): Add a main menu with background art, and make game states return the next state.
 
