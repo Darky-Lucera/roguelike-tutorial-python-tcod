@@ -1013,6 +1013,7 @@ Import the new classes at the top of `game_states.py`:
      Action,
 +    AreaRangedTargetingAction,
      BumpAction,
+     DropItem,
      EscapeAction,
      PickupAction,
 +    SingleRangedTargetingAction,

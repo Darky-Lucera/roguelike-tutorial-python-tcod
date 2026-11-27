@@ -19,7 +19,11 @@ In this part we will:
 
 ---
 
-## How equipment works
+## Background
+
+This section is for reading; there is nothing to type yet. If you want to start building right away, skip to [EquipmentType enum](#equipmenttype-enum). You can come back here at any time, even after you finish the tutorial, when you know the game from the inside and some of these ideas will mean more.
+
+### How equipment works
 
 Equipment is a two-sided relationship:
 
@@ -41,14 +45,23 @@ Effective attack  = 5 + 4 = 9
 Effective defense = 2 + 3 = 5
 ```
 
-None of this runs yet: equipment comes alive near the end of the chapter, once `factories.py` builds the pieces and the generator places them. Until then you are wiring up parts you cannot see in action; the dagger waiting in your first room is the payoff.
-
 !!! info "Wield and wear"
-    The two slots are as old as the genre. Rogue (1980) had separate commands to wield a weapon and wear armor, and NetHack still binds them to `w` and `W` today. Our version follows the modern convention instead: one inventory screen, one key, and the game works out which slot the item belongs to.
+    The two slots are as old as the genre. Rogue (1980) had separate commands to wield a weapon and wear armor, and NetHack still binds them to `w` and `W` today. Our version follows the modern convention instead: one inventory screen, one key, and the game decides which slot the item belongs to.
+
+### Where equipment comes from
+
+Part 12 made random loot scale with depth. Equipment gets the opposite treatment, for a simple reason: with only two slots and items that never break, a second dagger is useless. So equipment does not join the weighted item table. Each piece appears **exactly once per run**, on a floor chosen at random from a small range of floors (a band). The bands follow the difficulty curve, and the band of an upgrade always comes after the band of the piece it replaces.
+
+!!! info "Guaranteed loot is a classic tool"
+    Pure random tables can leave a run without the basics. A roguelike where you fight bare-handed for five floors because the dice said so is not difficult, just unfair.
+
+    Brogue is well known for controlling the items its balance depends on. Potions of strength and life and scrolls of enchanting are "metered": their chance grows on every floor where none appears, and when a run falls too far behind, the game forces one to spawn. Most modern roguelikes mix the two systems: weighted tables for consumables, guarantees for the items the balance depends on. Now ours does too.
 
 ---
 
 ## EquipmentType enum
+
+You will not see equipment in the game until near the end of the chapter, once `factories.py` builds the pieces and the generator places them. Until then we connect parts that you cannot see working yet. The reward is the dagger waiting in your first room.
 
 Create `game/entities/equipment_type.py`:
 
@@ -63,7 +76,7 @@ class EquipmentType(Enum):
     ARMOR  = auto()
 ```
 
-A two-member enum may look like overkill when a pair of strings would do, but it buys the same guarantees as `RenderOrder` did in Part 6: a typo becomes an immediate `AttributeError` instead of a silent bug, and your editor can autocomplete the slots.
+A two-member enum may look like too much when a pair of strings would do, but it gives the same guarantees as `RenderOrder` did in Part 6: a typo becomes an immediate `AttributeError` instead of a silent bug, and your editor can autocomplete the slots.
 
 ---
 
@@ -94,7 +107,9 @@ class Equippable(ItemComponent):
 That is the whole file. An `Equippable` is pure data: which slot it occupies and what it adds. The concrete numbers (a dagger gives +2, chain mail gives +3) do not live here; they go in `factories.py` later in this chapter, next to the templates, exactly where `Fighter(hp=30.0, defense=2.0, attack=5.0)` and the Part 12 spawn tables already live. One file tells you everything about an item.
 
 !!! info "Why not a subclass per item?"
-    The older tutorials define `class Dagger(Equippable)` and friends, one subclass per item type. It works, but every new weapon then needs edits in two files, and none of those subclasses add behavior; they only store different parameters. We already have a place for parameters: the template in `factories.py`. Subclasses earn their keep when items need different *code*, not different *numbers*.
+    The older tutorials define `class Dagger(Equippable)` and similar classes, one subclass per item type. It works, but every new weapon then needs edits in two files, and none of those subclasses add behavior; they only store different parameters.
+
+    We already have a place for parameters: the template in `factories.py`. Subclasses are worth it when items need different *code*, not different *numbers*.
 
 ---
 
@@ -172,7 +187,7 @@ Next, a way to ask what is equipped, and the single entry point for putting gear
             self.equip_to_slot(slot, equippable_item)
 ```
 
-`toggle_equip` is the single entry point. Select an equipped item and it comes off; select an unequipped one and it goes on, displacing whatever was in that slot (`equip_to_slot` unequips the previous occupant first, so swapping a dagger for a sword logs both messages). The `assert` at the top narrows `equippable` from `Equippable | None` to `Equippable` for the type checker, the same trick the actions have used with `isinstance` since Part 8.
+`toggle_equip` is the single entry point. Select an equipped item and it is removed; select an unequipped one and it is equipped, replacing whatever was in that slot. `equip_to_slot` unequips the previous item first, so swapping a dagger for a sword logs both messages. The `assert` at the top narrows `equippable` from `Equippable | None` to `Equippable` for the type checker, the same trick the actions have used with `isinstance` since Part 8.
 
 Finally, the two methods that actually move an item into or out of a slot:
 
@@ -192,7 +207,9 @@ Finally, the two methods that actually move an item into or out of a slot:
 ```
 
 !!! tip "`getattr` and `setattr` with a computed name"
-    `getattr(self, "weapon")` is exactly `self.weapon`, except the attribute name is a runtime value. That lets `equip_to_slot` and `unequip_from_slot` serve both slots with one implementation; with direct attribute access we would need a near-identical `if`/`else` branch per slot, and a third copy the day we add jewelry, amulets, etc. This pair is the standard tool when *which attribute to touch* is data rather than something you can hardcode.
+    `getattr(self, "weapon")` is exactly `self.weapon`, except the attribute name is a runtime value. That lets `equip_to_slot` and `unequip_from_slot` serve both slots with one implementation.
+
+    With direct attribute access we would need a near-identical `if`/`else` branch per slot, and one more copy for each new slot (rings, amulets). This pair is the standard tool when *which attribute to touch* is data rather than something you can hardcode.
 
 !!! note "Expect red squiggles for now"
     Your editor will flag `item.equippable` as unknown here, because `Item` does not have that attribute yet. We add it a couple of sections down, in *entity.py: Item gets equippable, Actor gets equipment*. The references resolve there.
@@ -215,7 +232,7 @@ Part 11 renamed the stored stats to `base_attack` and `base_defense` and kept `a
 +        return self.base_attack + self.entity.equipment.attack_bonus
 ```
 
-That is the entire combat integration. Every read of `fighter.attack` and `fighter.defense`, starting with `melee_attack`, now includes equipment bonuses with no changes at the call sites. This is the payoff of going through properties: the representation has changed twice (the rename in Part 11, the bonuses now) and the rest of the game never noticed.
+That is all combat needs. Every read of `fighter.attack` and `fighter.defense`, starting with `melee_attack`, now includes equipment bonuses with no changes at the call sites. This is why we went through properties: the stored data has changed twice (the rename in Part 11, the bonuses now), and the rest of the game did not have to change.
 
 !!! note "Still red, still fine"
     Like `item.equippable` above, `self.entity.equipment` does not exist yet: `Actor` gains it in the next section. Both references go green once *entity.py* wires in the two new components.
@@ -294,7 +311,9 @@ Making `consumable` optional also changes the base `ItemAction`. Its default imp
 `DropItem` and the `EquipAction` added below override `perform`, so neither reaches this assertion. Besides preventing an invalid direct `ItemAction` from failing with a less useful `AttributeError`, the assertion narrows `Consumable | None` for the type checker.
 
 !!! warning "Old saves break this time"
-    Part 12 ended with good news: removing reads does not hurt old save files. This chapter is the other half of that rule: **adding required state breaks them**. A player loaded from an old save has no `equipment` attribute, and the first code path that touches it (the `Fighter` properties run on every attack) dies with `AttributeError`. Delete your old save files after this change, just as you did when `Level` arrived in Part 11. If you would rather migrate them, the `__getattr__` trick from Part 10 can hand out a default `Equipment()` on first access; deleting the save is simpler.
+    Part 12 ended with good news: removing reads does not hurt old save files. This chapter is the other half of that rule: **adding required state breaks them**. A player loaded from an old save has no `equipment` attribute. The first code that reads it (the `Fighter` properties, on every attack) stops with `AttributeError`.
+
+    Delete your old save files after this change, just as you did when `Level` arrived in Part 11. If you would rather migrate them, the `__getattr__` trick from Part 10b Exercise 3 can return a default `Equipment()` on first access; deleting the save is simpler.
 
 ---
 
@@ -310,7 +329,7 @@ Since Part 8, `MovementAction` lets items react when an actor steps on them; tha
 +                    item.consumable.on_contact(engine=engine, consumer=entity)
 ```
 
-This breakage is the standard tax for relaxing an invariant: "every item has a consumable" was load-bearing, and loosening `Consumable` to `Consumable | None` invalidates every unguarded `.consumable.` access. The type checker is the fastest way to find them all; `mypy` flags each one as a possible `None` the moment the annotation changes.
+This is the usual cost of relaxing an invariant (a rule the code assumes is always true). Other code depended on "every item has a consumable", so changing `Consumable` to `Consumable | None` breaks every `.consumable.` access without a guard. The type checker is the fastest way to find them all: `mypy` flags each one as a possible `None` as soon as the annotation changes.
 
 !!! info "Same guard in the teleport scroll"
     If you did Part 9 Exercise 3, `TeleportConsumable` runs the same auto-collect loop after teleporting. Give it the same `if item.consumable is not None:` guard.
@@ -341,7 +360,9 @@ Dropping equipped gear should unequip it first; otherwise you would keep the bon
 +        if entity.equipment.item_is_equipped(self.item):
 +            entity.equipment.toggle_equip(self.item)
 +
-         entity.inventory.drop_item(self.item, engine.game_map)
+         if not entity.inventory.drop_item(self.item, engine.game_map):
+             raise Impossible("You don't have that.")
+
          MessageLog.add_message(f"You dropped the {self.item.name}.")
 ```
 
@@ -349,14 +370,26 @@ Dropping equipped gear should unequip it first; otherwise you would keep the bon
 
 ## Update InventoryUseState
 
-When the selected item is equippable, return an `EquipAction` instead of asking the consumable. In `game/game_states.py`:
+When the selected item is equippable, return an `EquipAction` instead of asking the consumable. In `game/game_states.py`, first add `EquipAction` to the import list at the top:
+
+```diff
+ from game.actions import (
+     Action,
+     AreaRangedTargetingAction,
+     BumpAction,
+     DropItem,
++    EquipAction,
+     EscapeAction,
+     ...
+ )
+```
+
+Then update `InventoryUseState.on_item_selected`:
 
 ```diff
      def on_item_selected(self, item: Item) -> Action | None:
 -        return item.consumable.get_action(self.engine.player, self.engine)
 +        if item.equippable:
-+            from game.actions import EquipAction
-+
 +            return EquipAction(item=item)
 +
 +        if item.consumable:
@@ -365,7 +398,7 @@ When the selected item is equippable, return an `EquipAction` instead of asking 
 +        return None
 ```
 
-The local import mirrors `InventoryDropState`, which already imports `DropItem` the same way to avoid an import cycle. The final `return None` covers an item with neither component: no such item exists today, but if one ever does, the method degrades to "nothing happens" instead of crashing.
+The final `return None` covers an item with neither component: no such item exists today, but if one ever does, selecting it does nothing instead of crashing.
 
 !!! note "If you did the persistent-keys exercise (Part 8 Exercise 3)"
     That exercise also added a direct item-key shortcut to `MainGameState.event_keydown` in `game/game_states.py`. It still calls `item.consumable.get_action()` unconditionally, so update that method with the same component dispatch:
@@ -379,8 +412,6 @@ The local import mirrors `InventoryDropState`, which already imports `DropItem` 
                  if item.key is not None and item.key == key:
 -                    return item.consumable.get_action(self.engine.player, self.engine)
 +                    if item.equippable:
-+                        from game.actions import EquipAction
-+
 +                        return EquipAction(item=item)
 +
 +                    if item.consumable:
@@ -395,12 +426,17 @@ The local import mirrors `InventoryDropState`, which already imports `DropItem` 
 
 ## Group the inventory: numbers for gear, letters for the rest
 
-Right now the inventory is one flat, alphabetical list: every item, equipped or not, takes the next letter. That was fine when everything was a consumable, but equipment changes what the list is *for*. The player needs to see at a glance what is worn versus what is spare, and gear is selected far more often than a one-shot potion. So we split the overlay into three sections, *Equipped*, *Equippable*, and *Items*, and give equipment its own keys: **numbers** for weapons and armor, **letters** for everything else.
+Right now the inventory is one flat list: every item, equipped or not, takes the next letter. That was fine when everything was a consumable, but equipment changes what the list is *for*. The player needs to see quickly what is worn and what is spare, and gear is selected far more often than a one-shot potion. So we split the overlay into three sections, *Equipped*, *Equippable*, and *Items*, and give equipment its own keys: **numbers** for weapons and armor, **letters** for everything else.
 
-The split is not decoration. Selecting gear by number is the convention players already know from countless games (hotbars, quick-slots), and keeping consumables on letters means a reflex like pressing the health-potion key never collides with equipping a weapon. A dedicated *Equipped* header also makes a per-item marker like `(E)` unnecessary: where a row sits says everything the marker would.
+The split has two practical reasons:
+
+- Selecting gear by number is a convention players already know from many games (hotbars, quick slots).
+- Keeping consumables on letters means that pressing the health potion key out of habit never equips a weapon by mistake.
+
+A separate *Equipped* header also makes a per-item marker like `(E)` unnecessary: the section a row is in already says it.
 
 !!! warning "Two paths through this section"
-    The code below builds the overlay on the **base** inventory: positional letters, one flat list. If you did the Part 8 inventory exercises (Exercise 1, item stacking, and Exercise 3, persistent keys), your inventory already stacks and selects by a fixed key, so this base code will not line up with yours. Skip to [If you did the Part 8 inventory exercises](#if-you-did-the-part-8-inventory-exercises) at the end of this section, expand the box there, and rejoin at *Sprites and colors*. Everyone else, read on.
+    The code below builds the overlay on the **base** inventory: positional letters, one flat list. If you did the Part 8 inventory exercises (Exercise 1, item stacking, and Exercise 3, persistent keys), your inventory already stacks and selects by a fixed key, so this base code will not match yours. Read the base code to see how the overlay works, but do not type it. Then go to [If you did the Part 8 inventory exercises](#if-you-did-the-part-8-inventory-exercises) at the end of this section, expand the box there, type that version, and continue at *Sprites and colors*. Everyone else, read on.
 
 First, a helper that sorts the inventory into the three groups, in the order they appear on screen. Add it to `InventoryState` (`game\game_states.py`):
 
@@ -536,7 +572,7 @@ Then replace the drawing loop itself. Keep the surrounding `if visible_rows > 0:
 Selection now has two namespaces, so `InventoryState.event_keydown` checks numbers and letters separately. Numbers index into the gear (the two equipment sections joined, in display order); letters index into everything else:
 
 ```python
-    def event_keydown(self, event: tcod.event.KeyDown) -> Action | None:
+    def event_keydown(self, event: tcod.event.KeyDown) -> Action | BaseGameState | None:
         key = event.sym
         equipped, equippable, other = self._grouped_items()
 
@@ -562,13 +598,12 @@ Selection now has two namespaces, so `InventoryState.event_keydown` checks numbe
             return self.on_item_selected(selected_item)
 
         if key == keys.KEY_EXIT:
-            self.engine.game_state = MainGameState(self.engine)
-            return None
+            return MainGameState(self.engine)
 
         return super().event_keydown(event)
 ```
 
-The two key ranges never overlap, so a number always means "equip or unequip" and a letter always means "use". An equipped item still shows its number in the *Equipped* section, and pressing it again toggles the gear back off through the `on_item_selected` routing you just added. The base class powers both the use and drop overlays, so the grouping and the new keys appear in both for free.
+The two key ranges never overlap, so a number always means "equip or unequip" and a letter always means "use". An equipped item still shows its number in the *Equipped* section, and pressing it again toggles the gear back off through the `on_item_selected` routing you just added. The base class drives both the use and drop overlays, so the grouping and the new keys appear in both with no extra code.
 
 ### If you did the Part 8 inventory exercises
 
@@ -626,7 +661,9 @@ The two key ranges never overlap, so a number always means "equip or unequip" an
         return rows
     ```
 
-    In the drawing loop, unpack the row as `(kind, label, stack)`. In the item branch take `item = stack[0]` (after `assert stack is not None`) for the key badge and glyph, and draw the name with `self.stack_name(stack)` instead of `item.name`, so a stacked row still reads `Health Potion (x3)`.
+    `on_render` then follows the base code above, read for reference. Size the panel from the rows: replace your `number_of_items_in_inventory = len(item_stacks)` line with `rows = self._inventory_rows()` and `number_of_rows = len(rows)`, and use `number_of_rows` in the `height` and `visible_rows` lines, as in the base diff. Keep `item_stacks` for the `item_width` line.
+
+    The drawing loop is the base loop above, with two changes. Unpack each row as `(kind, label, stack)`. In the item branch, after the header branch, write `assert stack is not None` and take `item = stack[0]` for the key badge and the glyph. Draw the name with `self.stack_name(stack)` instead of `item.name`, so a stacked row still reads `Health Potion (x3)`. Your old `item_key` line goes away: `label` already holds the key.
 
     `event_keydown` keeps your persistent loop (it already matches `stack[0].key`); the only change is widening the invalid-entry guard to reject stray digits too:
 
@@ -634,6 +671,7 @@ The two key ranges never overlap, so a number always means "equip or unequip" an
              if key == keys.KEY_EXIT:
                  return MainGameState(self.engine)
 
+             # Part-8. Exercise 3: Persistent item keys
     -        if ord("a") <= int(key) <= ord("z"):
     +        # Part-13: equipment uses number keys, so reject stray digits too.
     +        if ord("a") <= int(key) <= ord("z") or ord("0") <= int(key) <= ord("9"):
@@ -641,7 +679,7 @@ The two key ranges never overlap, so a number always means "equip or unequip" an
                  return None
     ```
 
-    Finally, give the equipment templates fixed number keys in `game/data/keys.py`, reserving **1-5 for weapons and 6-0 for armor** so the two ranges never collide:
+    Finally, give the equipment templates fixed number keys, reserving **1-5 for weapons and 6-0 for armor** so the two ranges never collide. If you did Exercise 4 too, the item keys live in `game/data/keys.py`; add these constants there. Otherwise write the raw `tcod.event.KeySym.N1` values directly in the templates, as you did for the consumables:
 
     ```python
     # Part-13: equipment keys are numbers; weapons 1-5, armor 6-0.
@@ -651,7 +689,7 @@ The two key ranges never overlap, so a number always means "equip or unequip" an
     CHAIN_MAIL    = tcod.event.KeySym.N7
     ```
 
-    The factories section below wires `key = keys.DAGGER` (and so on) into each template; mark those lines `# Part-8. Exercise 3: Persistent item keys`. The gap between `2` and `6` leaves room to add more weapons or armor later without renumbering.
+    The factories section below wires `key = keys.DAGGER` (and so on) into each template; mark those lines `# Part-8. Exercise 3: Persistent item keys`, like the consumables. The gap between `2` and `6` leaves room to add more weapons or armor later without renumbering.
 
 ---
 
@@ -704,7 +742,7 @@ Wire the new components into `game/entities/factories.py`. First the imports:
 +from game.entities.equipment_type import EquipmentType
 ```
 
-Every actor now needs an `Equipment` component. Add the empty default to the three templates (shown for the player; do the same for `orc` and `troll`):
+Every actor now needs an `Equipment` component. Add the empty default to every actor template (shown for the player; do the same for `orc`, `troll`, the Part 12 `ogre`, and any monster you added in the Part 12 exercises):
 
 ```diff
  player = Actor(
@@ -714,7 +752,7 @@ Every actor now needs an `Equipment` component. Add the empty default to the thr
  )
 ```
 
-Monsters get one too, even though nothing equips them yet: the `Fighter` properties read `entity.equipment` unconditionally, and an orc with a rusty sword is now one template edit away.
+Monsters get one too, even though nothing equips them yet: the `Fighter` properties always read `entity.equipment`. As a bonus, an orc with a rusty sword now needs only one template edit.
 
 Then the four item templates, at the end of the items section:
 
@@ -752,13 +790,16 @@ chain_mail = Item(
 !!! note "If you did the persistent-keys exercise (Part 8 Exercise 3)"
     These templates take their keys by position. With persistent keys, remember to give each piece its fixed number, exactly as the consumables already do: `key = keys.DAGGER`, `key = keys.SWORD`, `key = keys.LEATHER_ARMOR`, and `key = keys.CHAIN_MAIL` (defined back in the inventory section).
 
-The whole definition of a dagger fits in one template: sprite, color, name, slot, numbers. Rebalancing the sword is a one-line edit here, with nothing to chase through other files.
+The whole definition of a dagger fits in one template: sprite, color, name, slot, numbers. Changing the sword's bonus is a one-line edit here, with no other file to update.
+
+!!! tip "Run it now"
+    If you run the game now, it should play as at the end of Part 12: the equipment exists, but nothing places it in the dungeon yet. Walk around, fight a monster or two, and take the stairs down. If the game starts and combat works, the new components are connected correctly. Do not load an old save; start a new game.
 
 ---
 
 ## Guaranteed equipment spawns
 
-Part 12 made random loot scale with depth. Equipment gets the opposite treatment, and for a reason: with only two slots and items that never break, a second dagger is dead weight. Instead of joining `item_chances`, each piece appears **exactly once per run**, on a floor rolled from a band. Add the table at the end of `factories.py`, next to the other spawn data:
+Equipment does not join `item_chances`: each piece appears **exactly once per run**, on a floor rolled from its band (see *Where equipment comes from* in the Background). Add the table at the end of `factories.py`, next to the other spawn data:
 
 ```python
 # Guaranteed equipment: each template spawns once per run,
@@ -772,9 +813,6 @@ equipment_spawns = {
 ```
 
 The bands encode the difficulty curve. The dagger is always on floor 1; the sword arrives somewhere on floors 4 to 5; and because the bands of a piece and its upgrade never overlap, the upgrade cannot appear before the thing it replaces.
-
-!!! info "Guaranteed loot is a classic tool"
-    Pure random tables can starve a run of basics, and a roguelike where you melee bare-handed for five floors because the dice said so is not difficult, just unfair. Brogue is famous for hand-placing guarantees inside its randomness (early potions of strength among them), and most modern roguelikes mix the two systems: weighted tables for consumables, guarantees for the items the balance depends on. Now ours does too.
 
 ### GameWorld rolls the floors
 
@@ -818,10 +856,19 @@ And pass the result to the generator:
          )
 ```
 
-The method recomputes every roll from scratch on every call, with a fresh `random.Random(self.seed)`. That sounds wasteful, but it is the point: the same seed always produces the same rolls in the same order (dicts iterate in insertion order), so when floor 4 asks "is the sword mine?" it gets the answer the run already decided on floor 1. Uniqueness needs no bookkeeping either: floors are persistent since Part 11, each floor generates exactly once, so each piece spawns exactly once. This `rng` is deliberately separate from `generate_dungeon`'s own `rng` (Part 4): this one decides only *which* floor each piece belongs to, seeded from the run seed (`self.seed`); `generate_dungeon`'s decides *where* things land on a given floor, seeded from the per-floor seed (`self.seed + self.current_floor`, from Part 11). Two local `random.Random` instances, each owning one concern, instead of a single shared or global generator. The same run seed still reproduces the whole dungeon: layout, which equipment, which floor, and which tile.
+The method repeats every roll from the start on every call, with a new `random.Random(self.seed)`. That sounds wasteful, but it is the point: the same seed always produces the same rolls in the same order (dicts keep their insertion order), so when floor 4 asks "is the sword mine?" it gets the answer the run already decided on floor 1.
+
+Each piece also spawns only once, with no extra tracking: floors are persistent since Part 11, so each floor is generated exactly once.
+
+!!! info "Two random generators, two jobs"
+    This `rng` is separate from the `rng` inside `generate_dungeon` on purpose. This one decides only *which* floor each piece belongs to, and its seed is the run seed (`self.seed`). The one in `generate_dungeon` decides *where* things go on a given floor, and its seed is the per-floor seed (`self.seed + self.current_floor`, from Part 11).
+
+    So we have two local `random.Random` instances, each with one job, instead of one shared or global generator. The same run seed still reproduces the whole dungeon: the layout, the equipment, its floor, and its tile.
 
 !!! warning "Why not just store the rolled floors?"
-    The tempting alternative is a dict computed once in `__init__`, something like `self.equipment_floors = {factories.dagger: 1, ...}`. But `GameWorld` is pickled inside every save file, and pickle would store *copies* of those template items. After loading, `factories.dagger` and the key in your dict would be two different objects, and every identity-based lookup (the same identity hashing that makes the Part 12 tables work) would quietly fail. Deriving the rolls from the seed keeps `GameWorld` free of template references, and your saves free of surprises.
+    The obvious alternative is a dict computed once in `__init__`, something like `self.equipment_floors = {factories.dagger: 1, ...}`. But `GameWorld` is pickled inside every save file, and pickle would store *copies* of those template items.
+
+    After loading, `factories.dagger` and the key in your dict would be two different objects. Every identity-based lookup (the same identity hashing that makes the Part 12 tables work) would then fail without any error. Deriving the rolls from the seed keeps template references out of `GameWorld`, and out of your saves.
 
 ### map_generator places the items
 
@@ -841,7 +888,6 @@ def free_positions(room: RectangularRoom, dungeon: GameMap) -> list[tuple[int, i
 And replace the inline search in the stairs block:
 
 ```diff
-     # Place stairs in the last room, avoiding any entity already there
      last_room = rooms[-1]
 -    free = [
 -        (x, y)
@@ -885,32 +931,12 @@ And place each piece after the stairs, just before the return:
      return dungeon
 ```
 
-The floor 1 special case is deliberate level design. Your starting room spawns no monsters (it never has, since Part 5), so the dagger sits in a safe spot where you can practice the whole loop: walk over it, pick it up with `g`, open the inventory, equip it, with nothing biting your ankles. The game teaches its own mechanic before the first fight. On deeper floors the rule flips: the arrival room holds the up stairs, gear there would be loot without exploration, so the piece lands in a random room instead.
+The floor 1 special case is deliberate level design. Your starting room spawns no monsters (it never has, since Part 5), so the dagger sits in a safe spot. There you can practice the whole sequence with no enemy nearby: walk over it, pick it up with `g`, open the inventory, and equip it. The game teaches its own mechanic before the first fight. On deeper floors the rule changes. The arrival room holds the up stairs, and gear there would be loot without exploration, so the piece goes to a random room. That random room can still be the arrival room; Exercise 3 closes that gap.
 
-The `if free:` guard mirrors the stairs code above it: a room with no free tile is practically impossible, but the check keeps generation crash-proof instead of crash-prone.
+The `if free:` guard mirrors the stairs code above it: a room with no free tile is almost impossible, but the check makes sure generation never crashes on one.
 
----
-
-## A toolkit, not a power ladder
-
-Part 12 warned against making a dungeon harder with bigger numbers, and gave each monster a personality instead. This chapter, if we are honest, did the opposite with the player's gear. The dagger gives +2, the sword +4; leather armor +1, chain mail +3. That is a **power ladder**: each piece is the one before it with a larger number, and you swing the sword exactly the way you swung the dagger, only it hits harder. It is the orc with triple hit points, turned on your own inventory.
-
-That is fine here, and deliberate. The goal of this chapter was the *architecture*: two components, a pair of slots, bonuses that flow through the `Fighter` properties. A clean stat ladder is the honest baseline for that machinery, the equipment equivalent of the orc, the plain fight everything else is measured against. You need a flat reference before you can build twists on top of it.
-
-But the interesting direction is the one the bestiary already took. A weapon, too, can ask a **different question** instead of offering a bigger number:
-
-- an **axe** that hits every enemy around you asks, *are you in the open, or in a corridor?*
-- a **war hammer** that stuns asks, *do you need to buy a turn to escape?*
-- a **bow** that strikes at range asks, *can you fight before they reach you?*
-
-None of those is a larger `attack_bonus`; each changes *how* you fight. That is a toolkit, not a ladder.
-
-Armor resists this, and the reason is worth naming, because it is the same thesis as Part 12: *personality lives in behavior, not in stats.* Attacking is an **action**, so you can hang behavior on it (a cleave, a stun, a knockback). Wearing armor is **passive**: it sits there and changes a number, and a number has no behavior to vary. Armor gains a personality only by becoming partly active (spikes that bite back, slow regeneration, resistance to one kind of damage), and at that point it is borrowing the weapon's trick. So let armor be the honest axis, the steady baseline, and let the weapons carry the variety.
-
-!!! tip "Design takeaway"
-    For the player's gear as for the bestiary, "stronger" is the boring axis. The one that creates depth is *what new decision does this item create?* Stats are the floor of good item design, not the ceiling.
-
-The behavioral weapons above are not in this chapter, and the reason is the line the `Equippable` design drew at the very start: a subclass earns its keep when an item needs different *code*, not different *numbers*. A cleave needs targeting, a stun needs a status effect, a bow needs a ranged attack path; none of that fits in a template. When you are ready to cross that line, a future appendix, *Weapons with behavior*, builds them out.
+!!! tip "Run it now"
+    If you run the game now and start a new game, a light blue `/` lies in your starting room: the Dagger. Walk over it, press `g`, open the inventory with `i`, and press `1` to equip it. Press `1` again in the inventory to remove it, and equip it once more. Then go down the stairs and look for the Leather Armor (`[`), which waits on floor 2 or 3. Equipping and removing gear a few times is the quickest way to check the messages and the inventory sections.
 
 ---
 
@@ -923,9 +949,9 @@ Run the game with `uv run main.py` (or `python main.py`):
 - [ ] Walking over equipment on the floor does not crash the game (the contact guard at work)
 - [ ] Leather Armor appears once on floor 2 or 3, the Sword once on floor 4 or 5, Chain Mail once on floor 6 or 7; never a duplicate, never an upgrade before the piece it replaces
 - [ ] Equipping the Sword while the Dagger is equipped logs `"You remove the Dagger."` and then `"You equip the Sword."`
-- [ ] With the Sword equipped, attacks land with effective attack 5 (base) + 4 (sword) = 9
+- [ ] With the Sword equipped, your attack is your base attack plus 4 (5 + 4 = 9 if you never raised attack at a level-up), and the damage numbers in the message log grow to match
 - [ ] Dropping an equipped item unequips it first, and its bonus disappears
-- [ ] Two runs with the same `GAME_SEED` (Part 3 Exercise 1) place every piece on the same floors and tiles
+- [ ] Two runs with the same `GAME_SEED` environment variable (Part 3 Exercise 1) place every piece on the same floors and tiles
 
 ---
 
@@ -995,33 +1021,148 @@ game/
 
 ## Exercises
 
-Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in, and when a later part builds on an exercise, it points out the code that comes from it.
+Try each one on your own first. If one is too hard for now, do not let it stop you: where a reference solution is given, read it and type it in.
 
 1. **Show equipment bonuses in the inventory**:
 
-   The inventory lists `Sword` and `Chain Mail` with no hint of what they do, so the player has no reason to prefer one over another. Make each equippable row show its bonus, for example `Sword (+4 attack)` or `Chain Mail (+3 defense)`.
+    The inventory lists `Sword` and `Chain Mail` with no hint of what they do, so the player has no reason to prefer one over another. Make each equippable row show its bonus, for example `Sword (+4 attack)` or `Chain Mail (+3 defense)`.
 
-   The bonus lives on the item: `item.equippable` is `None` for consumables and an `Equippable` for gear, and it carries `attack_bonus`, `defense_bonus`, and `equipment_type` (which tells you whether to label the number "attack" or "defense"). The name is drawn in `InventoryState.on_render`, in the `_trim_text(item.name, name_width)` call. Build the suffix only when `item.equippable is not None`, append it to the name *before* trimming, and remember that the extra characters eat into `name_width`.
+    The bonus lives on the item: `item.equippable` is `None` for consumables and an `Equippable` for gear, and it carries `attack_bonus`, `defense_bonus`, and `equipment_type` (which tells you whether to label the number "attack" or "defense"). The name is drawn in `InventoryState.on_render`, in the `_trim_text(item.name, name_width)` call. Build the suffix only when `item.equippable is not None`, append it to the name *before* trimming, and remember that the extra characters take space from `name_width` and change the panel width, which is computed from the names.
+
+    ??? note "Reference implementation"
+        A helper in `game/game_states.py`, next to `_trim_text`. The bonuses are floats, and the `:g` format prints `4.0` as `4`:
+
+        ```python
+        # Part-13. Exercise 1: Show equipment bonuses in the inventory
+        def _item_display_name(item: Item) -> str:
+            equippable = item.equippable
+            if equippable is None:
+                return item.name
+
+            if equippable.equipment_type == EquipmentType.WEAPON:
+                return f"{item.name} (+{equippable.attack_bonus:g} attack)"
+
+            return f"{item.name} (+{equippable.defense_bonus:g} defense)"
+        ```
+
+        It needs `EquipmentType` at run time, so import it at the top of the file:
+
+        ```diff
+         from game.data.keys import key_label
+        +from game.entities.equipment_type import EquipmentType
+         from game.exceptions import Impossible
+        ```
+
+        In `InventoryState.on_render`, use the helper in the two places that read `item.name`: the panel width and the drawn name.
+
+        ```diff
+        -        item_width = max((len(item.name) for item in inventory.items), default=0) + 18
+        +        # Part-13. Exercise 1: Show equipment bonuses in the inventory
+        +        item_width = max((len(_item_display_name(item)) for item in inventory.items), default=0) + 18
+        ```
+
+        ```diff
+                         # Draw the item name, trimmed if it does not fit
+                         console.print(
+                             row_x + 10,
+                             row_y,
+        -                    _trim_text(item.name, name_width),
+        +                    _trim_text(_item_display_name(item), name_width),  # Part-13. Exercise 1
+                             fg = colors.INVENTORY_MENU_TEXT,
+                             bg = self.ROW_BG_COLOR,
+                         )
+        ```
+
+        If you did the Part 8 stacking exercise, change `stack_name` instead: replace both `stack[0].name` reads with `_item_display_name(stack[0])`. The width line and the drawn name already go through `stack_name`.
 
 2. **Equipment stats in the HUD**:
 
-   The panel shows the HP and XP bars, the floor, and your gold, but never your actual combat numbers. Add one line below the XP bar, for example `Attack: 9  Defense: 5`.
+    The panel shows the HP and XP bars, the floor, and your gold, but never your actual combat numbers. Add one line below the XP bar, for example `Attack: 9  Defense: 5`.
 
-   This is almost free, and that is the lesson: the `Fighter.attack` and `Fighter.defense` properties you edited earlier in this chapter already fold the weapon and armor bonuses on top of the base stats, so you do **not** touch `Equipment` here at all. You only *read* `player.fighter.attack` and `player.fighter.defense` (they return floats, so wrap them in `int(...)`) and print them.
+    This is almost free, and that is the lesson: the `Fighter.attack` and `Fighter.defense` properties you edited earlier in this chapter already add the weapon and armor bonuses to the base stats, so you do **not** touch `Equipment` here at all. You only *read* `player.fighter.attack` and `player.fighter.defense` (they return floats, so wrap them in `int(...)`) and print them.
 
-   Follow the pattern of the other panel pieces: add a small `render_combat_stats(console, attack, defense)` to `game/hud.py`, next to `render_dungeon_level`, have it `console.print` the line on a free panel row, and call it from `Engine.render()` right after `hud.render_xp_bar(...)`. The text itself is just `f"Attack: {int(attack)}  Defense: {int(defense)}"`.
+    Follow the pattern of the other panel pieces: add a small `render_combat_stats(console, attack, defense)` to `game/hud.py`, next to `render_dungeon_level`, have it `console.print` the line on a free panel row, and call it from `Engine.render()` right after `hud.render_xp_bar(...)`. The text itself is just `f"Attack: {int(attack)}  Defense: {int(defense)}"`.
+
+    ??? note "Reference implementation"
+        In `game/hud.py`, after `render_dungeon_level`. Row 47 is the first free row: the floor and gold use row 44, the HP bar 45, and the XP bar 46.
+
+        ```python
+        # Part-13. Exercise 2: Equipment stats in the HUD
+        def render_combat_stats(
+            console: Console,
+            attack: float,
+            defense: float,
+            y: int = 47,
+        ) -> None:
+            console.print(
+                x    = 0,
+                y    = y,
+                text = f"Attack: {int(attack)}  Defense: {int(defense)}",
+            )
+        ```
+
+        In `Engine.render()` (`game/engine.py`), right after the `hud.render_xp_bar(...)` call:
+
+        ```python
+                # Part-13. Exercise 2: Equipment stats in the HUD
+                hud.render_combat_stats(
+                    console = console,
+                    attack  = self.player.fighter.attack,
+                    defense = self.player.fighter.defense,
+                )
+        ```
+
+        Equip and remove the Dagger: the attack number changes at once, because the HUD is drawn again every frame.
 
 3. **Place guaranteed equipment away from the arrival room**:
 
-   On floors after the first, the guaranteed piece can currently land in `rooms[0]`, the room you arrive in, which also holds the up stairs, so the reward appears with no exploration. In the placement loop in `generate_dungeon` (`game/map/map_generator.py`), the deeper-floor branch is `rng.choice(rooms)`; restrict it to `rooms[1:]` so the arrival room is excluded.
+    On floors after the first, the guaranteed piece can currently land in `rooms[0]`, the room you arrive in, which also holds the up stairs, so the reward appears with no exploration. In the placement loop in `generate_dungeon` (`game/map/map_generator.py`), the deeper-floor branch is `rng.choice(rooms)`; restrict it to `rooms[1:]` so the arrival room is excluded.
 
-   Fall back safely when the dungeon has only one room (so `rooms[1:]` is empty): `rooms[1:] or rooms` gives you the candidate list in a single expression. Leave the floor-1 special case (`rooms[0]`) untouched, since placing the dagger in the safe starting room is deliberate.
+    Fall back safely when the dungeon has only one room (so `rooms[1:]` is empty): `rooms[1:] or rooms` gives you the candidate list in a single expression. Leave the floor-1 special case (`rooms[0]`) untouched, since placing the dagger in the safe starting room is deliberate.
 
-4. **Optional challenge: equipment for monsters**:
+    ??? note "Reference implementation"
+        One line changes in the placement loop at the end of `generate_dungeon`:
 
-   Every actor already carries an `Equipment` component, so the machinery for armed monsters is mostly in place. Give one monster template (say the orc) an equipped weapon in `factories.py` (`equipment = Equipment(weapon=...)`); because `Fighter.attack` reads `entity.equipment`, that orc immediately hits harder, with no other change. Each monster is deep-copied from its template on spawn (Part 5), so every orc gets its own weapon instance.
+        ```diff
+             for item_template in equipment:
+        -        room = rooms[0] if current_floor == 1 else rng.choice(rooms)
+        +        # Part-13. Exercise 3: Place guaranteed equipment away from the arrival room
+        +        room = rooms[0] if current_floor == 1 else rng.choice(rooms[1:] or rooms)
+                 free = free_positions(room, dungeon)
+        ```
 
-   Then make the kill rewarding: in the death logic in `Fighter` (the `die` handler that turns an actor into a corpse), check whether the dying actor has anything in a slot and, if so, drop it onto the corpse's tile (set the item's `x`/`y` and add it to the map's entities) so the player can pick it up and equip it. That turns equipment from a player-only system into a general actor feature.
+        `rooms[1:] or rooms` works because an empty list is false: when `rooms[1:]` is empty, `or` returns `rooms` instead.
+
+4. **Challenge: equipment for monsters**:
+
+    Every actor already carries an `Equipment` component, so the machinery for armed monsters is mostly in place. Give one monster template (say the orc) an equipped weapon in `factories.py` (`equipment = Equipment(weapon=...)`); because `Fighter.attack` reads `entity.equipment`, that orc immediately hits harder, with no other change. Each monster is deep-copied from its template on spawn (Part 5), so every orc gets its own weapon instance.
+
+    Then make the kill rewarding: in the death logic in `Fighter` (the `die` handler that turns an actor into a corpse), check whether the dying actor has anything in a slot and, if so, drop it onto the corpse's tile (set the item's `x`/`y` and add it to the map's entities) so the player can pick it up and equip it. That turns equipment from a player-only system into a general actor feature.
+
+---
+
+## A toolkit, not a power ladder
+
+Part 12 warned against making a dungeon harder with bigger numbers, and gave each monster a personality instead. This chapter did the opposite with the player's gear. The dagger gives +2, the sword +4; leather armor +1, chain mail +3. That is a **power ladder**: each piece is the one before it with a larger number, and you swing the sword exactly the way you swung the dagger, only it hits harder. It is the orc with triple hit points, applied to your own inventory.
+
+That is fine here, and deliberate. The goal of this chapter was the *architecture*: two components, a pair of slots, bonuses that flow through the `Fighter` properties. A simple stat ladder is the right baseline for that system. It plays the same role as the orc: the plain fight that everything else is measured against. You need a simple reference before you can build variations on top of it.
+
+But the interesting direction is the one the bestiary already took. A weapon, too, can ask a **different question** instead of offering a bigger number:
+
+- an **axe** that hits every enemy around you asks, *are you in the open, or in a corridor?*
+- a **war hammer** that stuns asks, *do you need to buy a turn to escape?*
+- a **bow** that strikes at range asks, *can you fight before they reach you?*
+
+None of those is a larger `attack_bonus`; each changes *how* you fight. That is a toolkit, not a ladder.
+
+Armor is harder to vary this way, and the reason is the same idea as in Part 12: *personality lives in behavior, not in stats.* Attacking is an **action**, so you can attach behavior to it (a cleave, a stun, a knockback). Wearing armor is **passive**: it only changes a number, and a number has no behavior to vary.
+
+Armor gets a personality only by becoming partly active (spikes that hurt attackers, slow regeneration, resistance to one kind of damage), and then it is using the weapon's trick. So let armor be the steady baseline, and let the weapons carry the variety.
+
+!!! tip "Design takeaway"
+    For the player's gear, as for the monsters, "stronger" is the boring direction. The question that creates depth is *what new decision does this item create?* Good stats are the minimum for good item design, not the goal.
+
+The weapons with behavior above are not in this chapter, and the reason is the rule the `Equippable` design set at the start: a subclass is worth it when an item needs different *code*, not different *numbers*. A cleave needs targeting, a stun needs a status effect, a bow needs a ranged attack path; none of that fits in a template. A future appendix, *Weapons with behavior*, builds them.
 
 ---
 
@@ -1031,13 +1172,13 @@ You have built a complete roguelike. Here are directions to take it further:
 
 **Content**:
 
-- More monster types riding Part 12's weighted tables (troll variants, vampires, dragons)
+- More monster types in Part 12's weighted tables (troll variants, vampires, dragons)
 - More spell scrolls: confusion variants, area heals, walls of fire
 - Ranged weapons: a bow as an `Equippable` plus arrows as inventory items
 
 **Depth**:
 
-- A shop between floors: the gold from Part 8's chests wants something to buy
+- A shop between floors: the gold from Part 8's chests needs something to buy
 - Named artifacts: unique items with special effects, spawned through their own `equipment_spawns` bands
 - Status effects: poison, blindness, haste, each as a component with a countdown
 
@@ -1051,6 +1192,8 @@ You have built a complete roguelike. Here are directions to take it further:
 
 - Push the game to a public repository with a README, a screenshot, and the run command; a project that starts with `uv run main.py` is easy for anyone to try
 
-The architecture you built (entities and components, actions, game states as a state machine, pickle serialization, data-driven spawn tables) scales to a much larger game. [Yet Another Roguelike Tutorial](https://www.rogueliketutorials.com/), the tutorial this one descends from, makes a good comparison point: same genre, same library, different decisions in the places where this tutorial deliberately diverged (game states instead of event handlers, a static message log, the data and factories packages, guaranteed equipment). Reading code that solves the same problems differently is one of the fastest ways to grow.
+The architecture you built (entities and components, actions, game states as a state machine, pickle serialization, data-driven spawn tables) works for a much larger game.
+
+[Yet Another Roguelike Tutorial](https://www.rogueliketutorials.com/), the tutorial this one comes from, is a good comparison: same genre, same library, but different decisions where this tutorial chose another way (game states instead of event handlers, a static message log, the data and factories packages, guaranteed equipment). Reading code that solves the same problems differently is one of the fastest ways to improve.
 
 Good luck with the dungeon.

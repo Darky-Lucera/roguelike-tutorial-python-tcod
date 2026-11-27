@@ -99,7 +99,7 @@ class DropItem(ItemAction):
 
 The `assert isinstance(entity, Actor)` lines make a rule explicit. `Action.perform` accepts any `Entity`, but these three actions need an `Actor`, because only actors have an `inventory`. The assert checks this at runtime. It also tells the type checker that `entity` is an `Actor` from that line on, so the attribute accesses after it need no cast.
 
-Also add `PickupAction` to the import list at the top of `game/game_states.py`:
+Also add `DropItem` and `PickupAction` to the import list at the top of `game/game_states.py`:
 
 ```diff
 -from game.actions import (
@@ -111,6 +111,7 @@ Also add `PickupAction` to the import list at the top of `game/game_states.py`:
 +from game.actions import (
 +    Action,
 +    BumpAction,
++    DropItem,
 +    EscapeAction,
 +    PickupAction,
 +    WaitAction,
@@ -697,8 +698,6 @@ class InventoryDropState(InventoryState):
     ROW_BG_COLOR = colors.INVENTORY_DROP_ROW_BG
 
     def on_item_selected(self, item: Item) -> Action | None:
-        from game.actions import DropItem
-
         return DropItem(item=item)
 ```
 

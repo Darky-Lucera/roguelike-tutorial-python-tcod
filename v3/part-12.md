@@ -137,6 +137,7 @@ ogre = Actor(
     name      = "Ogre",
     ai        = HostileEnemy(),
     fighter   = Fighter(hp=30.0, defense=1.0, attack=6.0),
+    # Part-8. Exercise 2: Backpack growing scroll
     inventory = Inventory(capacity=0, max_capacity=0),
     level     = Level(xp_given=100),
 )
@@ -827,7 +828,15 @@ The next parts assume you did these exercises. Try each one on your own first. I
     If you added the flee behavior (Part 6, Exercise 3), keep its `should_flee` check inside the in-sight branch: a monster cannot decide to flee from a player it cannot see.
 
     ??? note "Reference implementation"
-        `HostileEnemy` in `game/entities/components/ai.py`:
+        `HostileEnemy` in `game/entities/components/ai.py`. The monster no longer waits when it loses sight of you, so update the class docstring first:
+
+        ```diff
+         class HostileEnemy(BaseAI):
+        -    """Chases the player when visible; waits otherwise."""
+        +    """Chases the player when visible; otherwise goes to where it last saw the player."""
+        ```
+
+        Then add `__init__` and replace `perform`:
 
         ```python
         # Part-12. Exercise 4: Monsters that remember
